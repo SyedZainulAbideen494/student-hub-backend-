@@ -301,7 +301,7 @@ app.post("/verify-otp", (req, res) => {
 });
 
 app.post('/add/tasks', (req, res) => {
-  const { title, description, due_date, token } = req.body;
+  const { title, description, due_date, priority, token } = req.body;
 
   const getUserQuery = 'SELECT user_id FROM session WHERE jwt = ?';
   connection.query(getUserQuery, [token], (err, results) => {
@@ -313,8 +313,8 @@ app.post('/add/tasks', (req, res) => {
       }
 
       const user_id = results[0].user_id;
-      const insertQuery = 'INSERT INTO tasks (title, description, due_date, user_id) VALUES (?, ?, ?, ?)';
-      connection.query(insertQuery, [title, description, due_date, user_id], (err, results) => {
+      const insertQuery = 'INSERT INTO tasks (title, description, due_date, priority, user_id) VALUES (?, ?, ?, ?, ?)';
+      connection.query(insertQuery, [title, description, due_date, priority, user_id], (err, results) => {
           if (err) {
               return res.status(500).send(err);
           }
@@ -322,7 +322,6 @@ app.post('/add/tasks', (req, res) => {
       });
   });
 });
-
 
 app.post('/fetch/tasks', (req, res) => {
   const { token } = req.body;
@@ -347,6 +346,48 @@ app.post('/fetch/tasks', (req, res) => {
   });
 });
 
+// Check tasks and send reminders
+const checkTasksAndSendReminders = () => {
+  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  const tomorrow = new Date(new Date().setDate(new Date().getDate() + 1)).toISOString().split('T')[0];
+  const dayAfter = new Date(new Date().setDate(new Date().getDate() + 2)).toISOString().split('T')[0];
+
+  // Query to get tasks due today, tomorrow, or day after
+  const query = `
+    SELECT t.title, t.due_date, u.phone_number 
+    FROM tasks t
+    JOIN users u ON t.user_id = u.id
+    WHERE t.due_date IN (?, ?, ?)
+  `;
+
+  connection.query(query, [today, tomorrow, dayAfter], (err, results) => {
+    if (err) {
+      console.error('Error fetching tasks:', err);
+      return;
+    }
+
+    results.forEach(task => {
+      const { phone_number, title, due_date } = task;
+      const formattedDate = new Date(due_date).toLocaleDateString('en-IN', { 
+        day: '2-digit', 
+        month: '2-digit', 
+        year: 'numeric' 
+      });
+      
+      let messageBody = `Reminder: Your task "${title}" is due on ${formattedDate}.`;
+      
+      sendWhatsAppMessage({
+        messaging_product: "whatsapp",
+        to: `91${phone_number}`, // Add country code
+        type: "text",
+        text: { body: messageBody }
+      });
+    });
+  });
+};
+
+// Run the task-checking function every 24 hours
+setInterval(checkTasksAndSendReminders, 86400000); // 24 hours in milliseconds
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
