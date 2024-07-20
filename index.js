@@ -35,6 +35,32 @@ app.use(cors({
   credentials: true,
 }));
 
+// Define storage for multer
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+      cb(null, 'public/');
+  },
+  filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname);
+      cb(null, Date.now() + ext); // Append timestamp to filename to avoid collisions
+  },
+});
+
+// File filter function
+const fileFilter = (req, file, cb) => {
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
+  if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+  } else {
+      cb(new Error('Invalid file type'), false);
+  }
+};
+
+const upload = multer({
+  storage,
+  fileFilter,
+  limits: { fileSize: 5 * 1024 * 1024 }, // Limit file size to 5 MB
+});
 // Serve static files from the 'public' directory
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -346,6 +372,52 @@ app.post('/fetch/tasks', (req, res) => {
   });
 });
 
+app.post('/edit/task', (req, res) => {
+  const { id, title, description, due_date, priority, token } = req.body;
+
+  const getUserQuery = 'SELECT user_id FROM session WHERE jwt = ?';
+  connection.query(getUserQuery, [token], (err, results) => {
+      if (err) {
+          return res.status(500).send(err);
+      }
+      if (results.length === 0) {
+          return res.status(404).send({ message: 'User not found' });
+      }
+
+      const user_id = results[0].user_id;
+      const updateQuery = 'UPDATE tasks SET title = ?, description = ?, due_date = ?, priority = ? WHERE id = ? AND user_id = ?';
+      connection.query(updateQuery, [title, description, due_date, priority, id, user_id], (err, results) => {
+          if (err) {
+              return res.status(500).send(err);
+          }
+          res.send({ message: 'Task updated successfully' });
+      });
+  });
+});
+
+app.post('/delete/task', (req, res) => {
+  const { id, token } = req.body;
+
+  const getUserQuery = 'SELECT user_id FROM session WHERE jwt = ?';
+  connection.query(getUserQuery, [token], (err, results) => {
+      if (err) {
+          return res.status(500).send(err);
+      }
+      if (results.length === 0) {
+          return res.status(404).send({ message: 'User not found' });
+      }
+
+      const user_id = results[0].user_id;
+      const deleteQuery = 'DELETE FROM tasks WHERE id = ? AND user_id = ?';
+      connection.query(deleteQuery, [id, user_id], (err, results) => {
+          if (err) {
+              return res.status(500).send(err);
+          }
+          res.send({ message: 'Task deleted successfully' });
+      });
+  });
+});
+
 // Check tasks and send reminders
 const checkTasksAndSendReminders = () => {
   const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
@@ -388,6 +460,94 @@ const checkTasksAndSendReminders = () => {
 
 // Run the task-checking function every 24 hours
 setInterval(checkTasksAndSendReminders, 86400000); // 24 hours in milliseconds
+
+app.post('/api/add/flashcards', upload.array('images'), (req, res) => {
+  const { title, description, isPublic, token, headings } = req.body;
+
+  if (!token) {
+      return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  connection.query('SELECT user_id FROM session WHERE jwt = ?', [token], (err, results) => {
+      if (err) {
+          console.error('Error fetching user_id:', err);
+          return res.status(500).json({ message: 'Failed to authenticate user.' });
+      }
+
+      if (results.length === 0) {
+          return res.status(401).json({ message: 'Invalid or expired token.' });
+      }
+
+      const userId = results[0].user_id;
+      const imageNames = req.files ? req.files.map(file => file.filename) : [];
+
+      console.log('Image filenames:', imageNames); // Log image filenames
+
+      const query = `
+          INSERT INTO flashcards (title, description, images, is_public, user_id, headings) 
+          VALUES (?, ?, ?, ?, ?, ?)
+      `;
+      const values = [title, description, JSON.stringify(imageNames), isPublic, userId, headings];
+
+      connection.query(query, values, (error) => {
+          if (error) {
+              console.error('Error inserting flashcard:', error);
+              return res.status(500).json({ message: 'Failed to save flashcard.' });
+          }
+
+          res.status(200).json({ message: 'Flashcard saved successfully!' });
+      });
+  });
+});
+
+app.get('/api/get/user/notes', (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+
+  if (!token) {
+      return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  connection.query('SELECT user_id FROM session WHERE jwt = ?', [token], (err, results) => {
+      if (err) {
+          console.error('Error fetching user_id:', err);
+          return res.status(500).json({ message: 'Failed to authenticate user.' });
+      }
+
+      if (results.length === 0) {
+          return res.status(401).json({ message: 'Invalid or expired token.' });
+      }
+
+      const userId = results[0].user_id;
+
+      connection.query('SELECT * FROM flashcards WHERE user_id = ?', [userId], (err, notes) => {
+          if (err) {
+              console.error('Error fetching notes:', err);
+              return res.status(500).json({ message: 'Failed to retrieve notes.' });
+          }
+          res.json(notes);
+      });
+  });
+});
+
+// Route to get a specific note by ID
+app.get('/api/notes/:id', (req, res) => {
+  const noteId = req.params.id;
+
+  connection.query('SELECT * FROM flashcards WHERE id = ?', [noteId], (error, results) => {
+      if (error) {
+          console.error('Error fetching note:', error);
+          return res.status(500).json({ message: 'Internal Server Error' });
+      }
+      
+      if (results.length > 0) {
+          res.json(results[0]);
+      } else {
+          res.status(404).json({ message: 'Note not found' });
+      }
+  });
+});
+
+
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
