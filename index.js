@@ -547,6 +547,215 @@ app.get('/api/notes/:id', (req, res) => {
   });
 });
 
+// Utility function to extract user ID from token
+const getUserIdFromToken = (token) => {
+  return new Promise((resolve, reject) => {
+      connection.query('SELECT user_id FROM session WHERE jwt = ?', [token], (err, results) => {
+          if (err) {
+              console.error('Error fetching user_id:', err);
+              reject(new Error('Failed to authenticate user.'));
+          }
+
+          if (results.length === 0) {
+              reject(new Error('Invalid or expired token.'));
+          } else {
+              resolve(results[0].user_id);
+          }
+      });
+  });
+};
+// Route to fetch joined groups
+app.get('/api/groups/joined', async (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+
+  if (!token) {
+      return res.status(400).json({ message: 'Token is required' });
+  }
+
+  try {
+      const userId = await getUserIdFromToken(token);
+
+      connection.query(
+          'SELECT g.* FROM `groups` g JOIN user_groups ug ON g.id = ug.group_id WHERE ug.user_id = ?',
+          [userId],
+          (error, results) => {
+              if (error) {
+                  console.error('Error fetching joined groups:', error);
+                  return res.status(500).json({ message: 'Internal Server Error' });
+              }
+              res.status(200).json(results);
+          }
+      );
+  } catch (error) {
+      console.error('Error decoding token:', error);
+      res.status(401).json({ message: error.message });
+  }
+});
+// Route to get public groups
+app.get('/api/groups/public', (req, res) => {
+  connection.query('SELECT * FROM `groups` WHERE is_public = ?', ['1'], (error, results) => {
+      if (error) {
+          console.error('Error fetching public groups:', error);
+          return res.status(500).json({ message: 'Internal Server Error' });
+      }
+      res.json(results);
+  });
+});
+// Route to create a new group
+app.post('/api/groups/add', async (req, res) => {
+  const { name, description, is_public } = req.body;
+  const token = req.headers.authorization?.split(' ')[1];
+
+  if (!token) {
+      return res.status(400).json({ message: 'Token is required' });
+  }
+
+  try {
+      const userId = await getUserIdFromToken(token);
+
+      connection.query(
+          'INSERT INTO `groups` (name, description, is_public, user_id) VALUES (?, ?, ?, ?)',
+          [name, description, is_public, userId],
+          (error, results) => {
+              if (error) {
+                  console.error('Error creating group:', error);
+                  return res.status(500).json({ message: 'Internal Server Error' });
+              }
+              const groupId = results.insertId;
+              connection.query(
+                  'INSERT INTO user_groups (user_id, group_id) VALUES (?, ?)',
+                  [userId, groupId],
+                  (error) => {
+                      if (error) {
+                          console.error('Error adding user to group:', error);
+                          return res.status(500).json({ message: 'Internal Server Error' });
+                      }
+                      res.status(201).json({ message: 'Group created successfully' });
+                  }
+              );
+          }
+      );
+  } catch (error) {
+      console.error('Error decoding token:', error);
+      res.status(401).json({ message: error.message });
+  }
+});
+
+// Route to join a group
+app.post('/api/groups/join/:id', async (req, res) => {
+  const groupId = req.params.id;
+  const token = req.headers.authorization?.split(' ')[1];
+
+  if (!token) {
+      return res.status(400).json({ message: 'Token is required' });
+  }
+
+  try {
+      const userId = await getUserIdFromToken(token);
+
+      connection.query(
+          'INSERT INTO user_groups (user_id, group_id) VALUES (?, ?)',
+          [userId, groupId],
+          (error) => {
+              if (error) {
+                  console.error('Error joining group:', error);
+                  return res.status(500).json({ message: 'Internal Server Error' });
+              }
+              res.status(200).json({ message: 'Joined group successfully' });
+          }
+      );
+  } catch (error) {
+      console.error('Error decoding token:', error);
+      res.status(401).json({ message: error.message });
+  }
+});
+app.get('/api/groups/:id', (req, res) => {
+  const groupId = req.params.id;
+  const query = `SELECT * FROM \`groups\` WHERE id = ?`; // Escaped table name
+  connection.query(query, [groupId], (err, results) => {
+      if (err) throw err;
+      const group = results[0];
+      const messagesQuery = `SELECT * FROM \`messages\` WHERE group_id = ?`; // Escaped table name
+      connection.query(messagesQuery, [groupId], (err, messages) => {
+          if (err) throw err;
+          res.json({ ...group, messages });
+      });
+  });
+});
+
+
+app.post('/api/groups/messages/send/:id', async (req, res) => {
+  const groupId = req.params.id;
+  const { content, type, sender } = req.body;
+  const token = req.headers.authorization.split(' ')[1]; // Extract token from header
+
+  try {
+    const userId = await getUserIdFromToken(token);
+      const query = `INSERT INTO messages (group_id, content, sender, type) VALUES (?, ?, ?, ?)`;
+      connection.query(query, [groupId, content, userId, type], (err, results) => {
+          if (err) {
+              console.error('Error inserting message:', err);
+              res.sendStatus(500);
+          } else {
+              res.sendStatus(200);
+          }
+      });
+  } catch (error) {
+      console.error('Error fetching user ID:', error);
+      res.sendStatus(401); // Unauthorized
+  }
+});
+
+app.post('/shareFlashCard', async (req, res) => {
+  const { id, groupId } = req.body; // Flashcard ID and Group ID
+  const token = req.headers.authorization.split(' ')[1]; // Extract token from header
+
+  try {
+      // Extract user ID from token
+      const senderId = await getUserIdFromToken(token);
+
+      // Insert message into the messages table
+      const query = 'INSERT INTO messages (sender, group_id, type, content) VALUES (?, ?, ?, ?)';
+      connection.query(query, [senderId, groupId, 'flashcard', id], (err, results) => {
+          if (err) {
+              console.error('Error inserting message:', err);
+              return res.status(500).send('Error sharing flashcard');
+          }
+          res.status(200).send('Flashcard shared successfully');
+      });
+  } catch (error) {
+      console.error('Error sharing flashcard:', error);
+      res.status(401).send('Failed to authenticate user');
+  }
+});
+
+// Route to get user name by token
+app.get('/api/user/details/:id', async (req, res) => {
+  const token = req.headers.authorization.split(' ')[1]; // Extract token from header
+  const user_id = req.params.id;
+
+  if (!token) {
+      return res.status(403).send('Token is required');
+  }
+
+  try {
+      const userId = await getUserIdFromToken(token);
+      connection.query('SELECT user_name FROM users WHERE id = ?', [user_id], (err, results) => {
+          if (err) {
+              console.error('Error fetching user_name:', err);
+              return res.status(500).send('Failed to fetch user name.');
+          }
+
+          if (results.length === 0) {
+              return res.status(404).send('User not found.');
+          }
+
+          res.json({ user_name: results[0].user_name });
+      });
+  } catch (err) {
+      res.status(401).send(err.message);
+  }
+});
 
 // Start the server
 app.listen(PORT, () => {
