@@ -757,6 +757,130 @@ app.get('/api/user/details/:id', async (req, res) => {
   }
 });
 
+// Endpoint to get group member count
+app.get('/group/member-count/:groupId', (req, res) => {
+  const { groupId } = req.params;
+  connection.query('SELECT COUNT(*) AS memberCount FROM user_groups WHERE group_id = ?', [groupId], (error, results) => {
+      if (error) {
+          console.error('Error fetching group member count:', error);
+          return res.status(500).json({ error: 'Internal server error' });
+      }
+      res.json({ memberCount: results[0].memberCount });
+  });
+});
+
+
+app.post('/invite/group/:groupId', (req, res) => {
+  const { groupId } = req.params;
+  const { phoneNumber } = req.body;
+
+  console.log('Request received:', { groupId, phoneNumber }); // Log request details
+
+  // Check if phoneNumber is provided
+  if (!phoneNumber) {
+      return res.status(400).json({ message: 'Phone number is required.' });
+  }
+
+  // Check if group exists and its privacy
+  connection.query('SELECT is_public, user_id FROM `groups` WHERE id = ?', [groupId], (error, groupResults) => {
+      if (error) {
+          console.error('Database error while fetching group details:', error); // Log database error
+          return res.status(500).json({ message: 'Database error.' });
+      }
+
+      const group = groupResults[0];
+      if (!group) {
+          return res.status(404).json({ message: 'Group not found.' });
+      }
+
+      // Check if the group is private and the requester is not an admin
+      if (!group.is_public) {
+          const token = req.headers.authorization?.split(' ')[1];
+          if (!token) {
+              return res.status(401).json({ message: 'Authorization token is missing.' });
+          }
+
+          const userId = getUserIdFromToken(token); // Implement your method to get user ID from token
+          if (!userId) {
+              return res.status(401).json({ message: 'Invalid token.' });
+          }
+
+          if (userId !== group.user_id) {
+              return res.status(403).json({ message: 'Only admin can invite members to a private group.' });
+          }
+      }
+
+      // Check if the phone number belongs to a registered user
+      connection.query('SELECT id FROM users WHERE phone_number = ?', [phoneNumber], (error, userResults) => {
+          if (error) {
+              console.error('Database error while checking user existence:', error); // Log database error
+              return res.status(500).json({ message: 'Database error.' });
+          }
+
+          const user = userResults[0];
+          if (!user) {
+              return res.status(404).json({ message: 'User not found.' });
+          }
+
+          // Add the invitation request
+          connection.query('INSERT INTO group_request (group_id, phone_number, active) VALUES (?, ?, ?)', [groupId, phoneNumber, '1'], (error) => {
+              if (error) {
+                  console.error('Database error while inserting invitation request:', error); // Log database error
+                  return res.status(500).json({ message: 'Failed to add invitation request.' });
+              }
+
+              res.status(200).json({ message: 'Invitation sent successfully.' });
+          });
+      });
+  });
+});
+
+
+// Endpoint to get group members
+app.get('/api/groups/members/:group_id', (req, res) => {
+  const groupId = req.params.group_id;
+
+  if (isNaN(groupId)) {
+      return res.status(400).json({ error: 'Invalid group ID' });
+  }
+
+  // Query to get user IDs from the group_members table
+  const groupMembersQuery = `
+      SELECT user_id
+      FROM user_groups
+      WHERE group_id = ?
+  `;
+
+  connection.query(groupMembersQuery, [groupId], (err, results) => {
+      if (err) {
+          console.error('Error fetching group members:', err);
+          return res.status(500).json({ error: 'Internal server error' });
+      }
+
+      const userIds = results.map(row => row.user_id);
+
+      if (userIds.length === 0) {
+          return res.json({ members: [] });
+      }
+
+      // Query to get user names from the users table
+      const usersQuery = `
+          SELECT id, user_name
+          FROM users
+          WHERE id IN (?)
+      `;
+
+      connection.query(usersQuery, [userIds], (err, results) => {
+          if (err) {
+              console.error('Error fetching user names:', err);
+              return res.status(500).json({ error: 'Internal server error' });
+          }
+
+          res.json({ members: results });
+      });
+  });
+});
+
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
