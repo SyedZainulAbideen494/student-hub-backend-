@@ -14,6 +14,7 @@ const PORT = process.env.PORT || 8080;
 const axios = require('axios');
 const cheerio = require('cheerio');
 const querystring = require('querystring'); // Include the querystring module
+const nodemailer = require('nodemailer');
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
@@ -130,6 +131,7 @@ app.post('/signup', (req, res) => {
     phone,
     password,
     username,
+    email
   } = req.body;
 
  
@@ -150,11 +152,12 @@ app.post('/signup', (req, res) => {
           res.status(500).json({ error: 'Internal server error' });
         } else {
           const insertQuery =
-            'INSERT INTO users (phone_number, password, user_name) VALUES (?, ?, ?)';
+            'INSERT INTO users (phone_number, password, user_name, email) VALUES (?, ?, ?, ?)';
           const values = [
             phone,
             hash,
-            username
+            username,
+            email
           ];
 
           connection.query(insertQuery, values, (insertErr, insertResults) => {
@@ -208,13 +211,22 @@ function generateOTP() {
   return otp;
 }
 
+// Route to end the current event
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+      user: 'dropmentset@gmail.com',
+      pass: 'pgpq ydgd qztt mcex',
+  },
+});
+
 app.post("/login", (req, res) => {
   const phone = req.body.phone;
   const password = req.body.password;
 
   connection.query(
       "SELECT * FROM users WHERE phone_number = ?",
-      phone,
+      [phone],
       (err, result) => {
           if (err) {
               return res.send({ err: err });
@@ -232,13 +244,21 @@ app.post("/login", (req, res) => {
                                   console.log(err);
                                   return res.status(500).send({ message: "Error generating OTP" });
                               }
-                             
-                              // Send OTP via WhatsApp (or SMS)
-                              sendWhatsAppMessage({
-                                messaging_product: "whatsapp",
-                                to: `91${phone}`,
-                                type: "text",
-                                text: { body: `Your OTP for login is ${otp}` }
+
+                              // Send OTP via Email
+                              const mailOptions = {
+                                  from: 'dropmentset@gmail.com',
+                                  to: result[0].email, // Ensure the user table has an email column
+                                  subject: 'Your OTP for Login',
+                                  text: `Your OTP for login is ${otp}`
+                              };
+
+                              transporter.sendMail(mailOptions, (err, info) => {
+                                  if (err) {
+                                      console.log(err);
+                                  } else {
+                                      console.log('Email sent: ' + info.response);
+                                  }
                               });
 
                               res.json({ auth: true, message: "OTP sent for verification" });
@@ -254,6 +274,7 @@ app.post("/login", (req, res) => {
       }
   );
 });
+
 
 
 app.post("/verify-otp", (req, res) => {
@@ -418,43 +439,97 @@ app.post('/delete/task', (req, res) => {
   });
 });
 
-// Check tasks and send reminders
+
+
+
+// Check tasks and events, and send reminders
 const checkTasksAndSendReminders = () => {
   const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
   const tomorrow = new Date(new Date().setDate(new Date().getDate() + 1)).toISOString().split('T')[0];
   const dayAfter = new Date(new Date().setDate(new Date().getDate() + 2)).toISOString().split('T')[0];
 
   // Query to get tasks due today, tomorrow, or day after
-  const query = `
-    SELECT t.title, t.due_date, u.phone_number 
-    FROM tasks t
-    JOIN users u ON t.user_id = u.id
-    WHERE t.due_date IN (?, ?, ?)
+  const tasksQuery = `
+      SELECT t.title, t.due_date, u.phone_number, u.email
+      FROM tasks t
+      JOIN users u ON t.user_id = u.id
+      WHERE t.due_date IN (?, ?, ?)
   `;
 
-  connection.query(query, [today, tomorrow, dayAfter], (err, results) => {
-    if (err) {
-      console.error('Error fetching tasks:', err);
-      return;
-    }
+  // Query to get events on the calendar for today, tomorrow, or day after
+  const eventsQuery = `
+      SELECT e.title, e.date, u.phone_number, u.email
+      FROM events e
+      JOIN users u ON e.user_id = u.id
+      WHERE e.date IN (?, ?, ?)
+  `;
 
-    results.forEach(task => {
-      const { phone_number, title, due_date } = task;
-      const formattedDate = new Date(due_date).toLocaleDateString('en-IN', { 
-        day: '2-digit', 
-        month: '2-digit', 
-        year: 'numeric' 
+  connection.query(tasksQuery, [today, tomorrow, dayAfter], (err, taskResults) => {
+      if (err) {
+          console.error('Error fetching tasks:', err);
+          return;
+      }
+
+      taskResults.forEach(task => {
+          const { phone_number, email, title, due_date } = task;
+          const formattedDate = new Date(due_date).toLocaleDateString('en-IN', { 
+              day: '2-digit', 
+              month: '2-digit', 
+              year: 'numeric' 
+          });
+
+          let messageBody = `Reminder: Your task "${title}" is due on ${formattedDate}.`;
+
+          // Send email
+          const mailOptions = {
+              from: 'dropmentset@gmail.com',
+              to: email,
+              subject: 'Task Reminder',
+              text: messageBody
+          };
+
+          transporter.sendMail(mailOptions, (err, info) => {
+              if (err) {
+                  console.log('Error sending email:', err);
+              } else {
+                  console.log('Email sent: ' + info.response);
+              }
+          });
       });
-      
-      let messageBody = `Reminder: Your task "${title}" is due on ${formattedDate}.`;
-      
-      sendWhatsAppMessage({
-        messaging_product: "whatsapp",
-        to: `91${phone_number}`, // Add country code
-        type: "text",
-        text: { body: messageBody }
+  });
+
+  connection.query(eventsQuery, [today, tomorrow, dayAfter], (err, eventResults) => {
+      if (err) {
+          console.error('Error fetching events:', err);
+          return;
+      }
+
+      eventResults.forEach(event => {
+          const { phone_number, email, title, date } = event;
+          const formattedDate = new Date(date).toLocaleDateString('en-IN', { 
+              day: '2-digit', 
+              month: '2-digit', 
+              year: 'numeric' 
+          });
+
+          let messageBody = `Reminder: Your event "${title}" is scheduled for ${formattedDate}.`;
+
+          // Send email
+          const mailOptions = {
+              from: 'dropmentset@gmail.com',
+              to: email,
+              subject: 'Event Reminder',
+              text: messageBody
+          };
+
+          transporter.sendMail(mailOptions, (err, info) => {
+              if (err) {
+                  console.log('Error sending email:', err);
+              } else {
+                  console.log('Email sent: ' + info.response);
+              }
+          });
       });
-    });
   });
 };
 
@@ -1073,6 +1148,264 @@ app.post('/api/checkUserMembership', async (req, res) => {
       res.status(500).json({ message: 'Error checking membership' });
   }
 });
+
+
+// Create a new quiz
+app.post('/createQuiz', async (req, res) => {
+  const { token, title, description, questions } = req.body;
+
+  try {
+      const userId = await getUserIdFromToken(token);
+      if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+
+      const [result] = await connection.promise().query('INSERT INTO quizzes (title, description, creator_id) VALUES (?, ?, ?)', [title, description, userId]);
+      const quizId = result.insertId;
+
+      for (const question of questions) {
+          const [questionResult] = await connection.promise().query('INSERT INTO questions (quiz_id, question_text) VALUES (?, ?)', [quizId, question.text]);
+          const questionId = questionResult.insertId;
+
+          for (const answer of question.answers) {
+              await connection.promise().query('INSERT INTO answers (question_id, answer_text, is_correct) VALUES (?, ?, ?)', [questionId, answer.text, answer.is_correct]);
+          }
+      }
+
+      res.json({ message: 'Quiz created successfully', quizId });
+  } catch (error) {
+      console.error('Error creating quiz:', error);
+      res.status(500).json({ message: 'Error creating quiz' });
+  }
+});
+
+// Get all quizzes for a user
+app.post('/getUserQuizzes', async (req, res) => {
+  const { token } = req.body;
+
+  try {
+      const userId = await getUserIdFromToken(token);
+      if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+
+      const [quizzes] = await connection.promise().query('SELECT * FROM quizzes WHERE creator_id = ?', [userId]);
+      res.json(quizzes);
+  } catch (error) {
+      console.error('Error fetching quizzes:', error);
+      res.status(500).json({ message: 'Error fetching quizzes' });
+  }
+});
+
+// Get a single quiz by ID
+app.get('/getQuiz/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+      const [quiz] = await connection.promise().query('SELECT * FROM quizzes WHERE id = ?', [id]);
+      const [questions] = await connection.promise().query('SELECT * FROM questions WHERE quiz_id = ?', [id]);
+
+      for (const question of questions) {
+          const [answers] = await connection.promise().query('SELECT * FROM answers WHERE question_id = ?', [question.id]);
+          question.answers = answers;
+      }
+
+      res.json({ quiz: quiz[0], questions });
+  } catch (error) {
+      console.error('Error fetching quiz:', error);
+      res.status(500).json({ message: 'Error fetching quiz' });
+  }
+});
+
+app.post('/submitQuiz', async (req, res) => {
+  const { token, quizId, answers } = req.body;
+
+  // Input validation
+  if (!token || typeof token !== 'string' || !quizId || typeof quizId !== 'number' || !Array.isArray(answers)) {
+    console.error('Invalid input data:', req.body);
+    return res.status(400).json({ message: 'Invalid input data' });
+  }
+
+  try {
+    const userId = await getUserIdFromToken(token);
+    let correctCount = 0;
+
+    for (const answer of answers) {
+      if (typeof answer.answerId !== 'number' || typeof answer.questionId !== 'number') {
+        console.error('Invalid answer format:', answer);
+        return res.status(400).json({ message: 'Invalid answer format' });
+      }
+
+      const [result] = await connection.promise().query(
+        'SELECT * FROM answers WHERE id = ? AND question_id = ? AND is_correct = TRUE',
+        [answer.answerId, answer.questionId]
+      );
+
+      if (result.length) correctCount++;
+    }
+
+    const [questions] = await connection.promise().query(
+      'SELECT COUNT(*) AS count FROM questions WHERE quiz_id = ?',
+      [quizId]
+    );
+
+    const totalQuestions = questions[0].count;
+
+    if (totalQuestions === 0) {
+      return res.status(400).json({ message: 'No questions found for this quiz' });
+    }
+
+    const score = (correctCount / totalQuestions) * 100;
+
+    await connection.promise().query(
+      'INSERT INTO user_quizzes (user_id, quiz_id, score) VALUES (?, ?, ?)',
+      [userId, quizId, score]
+    );
+
+    res.json({ score });
+
+  } catch (error) {
+    console.error('Error submitting quiz:', error.message);
+    res.status(500).json({ message: 'Error submitting quiz' });
+  }
+});
+
+app.post('/shareQuiz', async (req, res) => {
+  const { quizId, groupId } = req.body; // Quiz ID and Group ID
+  const token = req.headers.authorization.split(' ')[1]; // Extract token from header
+
+  try {
+      // Extract user ID from token
+      const senderId = await getUserIdFromToken(token);
+
+      // Insert message into the messages table
+      const query = 'INSERT INTO messages (sender, group_id, type, content) VALUES (?, ?, ?, ?)';
+      connection.query(query, [senderId, groupId, 'quiz', quizId], (err, results) => {
+          if (err) {
+              console.error('Error inserting message:', err);
+              return res.status(500).send('Error sharing quiz');
+          }
+          res.status(200).send('Quiz shared successfully');
+      });
+  } catch (error) {
+      console.error('Error sharing quiz:', error);
+      res.status(401).send('Failed to authenticate user');
+  }
+});
+
+app.post('/api/getUserResults', async (req, res) => {
+  const token = req.body.token;
+
+  try {
+      // Wait for the promise to resolve
+      const userId = await getUserIdFromToken(token);
+
+      // Log the userId to ensure it's a valid value
+      console.log('userId:', userId);
+
+      const sql = `
+          SELECT quizzes.title AS quizTitle, user_quizzes.score, user_quizzes.completed_at AS takenAt
+          FROM user_quizzes
+          JOIN quizzes ON user_quizzes.quiz_id = quizzes.id
+          WHERE user_quizzes.user_id = ?
+      `;
+
+      // Execute the SQL query
+      connection.query(sql, [userId], (err, results) => {
+          if (err) {
+              console.error('Error fetching user results:', err);
+              return res.status(500).send('Server Error');
+          }
+          res.json(results);
+      });
+  } catch (error) {
+      console.error('Error fetching user results:', error);
+      res.status(500).send('Server Error');
+  }
+});
+
+app.post('/api/getQuizResults', (req, res) => {
+  const { token, quizId } = req.body;
+  // Verify token logic here...
+
+  const query = `
+      SELECT uq.score, uq.completed_at, u.user_name AS user_name 
+      FROM user_quizzes uq
+      JOIN users u ON uq.user_id = u.id
+      WHERE uq.quiz_id = ?
+  `;
+
+  connection.query(query, [quizId], (err, results) => {
+      if (err) {
+          console.error('Error fetching quiz results:', err);
+          return res.status(500).send({ error: 'Error fetching quiz results' });
+      }
+
+      res.send(results);
+  });
+});
+
+// Fetch events route
+app.post('/api/fetchEvents', async (req, res) => {
+  const { token } = req.body;
+  try {
+      const userId = await getUserIdFromToken(token);
+      const sql = 'SELECT * FROM events WHERE user_id = ?';
+      connection.query(sql, [userId], (err, result) => {
+          if (err) return res.status(500).send(err);
+          res.send(result);
+      });
+  } catch (error) {
+      res.status(401).send(error.message);
+  }
+});
+
+// Add event route
+app.post('/api/addEvent', async (req, res) => {
+  const { title, date, token } = req.body;
+  try {
+      const userId = await getUserIdFromToken(token);
+      const sql = 'INSERT INTO events (title, date, user_id) VALUES (?, ?, ?)';
+      connection.query(sql, [title, date, userId], (err, result) => {
+          if (err) return res.status(500).send(err);
+          res.send({ id: result.insertId });
+      });
+  } catch (error) {
+      res.status(401).send(error.message);
+  }
+});
+
+
+app.post('/api/fetchUserActivities', async (req, res) => {
+  const { token } = req.body;
+  try {
+      const userId = await getUserIdFromToken(token);
+      const sql = 'SELECT * FROM user_quizzes WHERE user_id = ?';
+      connection.query(sql, [userId], (err, result) => {
+          if (err) return res.status(500).send(err);
+          res.send(result);
+      });
+  } catch (error) {
+      res.status(401).send(error.message);
+  }
+});
+
+// Remove Event
+app.post('/api/events/remove', (req, res) => {
+  const { id, token } = req.body; // Assuming token-based authentication
+  connection.query('DELETE FROM events WHERE id = ?', [id], err => {
+      if (err) throw err;
+      res.json({ success: true });
+  });
+});
+
+// Update Event
+app.post('/api/events/update', (req, res) => {
+  const { id, title, date, token } = req.body; // Assuming token-based authentication
+  const query = 'UPDATE events SET title = ?, date = ? WHERE id = ?';
+  connection.query(query, [title, date, id], err => {
+      if (err) throw err;
+      res.json({ success: true });
+  });
+});
+
+
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
