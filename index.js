@@ -769,7 +769,6 @@ app.get('/group/member-count/:groupId', (req, res) => {
   });
 });
 
-
 app.post('/invite/group/:groupId', (req, res) => {
   const { groupId } = req.params;
   const { phoneNumber } = req.body;
@@ -778,63 +777,98 @@ app.post('/invite/group/:groupId', (req, res) => {
 
   // Check if phoneNumber is provided
   if (!phoneNumber) {
-      return res.status(400).json({ message: 'Phone number is required.' });
+    return res.status(400).json({ message: 'Phone number is required.' });
   }
 
   // Check if group exists and its privacy
   connection.query('SELECT is_public, user_id FROM `groups` WHERE id = ?', [groupId], (error, groupResults) => {
-      if (error) {
-          console.error('Database error while fetching group details:', error); // Log database error
-          return res.status(500).json({ message: 'Database error.' });
+    if (error) {
+      console.error('Database error while fetching group details:', error); // Log database error
+      return res.status(500).json({ message: 'Database error.' });
+    }
+
+    const group = groupResults[0];
+    if (!group) {
+      return res.status(404).json({ message: 'Group not found.' });
+    }
+
+    // Check if the group is private and the requester is not an admin
+    if (!group.is_public) {
+      const token = req.headers.authorization?.split(' ')[1];
+      if (!token) {
+        return res.status(401).json({ message: 'Authorization token is missing.' });
       }
 
-      const group = groupResults[0];
-      if (!group) {
-          return res.status(404).json({ message: 'Group not found.' });
-      }
-
-      // Check if the group is private and the requester is not an admin
-      if (!group.is_public) {
-          const token = req.headers.authorization?.split(' ')[1];
-          if (!token) {
-              return res.status(401).json({ message: 'Authorization token is missing.' });
-          }
-
-          const userId = getUserIdFromToken(token); // Implement your method to get user ID from token
-          if (!userId) {
-              return res.status(401).json({ message: 'Invalid token.' });
-          }
+      getUserIdFromToken(token)
+        .then(userId => {
+          console.log('Private group invite attempt:', { userId, groupOwner: group.user_id }); // Log private group invite attempt
 
           if (userId !== group.user_id) {
-              return res.status(403).json({ message: 'Only admin can invite members to a private group.' });
-          }
-      }
-
-      // Check if the phone number belongs to a registered user
-      connection.query('SELECT id FROM users WHERE phone_number = ?', [phoneNumber], (error, userResults) => {
-          if (error) {
-              console.error('Database error while checking user existence:', error); // Log database error
-              return res.status(500).json({ message: 'Database error.' });
+            return res.status(403).json({ message: 'Only admin can invite members to a private group.' });
           }
 
-          const user = userResults[0];
-          if (!user) {
-              return res.status(404).json({ message: 'User not found.' });
-          }
-
-          // Add the invitation request
-          connection.query('INSERT INTO group_request (group_id, phone_number, active) VALUES (?, ?, ?)', [groupId, phoneNumber, '1'], (error) => {
-              if (error) {
-                  console.error('Database error while inserting invitation request:', error); // Log database error
-                  return res.status(500).json({ message: 'Failed to add invitation request.' });
-              }
-
-              res.status(200).json({ message: 'Invitation sent successfully.' });
-          });
-      });
+          handleInvitation(groupId, phoneNumber, res);
+        })
+        .catch(err => {
+          console.error('Error fetching user ID from token:', err); // Log error fetching user ID from token
+          res.status(500).json({ message: 'Internal server error.' });
+        });
+    } else {
+      handleInvitation(groupId, phoneNumber, res);
+    }
   });
 });
 
+function handleInvitation(groupId, phoneNumber, res) {
+  // Check if the phone number belongs to a registered user
+  connection.query('SELECT id FROM users WHERE phone_number = ?', [phoneNumber], (error, userResults) => {
+    if (error) {
+      console.error('Database error while checking user existence:', error); // Log database error
+      return res.status(500).json({ message: 'Database error.' });
+    }
+
+    const user = userResults[0];
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    const userId = user.id;
+
+    // Check if the user is already a member of the group
+    connection.query('SELECT * FROM user_groups WHERE user_id = ? AND group_id = ?', [userId, groupId], (error, membershipResults) => {
+      if (error) {
+        console.error('Database error while checking group membership:', error); // Log database error
+        return res.status(500).json({ message: 'Database error.' });
+      }
+
+      if (membershipResults.length > 0) {
+        return res.status(400).json({ message: 'User is already a member of the group.' });
+      }
+
+      // Check if an active invitation already exists
+      connection.query('SELECT * FROM group_request WHERE phone_number = ? AND group_id = ? AND active = 1', [phoneNumber, groupId], (error, invitationResults) => {
+        if (error) {
+          console.error('Database error while checking existing invitations:', error); // Log database error
+          return res.status(500).json({ message: 'Database error.' });
+        }
+
+        if (invitationResults.length > 0) {
+          return res.status(400).json({ message: 'Invitation already sent.' });
+        }
+
+        // Add the invitation request
+        connection.query('INSERT INTO group_request (group_id, phone_number, active) VALUES (?, ?, ?)', [groupId, phoneNumber, '1'], (error) => {
+          if (error) {
+            console.error('Database error while inserting invitation request:', error); // Log database error
+            return res.status(500).json({ message: 'Failed to add invitation request.' });
+          }
+
+          res.status(200).json({ message: 'Invitation sent successfully.' });
+        });
+      });
+    });
+  });
+}
 
 // Endpoint to get group members
 app.get('/api/groups/members/:group_id', (req, res) => {
@@ -881,6 +915,164 @@ app.get('/api/groups/members/:group_id', (req, res) => {
   });
 });
 
+
+// Fetch Invitations API
+app.get('/api/invitations', (req, res) => {
+    const token = req.headers['authorization']?.split(' ')[1];
+    if (!token) return res.status(403).send('Token required');
+
+    getUserIdFromToken(token)
+        .then(userId => {
+            // Get user's phone number
+            const getPhoneNumberQuery = 'SELECT phone_number FROM users WHERE id = ?';
+            connection.query(getPhoneNumberQuery, [userId], (err, results) => {
+                if (err) {
+                    console.error('Error fetching phone number:', err);
+                    return res.status(500).send('Error fetching phone number');
+                }
+                const phoneNumber = results[0]?.phone_number;
+
+                if (!phoneNumber) return res.status(404).send('User not found');
+
+                // Fetch active invitations
+                const invitationsQuery = `
+                    SELECT gr.group_id, g.name AS group_name
+                    FROM group_request gr
+                    JOIN \`groups\` g ON gr.group_id = g.id
+                    WHERE gr.phone_number = ? AND gr.active = 1`;
+                
+                connection.query(invitationsQuery, [phoneNumber], (err, results) => {
+                    if (err) {
+                        console.error('Error fetching invitations:', err);
+                        return res.status(500).send('Error fetching invitations');
+                    }
+                    res.json(results);
+                });
+            });
+        })
+        .catch(error => {
+            console.error('Token authentication error:', error);
+            res.status(500).send('Failed to authenticate token');
+        });
+});
+
+// New API endpoint
+app.post('/invitations/respond', async (req, res) => {
+  console.log('Received request:', req.body);
+
+  const { groupId, action } = req.body;
+  const token = req.headers['authorization']?.split(' ')[1];
+
+  if (!token) {
+    console.log('Token missing');
+    return res.status(403).send('Token required');
+  }
+
+  if (!['accept', 'ignore'].includes(action)) {
+    console.log('Invalid action:', action);
+    return res.status(400).send('Invalid action');
+  }
+
+  try {
+    const userId = await getUserIdFromToken(token);
+
+    // Fetch phone number from users table
+    const getUserPhoneNumberQuery = 'SELECT phone_number FROM users WHERE id = ?';
+    connection.query(getUserPhoneNumberQuery, [userId], (err, results) => {
+      if (err) {
+        console.error('Database query error:', err);
+        return res.status(500).send('Database query error');
+      }
+      if (results.length === 0) {
+        console.log('User not found');
+        return res.status(404).send('User not found');
+      }
+
+      const phoneNumber = results[0].phone_number;
+
+      console.log('User phone number:', phoneNumber);
+
+      // Check if the invitation exists
+      const checkInvitationQuery = 'SELECT * FROM group_request WHERE phone_number = ? AND group_id = ? AND active = 1';
+      connection.query(checkInvitationQuery, [phoneNumber, groupId], (err, results) => {
+        if (err) {
+          console.error('Database query error:', err);
+          return res.status(500).send('Database query error');
+        }
+        if (results.length === 0) {
+          console.log('Invitation not found');
+          return res.status(404).send('Invitation not found');
+        }
+
+        if (action === 'accept') {
+          const insertMembershipQuery = 'INSERT INTO user_groups (user_id, group_id) VALUES (?, ?)';
+          connection.query(insertMembershipQuery, [userId, groupId], (err) => {
+            if (err) {
+              console.error('Error inserting membership:', err);
+              return res.status(500).send('Error inserting membership');
+            }
+
+            const updateInvitationQuery = 'UPDATE group_request SET active = 0, status = "accepted" WHERE phone_number = ? AND group_id = ?';
+            connection.query(updateInvitationQuery, [phoneNumber, groupId], (err) => {
+              if (err) {
+                console.error('Error updating invitation:', err);
+                return res.status(500).send('Error updating invitation');
+              }
+              console.log('Invitation accepted');
+              res.send('Invitation accepted');
+            });
+          });
+        } else if (action === 'ignore') {
+          const updateInvitationQuery = 'UPDATE group_request SET active = 0, status = "rejected" WHERE phone_number = ? AND group_id = ?';
+          connection.query(updateInvitationQuery, [phoneNumber, groupId], (err) => {
+            if (err) {
+              console.error('Error updating invitation:', err);
+              return res.status(500).send('Error updating invitation');
+            }
+            console.log('Invitation ignored');
+            res.send('Invitation ignored');
+          });
+        }
+      });
+    });
+  } catch (err) {
+    console.error('Failed to authenticate token:', err);
+    res.status(500).send('Failed to authenticate token');
+  }
+});
+const checkMembership = (userId, groupId, callback) => {
+  // Fetch membership from the database
+  connection.query('SELECT * FROM user_groups WHERE user_id = ? AND group_id = ?', [userId, groupId], (error, results) => {
+      if (error) {
+          console.error('Database query error:', error);
+          return callback(error, null);
+      }
+      callback(null, results);
+  });
+};
+
+// Routes
+app.post('/api/checkUserMembership', async (req, res) => {
+  const { token, groupId } = req.body;
+  
+  try {
+      const userId = await getUserIdFromToken(token);
+      
+      if (!userId) {
+          return res.status(401).json({ isMember: false });
+      }
+
+      checkMembership(userId, groupId, (error, membership) => {
+          if (error) {
+              return res.status(500).json({ message: 'Error checking membership' });
+          }
+          res.json({ isMember: membership.length > 0 });
+      });
+
+  } catch (error) {
+      res.status(500).json({ message: 'Error checking membership' });
+  }
+});
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
