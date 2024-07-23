@@ -84,6 +84,10 @@ connection.getConnection((err) => {
 });
 
 
+const baseURL = 'http://localhost:8080';
+
+
+
 
 // GET endpoint for testing
 app.get('/', (req, res) => {
@@ -1460,7 +1464,7 @@ app.post('/api/session-check', (req, res) => {
 
 const clientId = '0aac6cb1ec104103a5e2e5d6f9b490e7';
 const clientSecret = '4e2d9a5a3be9406c970cf3f6cb78b7a3';
-const redirectUri = 'http://localhost:8080/callback'; // Ensure this matches your Spotify Dashboard
+const redirectUri = `${baseURL}/callback`; // Ensure this matches your Spotify Dashboard
 
 app.use(cors());
 
