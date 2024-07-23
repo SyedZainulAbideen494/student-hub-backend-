@@ -13,8 +13,10 @@ const path = require("path");
 const PORT = process.env.PORT || 8080;
 const axios = require('axios');
 const cheerio = require('cheerio');
-const querystring = require('querystring'); // Include the querystring module
+const querystring = require('querystring');
 const nodemailer = require('nodemailer');
+const request = require('request');
+
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
@@ -621,6 +623,7 @@ app.get('/api/notes/:id', (req, res) => {
       }
   });
 });
+
 
 // Utility function to extract user ID from token
 const getUserIdFromToken = (token) => {
@@ -1405,6 +1408,127 @@ app.post('/api/events/update', (req, res) => {
   });
 });
 
+app.post('/api/validate-token-session', (req, res) => {
+  const { token } = req.body;
+  if (!token) {
+      return res.status(400).json({ valid: false, message: 'No token provided' });
+  }
+
+  const query = 'SELECT * FROM session WHERE jwt = ?';
+  connection.query(query, [token], (err, results) => {
+      if (err) {
+          console.error('Database query error:', err);
+          return res.status(500).json({ valid: false, message: 'Internal server error' });
+      }
+
+      if (results.length === 0) {
+          return res.status(401).json({ valid: false, message: 'Invalid token' });
+      }
+
+      return res.status(200).json({ valid: true });
+  });
+});
+
+// Route for the app download
+app.get('/download/android', (req, res) => {
+  const file = path.join(__dirname, 'public', 'app', 'Edusify.apk');
+  res.download(file);
+});
+
+// Endpoint to check token
+app.post('/api/session-check', (req, res) => {
+  const { token } = req.body;
+
+  if (!token) {
+    return res.status(400).json({ error: 'Token is required.' });
+  }
+
+  const query = 'SELECT * FROM session WHERE jwt = ?';
+  connection.query(query, [token], (err, results) => {
+    if (err) {
+      console.error('Database query error:', err);
+      return res.status(500).json({ error: 'Internal server error.' });
+    }
+
+    if (results.length > 0) {
+      res.json({ exists: true });
+    } else {
+      res.json({ exists: false });
+    }
+  });
+});
+
+const clientId = '0aac6cb1ec104103a5e2e5d6f9b490e7';
+const clientSecret = '4e2d9a5a3be9406c970cf3f6cb78b7a3';
+const redirectUri = 'http://localhost:8080/callback'; // Ensure this matches your Spotify Dashboard
+
+app.use(cors());
+
+app.get('/login/spotify', (req, res) => {
+  const scope = 'user-read-private user-read-email streaming user-modify-playback-state';
+  res.redirect('https://accounts.spotify.com/authorize?' +
+    querystring.stringify({
+      response_type: 'code',
+      client_id: clientId,
+      scope: scope,
+      redirect_uri: redirectUri
+    }));
+});
+
+app.get('/callback', (req, res) => {
+  const code = req.query.code || null;
+  const authOptions = {
+    url: 'https://accounts.spotify.com/api/token',
+    form: {
+      code: code,
+      redirect_uri: redirectUri,
+      grant_type: 'authorization_code'
+    },
+    headers: {
+      'Authorization': 'Basic ' + Buffer.from(clientId + ':' + clientSecret).toString('base64')
+    },
+    json: true
+  };
+
+  request.post(authOptions, (error, response, body) => {
+    if (!error && response.statusCode === 200) {
+      const access_token = body.access_token;
+      const refresh_token = body.refresh_token;
+
+      const uri = 'http://localhost:3000/music';
+      res.redirect(uri + '?access_token=' + access_token + '&refresh_token=' + refresh_token);
+    } else {
+      res.redirect('/#' +
+        querystring.stringify({
+          error: 'invalid_token'
+        }));
+    }
+  });
+});
+
+app.post('/refresh_token', (req, res) => {
+  const { refreshToken } = req.body;
+
+  const authOptions = {
+    url: 'https://accounts.spotify.com/api/token',
+    form: {
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken
+    },
+    headers: {
+      'Authorization': 'Basic ' + Buffer.from(clientId + ':' + clientSecret).toString('base64')
+    },
+    json: true
+  };
+
+  request.post(authOptions, (error, response, body) => {
+    if (!error && response.statusCode === 200) {
+      res.json({ accessToken: body.access_token });
+    } else {
+      res.status(response.statusCode).json({ error: 'Failed to refresh token' });
+    }
+  });
+});
 
 // Start the server
 app.listen(PORT, () => {
