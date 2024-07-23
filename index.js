@@ -1510,7 +1510,7 @@ app.get('/callback', (req, res) => {
   });
 });
 
-app.post('/refresh_token', (req, res) => {
+app.post('/refresh_token', async (req, res) => {
   const { refreshToken } = req.body;
 
   const authOptions = {
@@ -1529,6 +1529,7 @@ app.post('/refresh_token', (req, res) => {
     if (!error && response.statusCode === 200) {
       res.json({ accessToken: body.access_token });
     } else {
+      console.error('Error refreshing token:', error);
       res.status(response.statusCode).json({ error: 'Failed to refresh token' });
     }
   });
