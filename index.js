@@ -16,7 +16,7 @@ const cheerio = require('cheerio');
 const querystring = require('querystring');
 const nodemailer = require('nodemailer');
 const request = require('request');
-
+const webpush = require('web-push');
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
@@ -85,14 +85,123 @@ connection.getConnection((err) => {
 
 
 const baseURL = 'http://localhost:8080';
+// Replace these with your actual VAPID keys
+const vapidKeys = {
+  publicKey: 'BB0t-WTOpYNRM6b24mcvZKliaHnYK0umXovnqouKrFpSD8Zeq07V9N_z1jTwhenXBJ-Rlf_UxplpYculchlM3ug',
+  privateKey: 'WofqigD5KWG-9XLsCYLxp_IThRwSW6e9qNKMYc6_23I'
+};
 
+webpush.setVapidDetails(
+  'mailto:example@yourdomain.org',
+  vapidKeys.publicKey,
+  vapidKeys.privateKey
+);
 
+let subscriptions = [];
 
-
-// GET endpoint for testing
+// Serve the HTML and client-side JS
 app.get('/', (req, res) => {
-  res.send('Welcome!');
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Push Notifications</title>
+      <script>
+        // Register Service Worker
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.register('/service-worker.js')
+            .then(reg => {
+              console.log('Service Worker Registered', reg);
+              if ('PushManager' in window) {
+                reg.pushManager.getSubscription()
+                  .then(subscription => {
+                    if (!subscription) {
+                      return reg.pushManager.subscribe({
+                        userVisibleOnly: true,
+                        applicationServerKey: urlBase64ToUint8Array('${vapidKeys.publicKey}')
+                      }).then(newSubscription => {
+                        fetch('/save-subscription', {
+                          method: 'POST',
+                          body: JSON.stringify(newSubscription),
+                          headers: { 'Content-Type': 'application/json' }
+                        }).then(() => console.log('Subscription saved'));
+                      });
+                    }
+                  });
+              }
+            });
+        }
+
+        function urlBase64ToUint8Array(base64String) {
+          const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+          const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+          const rawData = window.atob(base64);
+          const outputArray = new Uint8Array(rawData.length);
+          for (let i = 0; i < rawData.length; ++i) {
+            outputArray[i] = rawData.charCodeAt(i);
+          }
+          return outputArray;
+        }
+
+        // Send notification from the client
+        function sendNotification() {
+          fetch('/send-notification', {
+            method: 'POST',
+            body: JSON.stringify({ message: 'Hello from server!' }),
+            headers: { 'Content-Type': 'application/json' }
+          }).then(response => response.json())
+            .then(data => console.log(data));
+        }
+      </script>
+    </head>
+    <body>
+      <h1>Push Notifications</h1>
+      <button onclick="sendNotification()">Send Notification</button>
+    </body>
+    </html>
+  `);
 });
+
+// Service worker script
+app.get('/service-worker.js', (req, res) => {
+  res.send(`
+    self.addEventListener('push', function(event) {
+      const data = event.data.json();
+      self.registration.showNotification(data.title, {
+        body: data.message,
+        icon: data.icon || 'default-icon.png',
+      });
+    });
+  `);
+});
+
+
+app.post('/save-subscription', (req, res) => {
+  console.log('Received subscription:', req.body); // Log subscription details
+  subscriptions.push(req.body);
+  res.sendStatus(201);
+});
+
+app.post('/send-notification', (req, res) => {
+  const { message } = req.body;
+  const payload = JSON.stringify({ title: 'New Notification', message });
+
+  console.log('Sending notification with payload:', payload);
+
+  Promise.all(subscriptions.map(sub =>
+    webpush.sendNotification(sub, payload)
+      .then(() => console.log('Notification sent'))
+      .catch(err => console.error('Error sending notification:', err))
+  )).then(() => {
+    res.json({ success: true });
+  }).catch(err => {
+    console.error('Error in sending notifications:', err);
+    res.sendStatus(500);
+  });
+});
+
+
+
 
 
 
@@ -131,39 +240,43 @@ app.get('/webhook', (req, res) => {
   }
 });
 
-
 app.post('/signup', (req, res) => {
   const {
     phone,
     password,
     username,
-    email
+    email,
+    bio,
+    unique_id,
+    country
   } = req.body;
 
- 
-  // Check if the email already exists in the database
+  // Check if the phone number already exists in the database
   const checkEmailQuery = 'SELECT * FROM users WHERE phone_number = ?';
   connection.query(checkEmailQuery, [phone], (err, results) => {
     if (err) {
       console.error('Error checking phone number:', err);
       res.status(500).json({ error: 'Internal server error' });
     } else if (results.length > 0) {
-      // If email already exists, return a message
-      res.status(409).json({ error: 'User with this email already exists' });
+      // If phone number already exists, return a message
+      res.status(409).json({ error: 'User with this phone number already exists' });
     } else {
-      // If email doesn't exist, proceed with user registration
+      // If phone number doesn't exist, proceed with user registration
       bcrypt.hash(password, saltRounds, (hashErr, hash) => {
         if (hashErr) {
           console.error('Error hashing password: ', hashErr);
           res.status(500).json({ error: 'Internal server error' });
         } else {
           const insertQuery =
-            'INSERT INTO users (phone_number, password, user_name, email) VALUES (?, ?, ?, ?)';
+            'INSERT INTO users (phone_number, password, user_name, email, bio, unique_id, location) VALUES (?, ?, ?, ?, ?, ?, ?)';
           const values = [
             phone,
             hash,
             username,
-            email
+            email,
+            bio,
+            unique_id,
+            country
           ];
 
           connection.query(insertQuery, values, (insertErr, insertResults) => {
@@ -371,11 +484,10 @@ app.post('/add/tasks', (req, res) => {
           if (err) {
               return res.status(500).send(err);
           }
-          res.status(201).send({ id: results.insertId });
+        
       });
   });
 });
-
 app.post('/fetch/tasks', (req, res) => {
   const { token } = req.body;
 
@@ -440,11 +552,11 @@ app.post('/delete/task', (req, res) => {
           if (err) {
               return res.status(500).send(err);
           }
+         
           res.send({ message: 'Task deleted successfully' });
       });
   });
 });
-
 
 
 
@@ -751,30 +863,45 @@ app.post('/api/groups/join/:id', async (req, res) => {
       res.status(401).json({ message: error.message });
   }
 });
+
 app.get('/api/groups/:id', (req, res) => {
   const groupId = req.params.id;
   const query = `SELECT * FROM \`groups\` WHERE id = ?`; // Escaped table name
   connection.query(query, [groupId], (err, results) => {
       if (err) throw err;
       const group = results[0];
-      const messagesQuery = `SELECT * FROM \`messages\` WHERE group_id = ?`; // Escaped table name
+      const messagesQuery = `
+          SELECT * FROM \`messages\` 
+          WHERE group_id = ? AND parent_id IS NULL`; // Fetch only parent messages
       connection.query(messagesQuery, [groupId], (err, messages) => {
           if (err) throw err;
-          res.json({ ...group, messages });
+
+          // Fetch replies for each message
+          const messageIds = messages.map(message => message.id);
+          const repliesQuery = `SELECT * FROM \`messages\` WHERE parent_id IN (?)`;
+          connection.query(repliesQuery, [messageIds], (err, replies) => {
+              if (err) throw err;
+
+              const messagesWithReplies = messages.map(message => ({
+                  ...message,
+                  replies: replies.filter(reply => reply.parent_id === message.id)
+              }));
+
+              res.json({ ...group, messages: messagesWithReplies });
+          });
       });
   });
 });
 
-
 app.post('/api/groups/messages/send/:id', async (req, res) => {
   const groupId = req.params.id;
-  const { content, type, sender } = req.body;
+  const { content, type, sender, parentId = null } = req.body;
   const token = req.headers.authorization.split(' ')[1]; // Extract token from header
 
   try {
-    const userId = await getUserIdFromToken(token);
-      const query = `INSERT INTO messages (group_id, content, sender, type) VALUES (?, ?, ?, ?)`;
-      connection.query(query, [groupId, content, userId, type], (err, results) => {
+      const userId = await getUserIdFromToken(token);
+      const query = `INSERT INTO messages (group_id, content, sender, type, parent_id) VALUES (?, ?, ?, ?, ?)`;
+      connection.query(query, [groupId, content, userId, type, parentId], (err, results) => {
           if (err) {
               console.error('Error inserting message:', err);
               res.sendStatus(500);
@@ -1533,6 +1660,119 @@ app.post('/refresh_token', async (req, res) => {
       res.status(response.statusCode).json({ error: 'Failed to refresh token' });
     }
   });
+});
+
+app.post('/api/profile/user', async (req, res) => {
+  try {
+    const token = req.body.token;
+
+    if (!token) {
+      return res.status(400).send('No token provided');
+    }
+
+    // Get user ID from token
+    const userId = await getUserIdFromToken(token);
+
+    // Fetch user profile data
+    connection.query('SELECT * FROM users WHERE id = ?', [userId], (error, results) => {
+      if (error) return res.status(500).send(error);
+      if (results.length === 0) return res.status(404).send('User not found');
+      res.json(results[0]);
+    });
+  } catch (error) {
+    res.status(401).send(error);
+  }
+});
+
+app.post('/getEduScribe', async (req, res) => {
+  const { token } = req.body;
+
+  try {
+    const userId = await getUserIdFromToken(token);
+    if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+
+    const [eduScribe] = await connection.promise().query('SELECT * FROM edu_scribe WHERE user_id = ?', [userId]);
+    res.json(eduScribe);
+  } catch (error) {
+    console.error('Error fetching EduScribe:', error);
+    res.status(500).json({ message: 'Error fetching EduScribe' });
+  }
+});
+
+app.post('/getPosts/user', async (req, res) => {
+  const { token } = req.body;
+
+  try {
+    const userId = await getUserIdFromToken(token);
+    if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+
+    // Fetch posts with images
+    const [posts] = await connection.promise().query(
+      `SELECT p.id, p.title, p.content, pi.image_url
+       FROM posts p
+       LEFT JOIN post_images pi ON p.id = pi.post_id
+       WHERE p.user_id = ?`,
+      [userId]
+    );
+
+    // Group images by post
+    const postsWithImages = posts.reduce((acc, post) => {
+      const { id, title, content, image_url } = post;
+      if (!acc[id]) {
+        acc[id] = { id, title, content, images: [] };
+      }
+      if (image_url) {
+        acc[id].images.push(image_url);
+      }
+      return acc;
+    }, {});
+
+    res.json(Object.values(postsWithImages));
+  } catch (error) {
+    console.error('Error fetching posts:', error);
+    res.status(500).json({ message: 'Error fetching posts' });
+  }
+});
+
+app.post('/api/add/posts', upload.array('images', 5), async (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+
+  let userId;
+  try {
+    userId = await getUserIdFromToken(token);
+  } catch (err) {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+
+  const { title, content } = req.body;
+  const imageNames = req.files.map(file => file.filename); // Get only file names
+
+  try {
+    const [result] = await connection.promise().query(
+      'INSERT INTO posts (user_id, title, content) VALUES (?, ?, ?)',
+      [userId, title, content]
+    );
+    
+    const postId = result.insertId;
+
+    // Insert image names into the post_images table
+    const imagePromises = imageNames.map(name =>
+      connection.promise().query(
+        'INSERT INTO post_images (post_id, image_url) VALUES (?, ?)',
+        [postId, name]
+      )
+    );
+
+    await Promise.all(imagePromises);
+
+    res.status(201).json({ message: 'Post created successfully', postId });
+  } catch (err) {
+    console.error('Error creating post:', err);
+    res.status(500).json({ error: 'Error creating post' });
+  }
 });
 
 // Start the server
