@@ -1683,7 +1683,6 @@ app.post('/api/profile/user', async (req, res) => {
     res.status(401).send(error);
   }
 });
-
 app.get('/api/eduscribes', async (req, res) => {
   try {
     // Extract token from request headers
@@ -1698,32 +1697,58 @@ app.get('/api/eduscribes', async (req, res) => {
       return res.status(401).json({ message: 'Invalid token or user ID not found' });
     }
 
-    // Query to fetch eduscribes with comments and likes count
-    const query = `
-      SELECT e.id, e.content, e.image, e.created_at, u.id AS user_id, u.user_name, u.avatar,
-             (SELECT COUNT(*) FROM comments c WHERE c.eduscribe_id = e.id) AS commentsCount,
-             (SELECT COUNT(*) FROM likes l WHERE l.eduscribe_id = e.id) AS likesCount,
-             (SELECT COUNT(*) FROM likes l WHERE l.eduscribe_id = e.id AND l.user_id = ?) AS isLiked
-      FROM eduscribes e
-      JOIN users u ON e.user_id = u.id
-      GROUP BY e.id, u.id
-      ORDER BY e.created_at DESC
-    `;
+    // Get tab filter from query parameter
+    const { tab } = req.query;
 
-    // Execute query with user ID to check liked status
-    connection.query(query, [userId], (err, results) => {
-      if (err) {
-        console.error('Database error:', err);
-        return res.status(500).json({ message: 'Database error' });
+    let sql;
+    let params = [userId];
+
+    if (tab === 'Following') {
+      // Query to get user IDs that the current user is following
+      const followingQuery = 'SELECT following_id FROM followers WHERE follower_id = ?';
+      const followingResults = await query(followingQuery, [userId]);
+      const followingIds = followingResults.map(f => f.following_id);
+
+      if (followingIds.length === 0) {
+        // No following users
+        return res.json([]);
       }
-      res.json(results);
-    });
+
+      // Query to fetch eduscribes for the users the current user is following
+      sql = `
+        SELECT e.id, e.content, e.image, e.created_at, u.id AS user_id, u.user_name, u.avatar,
+               (SELECT COUNT(*) FROM comments c WHERE c.eduscribe_id = e.id) AS commentsCount,
+               (SELECT COUNT(*) FROM likes l WHERE l.eduscribe_id = e.id) AS likesCount,
+               (SELECT COUNT(*) FROM likes l WHERE l.eduscribe_id = e.id AND l.user_id = ?) AS isLiked
+        FROM eduscribes e
+        JOIN users u ON e.user_id = u.id
+        WHERE e.user_id IN (?)
+        GROUP BY e.id, u.id
+        ORDER BY e.created_at DESC
+      `;
+      params.push(followingIds);
+    } else {
+      // Default to fetching all eduscribes for "For You" tab
+      sql = `
+        SELECT e.id, e.content, e.image, e.created_at, u.id AS user_id, u.user_name, u.avatar,
+               (SELECT COUNT(*) FROM comments c WHERE c.eduscribe_id = e.id) AS commentsCount,
+               (SELECT COUNT(*) FROM likes l WHERE l.eduscribe_id = e.id) AS likesCount,
+               (SELECT COUNT(*) FROM likes l WHERE l.eduscribe_id = e.id AND l.user_id = ?) AS isLiked
+        FROM eduscribes e
+        JOIN users u ON e.user_id = u.id
+        GROUP BY e.id, u.id
+        ORDER BY e.created_at DESC
+      `;
+    }
+
+    // Execute query
+    const results = await query(sql, params);
+    res.json(results);
   } catch (error) {
     console.error('Error fetching eduscribes:', error.message);
     res.status(500).json({ message: 'Internal Server Error' });
   }
 });
-
 
 // Add Eduscribe endpoint
 app.post('/api/add/eduscribes', upload.single('image'), async (req, res) => {
@@ -1867,6 +1892,102 @@ app.get('/api/user/profile/items/:id', async (req, res) => {
   } catch (error) {
     console.error('Error fetching data:', error);
     res.status(500).json({ error: 'Failed to fetch data' });
+  }
+});
+
+// Promisify query function
+const query = (sql, params) => {
+  return new Promise((resolve, reject) => {
+    connection.query(sql, params, (error, results) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve(results);
+      }
+    });
+  });
+};
+
+
+// Follow endpoint
+app.post('/api/follow', async (req, res) => {
+  console.log('Received follow request');
+  const { id, token } = req.body; // Profile ID to follow and token
+
+  if (!id || !token) {
+    console.log('Missing ID or token');
+    return res.status(400).json({ message: 'ID and token are required' });
+  }
+
+  try {
+    const userId = await getUserIdFromToken(token);
+
+    const rows = await query('SELECT * FROM followers WHERE follower_id = ? AND following_id = ?', [userId, id]);
+
+    if (rows.length > 0) {
+      // Already following
+      console.log('Already following');
+      return res.status(200).json({ message: 'Already following' });
+    }
+
+    // Insert follow record
+    const result = await query('INSERT INTO followers (follower_id, following_id) VALUES (?, ?)', [userId, id]);
+    console.log('Followed successfully:', result);
+    res.status(200).json({ message: 'Followed successfully', result });
+  } catch (err) {
+    console.error('Error:', err);
+    res.status(500).json({ message: 'Failed to follow user' });
+  }
+});
+
+// Unfollow endpoint
+app.post('/api/unfollow', async (req, res) => {
+  console.log('Received unfollow request');
+  const { id, token } = req.body; // Profile ID to unfollow and token
+
+  if (!id || !token) {
+    console.log('Missing ID or token');
+    return res.status(400).json({ message: 'ID and token are required' });
+  }
+
+  try {
+    const userId = await getUserIdFromToken(token);
+
+    // Delete follow record
+    const result = await query('DELETE FROM followers WHERE follower_id = ? AND following_id = ?', [userId, id]);
+    console.log('Unfollowed successfully:', result);
+    res.status(200).json({ message: 'Unfollowed successfully', result });
+  } catch (err) {
+    console.error('Error:', err);
+    res.status(500).json({ message: 'Failed to unfollow user' });
+  }
+});
+
+// Check if following endpoint
+app.post('/api/isFollowing', async (req, res) => {
+  console.log('Received isFollowing request');
+  const { id, token } = req.body; // Profile ID to check and token
+
+  if (!id || !token) {
+    console.log('Missing ID or token');
+    return res.status(400).json({ message: 'ID and token are required' });
+  }
+
+  try {
+    const userId = await getUserIdFromToken(token);
+
+    // Check if following
+    const rows = await query('SELECT * FROM followers WHERE follower_id = ? AND following_id = ?', [userId, id]);
+    if (rows.length > 0) {
+      console.log('Following');
+      res.status(200).json({ following: true });
+    } else {
+      console.log('Not following');
+      res.status(200).json({ following: false });
+    }
+  } catch (err) {
+    console.error('Error:', err);
+    res.status(500).json({ message: 'Failed to check follow status' });
   }
 });
 
