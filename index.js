@@ -1684,94 +1684,189 @@ app.post('/api/profile/user', async (req, res) => {
   }
 });
 
-app.post('/getEduScribe', async (req, res) => {
+app.get('/api/eduscribes', async (req, res) => {
+  try {
+    // Extract token from request headers
+    const token = req.headers['authorization'];
+    if (!token) {
+      return res.status(401).json({ message: 'Token required' });
+    }
+
+    // Function to get user ID from token (implement this according to your authentication logic)
+    const userId = await getUserIdFromToken(token);
+    if (!userId) {
+      return res.status(401).json({ message: 'Invalid token or user ID not found' });
+    }
+
+    // Query to fetch eduscribes with comments and likes count
+    const query = `
+      SELECT e.id, e.content, e.image, e.created_at, u.id AS user_id, u.user_name, u.avatar,
+             (SELECT COUNT(*) FROM comments c WHERE c.eduscribe_id = e.id) AS commentsCount,
+             (SELECT COUNT(*) FROM likes l WHERE l.eduscribe_id = e.id) AS likesCount,
+             (SELECT COUNT(*) FROM likes l WHERE l.eduscribe_id = e.id AND l.user_id = ?) AS isLiked
+      FROM eduscribes e
+      JOIN users u ON e.user_id = u.id
+      GROUP BY e.id, u.id
+      ORDER BY e.created_at DESC
+    `;
+
+    // Execute query with user ID to check liked status
+    connection.query(query, [userId], (err, results) => {
+      if (err) {
+        console.error('Database error:', err);
+        return res.status(500).json({ message: 'Database error' });
+      }
+      res.json(results);
+    });
+  } catch (error) {
+    console.error('Error fetching eduscribes:', error.message);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+
+// Add Eduscribe endpoint
+app.post('/api/add/eduscribes', upload.single('image'), async (req, res) => {
+  const { question, token } = req.body;
+  const imageName = req.file ? req.file.filename : null;
+
+  try {
+    const userId = await getUserIdFromToken(token);
+    const sql = 'INSERT INTO eduscribes (content, user_id, image) VALUES (?, ?, ?)';
+    connection.query(sql, [question, userId, imageName], (err, result) => {
+      if (err) {
+        console.error('Error executing query:', err);
+        return res.status(500).json({ error: 'Internal Server Error' });
+      }
+      res.status(200).json({ message: 'Eduscribe submitted successfully!', id: result.insertId });
+    });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(401).json({ error: error.message });
+  }
+});
+
+
+// API endpoint to like/unlike an eduscribe
+app.post('/api/eduscribes/like/:id', async (req, res) => {
+  const { id } = req.params;
   const { token } = req.body;
 
   try {
     const userId = await getUserIdFromToken(token);
-    if (!userId) return res.status(401).json({ message: 'Unauthorized' });
-
-    const [eduScribe] = await connection.promise().query('SELECT * FROM edu_scribe WHERE user_id = ?', [userId]);
-    res.json(eduScribe);
-  } catch (error) {
-    console.error('Error fetching EduScribe:', error);
-    res.status(500).json({ message: 'Error fetching EduScribe' });
-  }
-});
-
-app.post('/getPosts/user', async (req, res) => {
-  const { token } = req.body;
-
-  try {
-    const userId = await getUserIdFromToken(token);
-    if (!userId) return res.status(401).json({ message: 'Unauthorized' });
-
-    // Fetch posts with images
-    const [posts] = await connection.promise().query(
-      `SELECT p.id, p.title, p.content, pi.image_url
-       FROM posts p
-       LEFT JOIN post_images pi ON p.id = pi.post_id
-       WHERE p.user_id = ?`,
-      [userId]
-    );
-
-    // Group images by post
-    const postsWithImages = posts.reduce((acc, post) => {
-      const { id, title, content, image_url } = post;
-      if (!acc[id]) {
-        acc[id] = { id, title, content, images: [] };
-      }
-      if (image_url) {
-        acc[id].images.push(image_url);
-      }
-      return acc;
-    }, {});
-
-    res.json(Object.values(postsWithImages));
-  } catch (error) {
-    console.error('Error fetching posts:', error);
-    res.status(500).json({ message: 'Error fetching posts' });
-  }
-});
-
-app.post('/api/add/posts', upload.array('images', 5), async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) {
-    return res.status(401).json({ error: 'No token provided' });
-  }
-
-  let userId;
-  try {
-    userId = await getUserIdFromToken(token);
-  } catch (err) {
-    return res.status(401).json({ error: 'Invalid token' });
-  }
-
-  const { title, content } = req.body;
-  const imageNames = req.files.map(file => file.filename); // Get only file names
-
-  try {
-    const [result] = await connection.promise().query(
-      'INSERT INTO posts (user_id, title, content) VALUES (?, ?, ?)',
-      [userId, title, content]
-    );
     
-    const postId = result.insertId;
+    if (!userId) {
+      return res.status(400).send({ message: 'Invalid token or user ID not found' });
+    }
 
-    // Insert image names into the post_images table
-    const imagePromises = imageNames.map(name =>
-      connection.promise().query(
-        'INSERT INTO post_images (post_id, image_url) VALUES (?, ?)',
-        [postId, name]
-      )
-    );
+    // Check if user already liked this eduscribe
+    const checkSql = 'SELECT * FROM likes WHERE eduscribe_id = ? AND user_id = ?';
+    connection.query(checkSql, [id, userId], (err, results) => {
+      if (err) {
+        console.error('Database error:', err);
+        return res.status(500).send({ message: 'Database error' });
+      }
 
-    await Promise.all(imagePromises);
+      if (results.length > 0) {
+        // Unlike if already liked
+        const deleteSql = 'DELETE FROM likes WHERE eduscribe_id = ? AND user_id = ?';
+        connection.query(deleteSql, [id, userId], (err) => {
+          if (err) {
+            console.error('Database error:', err);
+            return res.status(500).send({ message: 'Database error' });
+          }
+          res.send({ message: 'Unliked successfully' });
+        });
+      } else {
+        // Like if not yet liked
+        const insertSql = 'INSERT INTO likes (eduscribe_id, user_id) VALUES (?, ?)';
+        connection.query(insertSql, [id, userId], (err) => {
+          if (err) {
+            console.error('Database error:', err);
+            return res.status(500).send({ message: 'Database error' });
+          }
+          res.send({ message: 'Liked successfully' });
+        });
+      }
+    });
+  } catch (error) {
+    console.error('Error liking eduscribe:', error.message);
+    res.status(500).send({ message: 'Internal Server Error' });
+  }
+});
 
-    res.status(201).json({ message: 'Post created successfully', postId });
-  } catch (err) {
-    console.error('Error creating post:', err);
-    res.status(500).json({ error: 'Error creating post' });
+// API endpoint to comment on an eduscribe
+app.post('/api/eduscribes/comment/add/:id', async (req, res) => {
+  const { id } = req.params;
+  const { token, comment } = req.body;
+
+  try {
+    const userId = await getUserIdFromToken(token);
+
+    if (!userId) {
+      return res.status(400).send({ message: 'Invalid token or user ID not found' });
+    }
+
+    const sql = 'INSERT INTO comments (eduscribe_id, user_id, content) VALUES (?, ?, ?)';
+    connection.query(sql, [id, userId, comment], (err) => {
+      if (err) {
+        console.error('Database error:', err);
+        return res.status(500).send({ message: 'Database error' });
+      }
+      res.send({ message: 'Comment added successfully' });
+    });
+  } catch (error) {
+    console.error('Error commenting on eduscribe:', error.message);
+    res.status(500).send({ message: 'Internal Server Error' });
+  }
+});
+
+app.get('/api/eduscribes/comments/:id', async (req, res) => {
+  const { id } = req.params;
+
+  const sql = `
+    SELECT comments.id, comments.content, comments.created_at, users.avatar, users.user_name 
+    FROM comments 
+    JOIN users ON comments.user_id = users.id 
+    WHERE comments.eduscribe_id = ?
+  `;
+  
+  connection.query(sql, [id], (err, results) => {
+    if (err) {
+      console.error('Database error:', err);
+      return res.status(500).send({ message: 'Database error' });
+    }
+    res.send(results);
+  });
+});
+
+app.get('/api/profile/view/guest/:user_id', (req, res) => {
+  const userId = req.params.user_id;
+  const query = 'SELECT * FROM users WHERE id = ?';
+  connection.query(query, [userId], (err, results) => {
+    if (err) {
+      console.error('Error fetching user profile:', err);
+      return res.status(500).json({ error: 'Failed to fetch user profile' });
+    }
+    if (results.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    res.json(results[0]);
+  });
+});
+
+app.get('/api/user/profile/items/:id', async (req, res) => {
+  const userId = req.params.id;
+  
+  try {
+    const [flashcards] = await connection.promise().query(`SELECT * FROM flashcards WHERE user_id = ? AND is_public = 'true'`, [userId]);
+    const [quizzes] = await connection.promise().query('SELECT * FROM quizzes WHERE creator_id = ?', [userId]);
+    const [eduscribes] = await connection.promise().query('SELECT * FROM eduscribes WHERE user_id = ?', [userId]);
+
+    res.json({ flashcards, quizzes, eduscribes });
+  } catch (error) {
+    console.error('Error fetching data:', error);
+    res.status(500).json({ error: 'Failed to fetch data' });
   }
 });
 
