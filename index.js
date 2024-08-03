@@ -1991,6 +1991,94 @@ app.post('/api/isFollowing', async (req, res) => {
   }
 });
 
+
+app.post('/api/solve-math', async (req, res) => {
+  const { query } = req.body;
+
+  try {
+    const response = await axios.get('https://api.wolframalpha.com/v2/query', {
+      params: {
+        input: query,
+        format: 'plaintext,image', // Request both plaintext and images
+        output: 'JSON',
+        appid: 'XH7LLE-R26W3Q9YTA', // Replace with your Wolfram|Alpha API key
+      },
+    });
+
+    console.log('Raw API Response:', response.data); // Log the raw response
+
+    const pods = response.data.queryresult.pods;
+
+    if (pods && pods.length > 0) {
+      const results = pods.map(pod => ({
+        title: pod.title,
+        content: pod.subpods
+          .map(subpod => subpod.plaintext || 'No content available')
+          .join('\n'),
+        images: pod.subpods
+          .filter(subpod => subpod.img && subpod.img.src)
+          .map(subpod => {
+            const imgSrc = subpod.img.src.startsWith('http') ? subpod.img.src : `https:${subpod.img.src}`;
+            return imgSrc;
+          })
+      }));
+
+      res.json({ results });
+    } else {
+      res.status(404).json({ error: 'No result found' });
+    }
+  } catch (error) {
+    console.error('Error:', error); // Log the error for debugging
+    res.status(500).json({ error: 'An error occurred while processing the request' });
+  }
+});
+
+app.get('/wolfram/science', async (req, res) => {
+  const query = req.query.input;
+  try {
+    const response = await axios.get('https://api.wolframalpha.com/v2/query', {
+      params: {
+        input: query,
+        format: 'plaintext,image',
+        output: 'JSON',
+        appid: 'XH7LLE-WVTQHYEG2U'
+      }
+    });
+    
+    console.log(response.data); // Debugging line
+    
+    const result = response.data.queryresult;
+    
+    // Ensure result is not undefined
+    if (result) {
+      res.json(result);
+    } else {
+      res.status(404).json({ error: 'No results found' });
+    }
+  } catch (error) {
+    console.error(error); // Debugging line
+    res.status(500).json({ error: 'Error fetching data' });
+  }
+});
+
+
+app.get('/search', (req, res) => {
+  const { query } = req.query;
+
+  const sql = `SELECT * FROM users WHERE user_name LIKE ? OR unique_id LIKE ?`;
+  const values = [`%${query}%`, `%${query}%`];
+
+  connection.query(sql, values, (err, results) => {
+      if (err) {
+          console.error('Error executing query:', err);
+          res.status(500).send('Server error');
+      } else {
+          res.json(results);
+      }
+  });
+});
+
+
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
