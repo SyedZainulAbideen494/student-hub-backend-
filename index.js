@@ -244,11 +244,8 @@ app.post('/signup', (req, res) => {
   const {
     phone,
     password,
-    username,
     email,
-    bio,
     unique_id,
-    country
   } = req.body;
 
   // Check if the phone number already exists in the database
@@ -268,15 +265,12 @@ app.post('/signup', (req, res) => {
           res.status(500).json({ error: 'Internal server error' });
         } else {
           const insertQuery =
-            'INSERT INTO users (phone_number, password, user_name, email, bio, unique_id, location) VALUES (?, ?, ?, ?, ?, ?, ?)';
+            'INSERT INTO users (phone_number, password, email, unique_id) VALUES (?, ?, ?, ?, ?)';
           const values = [
             phone,
             hash,
-            username,
             email,
-            bio,
-            unique_id,
-            country
+            unique_id
           ];
 
           connection.query(insertQuery, values, (insertErr, insertResults) => {
@@ -2075,6 +2069,59 @@ app.get('/search', (req, res) => {
       } else {
           res.json(results);
       }
+  });
+});
+
+
+app.put('/user/update', upload.single('avatar'), (req, res) => {
+  const token = req.headers.authorization ? req.headers.authorization.split(' ')[1] : null;
+  if (!token) {
+    return res.status(401).send('Unauthorized');
+  }
+
+  getUserIdFromToken(token).then(userId => {
+    if (!userId) {
+      return res.status(400).send('User ID is missing');
+    }
+
+    const { unique_id, user_name, bio, location, phone_number } = req.body;
+    const avatar = req.file ? req.file.filename : null;
+
+    const query = `
+      UPDATE users
+      SET unique_id = ?, user_name = ?, bio = ?, location = ?, phone_number = ?, avatar = ?
+      WHERE id = ?
+    `;
+
+    connection.query(query, [unique_id, user_name, bio, location, phone_number, avatar, userId], (err, results) => {
+      if (err) {
+        console.error('Error updating profile:', err);
+        return res.status(500).send('Error updating profile');
+      }
+      res.status(200).send('Profile updated successfully');
+    });
+  }).catch(err => {
+    console.error('Error fetching user ID:', err);
+    res.status(500).send('Internal server error');
+  });
+});
+
+// API route to remove avatar and set default image
+app.post('/api/remove-avatar', (req, res) => {
+  const { unique_id } = req.body;
+  const defaultAvatar = 'defPic.png'; // Default avatar image name
+
+  if (!unique_id) {
+    return res.status(400).json({ error: 'Unique ID is required' });
+  }
+
+  const query = 'UPDATE users SET avatar = ? WHERE unique_id = ?';
+  connection.query(query, [defaultAvatar, unique_id], (err, result) => {
+    if (err) {
+      console.error('Error updating avatar:', err);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+    res.status(200).json({ message: 'Avatar removed and set to default image' });
   });
 });
 
