@@ -490,6 +490,8 @@ app.post('/add/tasks', async (req, res) => {
   }
 });
 
+
+
 app.post('/fetch/tasks', (req, res) => {
   const { token } = req.body;
 
@@ -1997,27 +1999,22 @@ app.post('/api/isFollowing', async (req, res) => {
 app.post('/api/solve-math', async (req, res) => {
   const { query } = req.body;
 
-  if (!query) {
-    return res.status(400).json({ error: 'Query parameter is required' });
-  }
-
   try {
-    console.log(`Received query: ${query}`); // Log the query
-
-    // Wolfram Alpha API request
-    const wolframResponse = await axios.get('https://api.wolframalpha.com/v2/query', {
+    const response = await axios.get('https://api.wolframalpha.com/v2/query', {
       params: {
         input: query,
-        format: 'plaintext,image',
+        format: 'plaintext,image', // Request both plaintext and images
         output: 'JSON',
-        appid: 'XH7LLE-R26W3Q9YTA' // Replace with your Wolfram|Alpha API key
+        appid: 'XH7LLE-R26W3Q9YTA', // Replace with your Wolfram|Alpha API key
       },
     });
 
-    const wolframPods = wolframResponse.data.queryresult.pods;
+    console.log('Raw API Response:', response.data); // Log the raw response
 
-    if (wolframPods && wolframPods.length > 0) {
-      const results = wolframPods.map(pod => ({
+    const pods = response.data.queryresult.pods;
+
+    if (pods && pods.length > 0) {
+      const results = pods.map(pod => ({
         title: pod.title,
         content: pod.subpods
           .map(subpod => subpod.plaintext || 'No content available')
@@ -2030,92 +2027,20 @@ app.post('/api/solve-math', async (req, res) => {
           })
       }));
 
-      return res.json({ results });
+      res.json({ results });
     } else {
-      // Fallback API calls
-      console.log('No results from Wolfram Alpha, trying fallbacks.');
-      const fallbackData = await getFallbackData(query);
-      if (fallbackData) {
-        return res.json(fallbackData);
-      } else {
-        return res.status(404).json({ error: 'No results found' });
-      }
+      res.status(404).json({ error: 'No result found' });
     }
   } catch (error) {
-    console.error('Error fetching data:', error);
-    // Attempt fallbacks in case of error
-    const fallbackData = await getFallbackData(query);
-    if (fallbackData) {
-      return res.json(fallbackData);
-    } else {
-      return res.status(500).json({ error: 'An error occurred while processing the request' });
-    }
+    console.error('Error:', error); // Log the error for debugging
+    res.status(500).json({ error: 'An error occurred while processing the request' });
   }
 });
 
-async function getFallbackData(query) {
-  try {
-    // DuckDuckGo API request
-    const duckduckgoResponse = await axios.get('https://api.duckduckgo.com/', {
-      params: {
-        q: query,
-        format: 'json',
-        pretty: 1
-      }
-    });
-
-    if (duckduckgoResponse.data.AbstractText) {
-      return {
-        results: [{
-          title: duckduckgoResponse.data.Heading,
-          content: duckduckgoResponse.data.AbstractText
-        }]
-      };
-    }
-
-    // Wikipedia API request
-    const wikiResponse = await axios.get('https://en.wikipedia.org/w/api.php', {
-      params: {
-        action: 'query',
-        format: 'json',
-        prop: 'extracts',
-        titles: query,
-        exintro: true,
-        explaintext: true
-      }
-    });
-
-    const pages = wikiResponse.data.query.pages;
-    const page = Object.values(pages)[0];
-    if (page.extract) {
-      return {
-        results: [{
-          title: page.title,
-          content: page.extract
-        }]
-      };
-    }
-
-    return null;
-  } catch (error) {
-    console.error('Error fetching fallback data:', error);
-    return null;
-  }
-}
-
-// API route to handle science queries
 app.get('/wolfram/science', async (req, res) => {
   const query = req.query.input;
-
-  if (!query) {
-    return res.status(400).json({ error: 'Query parameter is required' });
-  }
-
   try {
-    console.log(`Received query: ${query}`); // Log the query
-
-    // Wolfram Alpha API request
-    const wolframResponse = await axios.get('https://api.wolframalpha.com/v2/query', {
+    const response = await axios.get('https://api.wolframalpha.com/v2/query', {
       params: {
         input: query,
         format: 'plaintext,image',
@@ -2123,79 +2048,23 @@ app.get('/wolfram/science', async (req, res) => {
         appid: 'XH7LLE-WVTQHYEG2U'
       }
     });
-
-    const wolframResult = wolframResponse.data.queryresult;
-
-    // Check if Wolfram Alpha returned results
-    if (wolframResult && wolframResult.pods) {
-      return res.json(wolframResult);
+    
+    console.log(response.data); // Debugging line
+    
+    const result = response.data.queryresult;
+    
+    // Ensure result is not undefined
+    if (result) {
+      res.json(result);
     } else {
-      console.log('No results from Wolfram Alpha, trying fallbacks.');
-      // Fallback API calls
-      const fallbackData = await getFallbackData(query);
-      if (fallbackData) {
-        return res.json(fallbackData);
-      } else {
-        return res.status(404).json({ error: 'No results found' });
-      }
+      res.status(404).json({ error: 'No results found' });
     }
   } catch (error) {
-    console.error('Error fetching data from Wolfram Alpha:', error);
-    // Attempt fallbacks in case of error
-    const fallbackData = await getFallbackData(query);
-    if (fallbackData) {
-      return res.json(fallbackData);
-    } else {
-      return res.status(500).json({ error: 'Error fetching data' });
-    }
+    console.error(error); // Debugging line
+    res.status(500).json({ error: 'Error fetching data' });
   }
 });
 
-async function getFallbackData(query) {
-  try {
-    // DuckDuckGo API request
-    const duckduckgoResponse = await axios.get('https://api.duckduckgo.com/', {
-      params: {
-        q: query,
-        format: 'json',
-        pretty: 1
-      }
-    });
-
-    if (duckduckgoResponse.data.AbstractText) {
-      return {
-        title: duckduckgoResponse.data.Heading,
-        content: duckduckgoResponse.data.AbstractText
-      };
-    }
-
-    // Wikipedia API request
-    const wikiResponse = await axios.get('https://en.wikipedia.org/w/api.php', {
-      params: {
-        action: 'query',
-        format: 'json',
-        prop: 'extracts',
-        titles: query,
-        exintro: true,
-        explaintext: true
-      }
-    });
-
-    const pages = wikiResponse.data.query.pages;
-    const page = Object.values(pages)[0];
-    if (page.extract) {
-      return {
-        title: page.title,
-        content: page.extract
-      };
-    }
-
-    return null;
-  } catch (error) {
-    console.error('Error fetching fallback data:', error);
-    return null;
-  }
-}
 
 app.get('/search', (req, res) => {
   const { query } = req.query;
