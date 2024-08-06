@@ -460,28 +460,36 @@ app.post("/verify-otp", (req, res) => {
   );
 });
 
-app.post('/add/tasks', (req, res) => {
+app.post('/add/tasks', async (req, res) => {
   const { title, description, due_date, priority, token } = req.body;
 
-  const getUserQuery = 'SELECT user_id FROM session WHERE jwt = ?';
-  connection.query(getUserQuery, [token], (err, results) => {
-      if (err) {
-          return res.status(500).send(err);
-      }
-      if (results.length === 0) {
-          return res.status(404).send({ message: 'User not found' });
-      }
+  try {
+    // Step 1: Get User ID
+    const [userResults] = await connection.promise().query(
+      'SELECT user_id FROM session WHERE jwt = ?',
+      [token]
+    );
 
-      const user_id = results[0].user_id;
-      const insertQuery = 'INSERT INTO tasks (title, description, due_date, priority, user_id) VALUES (?, ?, ?, ?, ?)';
-      connection.query(insertQuery, [title, description, due_date, priority, user_id], (err, results) => {
-          if (err) {
-              return res.status(500).send(err);
-          }
-        
-      });
-  });
+    if (userResults.length === 0) {
+      return res.status(404).send({ message: 'User not found' });
+    }
+
+    const user_id = userResults[0].user_id;
+
+    // Step 2: Insert Task
+    const [insertResults] = await connection.promise().query(
+      'INSERT INTO tasks (title, description, due_date, priority, user_id) VALUES (?, ?, ?, ?, ?)',
+      [title, description, due_date, priority, user_id]
+    );
+
+    // Step 3: Send response
+    res.status(201).send({ id: insertResults.insertId, title, description, due_date, priority });
+  } catch (err) {
+    console.error('Error adding task:', err);
+    res.status(500).send({ message: 'Internal server error' });
+  }
 });
+
 app.post('/fetch/tasks', (req, res) => {
   const { token } = req.body;
 
