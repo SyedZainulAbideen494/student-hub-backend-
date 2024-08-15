@@ -84,7 +84,7 @@ connection.getConnection((err) => {
 });
 
 
-const baseURL = 'http://localhost:8080';
+const baseURL = 'https://d9e67164d44cde2f9870e983ff2546a0.serveo.net';
 // Replace these with your actual VAPID keys
 const vapidKeys = {
   publicKey: 'BB0t-WTOpYNRM6b24mcvZKliaHnYK0umXovnqouKrFpSD8Zeq07V9N_z1jTwhenXBJ-Rlf_UxplpYculchlM3ug',
@@ -744,6 +744,72 @@ app.get('/api/notes/:id', (req, res) => {
   });
 });
 
+// Route to update a specific note by note_id
+app.put('/api/update/note/:note_id', (req, res) => {
+  const noteId = req.params.note_id;
+  const { title, description, headings } = req.body;
+
+  const query = `
+      UPDATE flashcards 
+      SET title = ?, description = ?, headings = ?
+      WHERE id = ?
+  `;
+  const values = [title, description, headings, noteId];
+
+  connection.query(query, values, (error, results) => {
+      if (error) {
+          console.error('Error updating note:', error);
+          return res.status(500).json({ message: 'Failed to update note.' });
+      }
+
+      if (results.affectedRows === 0) {
+          return res.status(404).json({ message: 'Note not found.' });
+      }
+
+      res.status(200).json({ message: 'Note updated successfully!' });
+  });
+});
+// Route to delete a specific note by note_id
+app.delete('/api/delete/note/:note_id', (req, res) => {
+  const noteId = req.params.note_id;
+  const token = req.headers.authorization?.split(' ')[1];
+
+  if (!token) {
+      return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  connection.query('SELECT user_id FROM session WHERE jwt = ?', [token], (err, results) => {
+      if (err) {
+          console.error('Error fetching user_id:', err);
+          return res.status(500).json({ message: 'Failed to authenticate user.' });
+      }
+
+      if (results.length === 0) {
+          return res.status(401).json({ message: 'Invalid or expired token.' });
+      }
+
+      const userId = results[0].user_id;
+
+      const query = `
+          DELETE FROM flashcards 
+          WHERE id = ? AND user_id = ?
+      `;
+      const values = [noteId, userId];
+
+      connection.query(query, values, (error, results) => {
+          if (error) {
+              console.error('Error deleting note:', error);
+              return res.status(500).json({ message: 'Failed to delete note.' });
+          }
+
+          if (results.affectedRows === 0) {
+              return res.status(404).json({ message: 'Note not found or not authorized.' });
+          }
+
+          res.status(200).json({ message: 'Note deleted successfully!' });
+      });
+  });
+});
 
 // Utility function to extract user ID from token
 const getUserIdFromToken = (token) => {
@@ -870,52 +936,84 @@ app.post('/api/groups/join/:id', async (req, res) => {
 
 app.get('/api/groups/:id', (req, res) => {
   const groupId = req.params.id;
-  const query = `SELECT * FROM \`groups\` WHERE id = ?`; // Escaped table name
+  const query = `SELECT * FROM \`groups\` WHERE id = ?`;
+  
   connection.query(query, [groupId], (err, results) => {
-      if (err) throw err;
-      const group = results[0];
-      const messagesQuery = `
-          SELECT * FROM \`messages\` 
-          WHERE group_id = ? AND parent_id IS NULL`; // Fetch only parent messages
-      connection.query(messagesQuery, [groupId], (err, messages) => {
-          if (err) throw err;
+    if (err) {
+      console.error('Error fetching group:', err);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
 
-          // Fetch replies for each message
-          const messageIds = messages.map(message => message.id);
-          const repliesQuery = `SELECT * FROM \`messages\` WHERE parent_id IN (?)`;
-          connection.query(repliesQuery, [messageIds], (err, replies) => {
-              if (err) throw err;
+    if (results.length === 0) {
+      return res.status(404).json({ error: 'Group not found' });
+    }
 
-              const messagesWithReplies = messages.map(message => ({
-                  ...message,
-                  replies: replies.filter(reply => reply.parent_id === message.id)
-              }));
+    const group = results[0];
+    const messagesQuery = `
+      SELECT * FROM \`messages\` 
+      WHERE group_id = ? AND parent_id IS NULL
+    `;
+    
+    connection.query(messagesQuery, [groupId], (err, messages) => {
+      if (err) {
+        console.error('Error fetching messages:', err);
+        return res.status(500).json({ error: 'Internal server error' });
+      }
 
-              res.json({ ...group, messages: messagesWithReplies });
-          });
+      if (messages.length === 0) {
+        return res.json({ ...group, messages: [] }); // Return empty messages array if no messages
+      }
+
+      const messageIds = messages.map(message => message.id);
+      const repliesQuery = `
+        SELECT * FROM \`messages\` 
+        WHERE parent_id IN (?)
+      `;
+      
+      connection.query(repliesQuery, [messageIds], (err, replies) => {
+        if (err) {
+          console.error('Error fetching replies:', err);
+          return res.status(500).json({ error: 'Internal server error' });
+        }
+
+        const messagesWithReplies = messages.map(message => ({
+          ...message,
+          replies: replies.filter(reply => reply.parent_id === message.id)
+        }));
+
+        res.json({ ...group, messages: messagesWithReplies });
       });
+    });
   });
 });
 
 app.post('/api/groups/messages/send/:id', async (req, res) => {
   const groupId = req.params.id;
-  const { content, type, sender, parentId = null } = req.body;
-  const token = req.headers.authorization.split(' ')[1]; // Extract token from header
+  const { content, type, parentId = null } = req.body;
+  const token = req.headers.authorization?.split(' ')[1]; // Extract token from header
+
+  if (!token) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
 
   try {
       const userId = await getUserIdFromToken(token);
+      if (!userId) {
+          return res.status(401).json({ error: 'Invalid token' });
+      }
+
       const query = `INSERT INTO messages (group_id, content, sender, type, parent_id) VALUES (?, ?, ?, ?, ?)`;
       connection.query(query, [groupId, content, userId, type, parentId], (err, results) => {
           if (err) {
               console.error('Error inserting message:', err);
-              res.sendStatus(500);
-          } else {
-              res.sendStatus(200);
+              return res.status(500).json({ error: 'Error sending message' });
           }
+
+          res.status(200).json({ success: 'Message sent successfully' });
       });
   } catch (error) {
       console.error('Error fetching user ID:', error);
-      res.sendStatus(401); // Unauthorized
+      res.status(401).json({ error: 'Unauthorized' }); // Unauthorized
   }
 });
 
@@ -1630,7 +1728,7 @@ app.get('/callback', (req, res) => {
       const access_token = body.access_token;
       const refresh_token = body.refresh_token;
 
-      const uri = 'http://localhost:3000/music';
+      const uri = 'https://edusify.vercel.app/music';
       res.redirect(uri + '?access_token=' + access_token + '&refresh_token=' + refresh_token);
     } else {
       res.redirect('/#' +
