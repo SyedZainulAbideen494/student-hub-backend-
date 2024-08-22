@@ -10,13 +10,14 @@ const saltRounds = 10;
 const jwt = require("jsonwebtoken");
 const multer = require("multer");
 const path = require("path");
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 5000;
 const axios = require('axios');
 const cheerio = require('cheerio');
 const querystring = require('querystring');
 const nodemailer = require('nodemailer');
 const request = require('request');
 const webpush = require('web-push');
+const crypto = require('crypto');
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
@@ -33,9 +34,9 @@ app.use(session({
 }));
 
 app.use(cors({
-  origin: "*",
+  origin: "*", // Allows requests from any origin
   methods: ["GET", "POST", "DELETE", "PUT"],
-  credentials: true,
+  credentials: true, // Allows cookies to be sent
 }));
 
 // Define storage for multer
@@ -84,7 +85,7 @@ connection.getConnection((err) => {
 });
 
 
-const baseURL = 'https://6ae804a38abf91309a0a6cf0884d9140.serveo.net';
+const baseURL = 'https://mn4jqd3r-8080.inc1.devtunnels.ms';
 // Replace these with your actual VAPID keys
 const vapidKeys = {
   publicKey: 'BB0t-WTOpYNRM6b24mcvZKliaHnYK0umXovnqouKrFpSD8Zeq07V9N_z1jTwhenXBJ-Rlf_UxplpYculchlM3ug',
@@ -249,8 +250,8 @@ app.post('/signup', (req, res) => {
   } = req.body;
 
   // Check if the phone number already exists in the database
-  const checkEmailQuery = 'SELECT * FROM users WHERE phone_number = ?';
-  connection.query(checkEmailQuery, [phone], (err, results) => {
+  const checkPhoneQuery = 'SELECT * FROM users WHERE phone_number = ?';
+  connection.query(checkPhoneQuery, [phone], (err, results) => {
     if (err) {
       console.error('Error checking phone number:', err);
       res.status(500).json({ error: 'Internal server error' });
@@ -261,11 +262,11 @@ app.post('/signup', (req, res) => {
       // If phone number doesn't exist, proceed with user registration
       bcrypt.hash(password, saltRounds, (hashErr, hash) => {
         if (hashErr) {
-          console.error('Error hashing password: ', hashErr);
+          console.error('Error hashing password:', hashErr);
           res.status(500).json({ error: 'Internal server error' });
         } else {
           const insertQuery =
-            'INSERT INTO users (phone_number, password, email, unique_id) VALUES (?, ?, ?, ?, ?)';
+            'INSERT INTO users (phone_number, password, email, unique_id) VALUES (?, ?, ?, ?)';
           const values = [
             phone,
             hash,
@@ -275,7 +276,7 @@ app.post('/signup', (req, res) => {
 
           connection.query(insertQuery, values, (insertErr, insertResults) => {
             if (insertErr) {
-              console.error('Error inserting user: ', insertErr);
+              console.error('Error inserting user:', insertErr);
               res.status(500).json({ error: 'Internal server error' });
             } else {
               console.log('User registration successful!');
@@ -2315,7 +2316,65 @@ async function getFallbackData(query) {
     return null;
   }
 }
+const generateToken = () => crypto.randomBytes(20).toString('hex');
 
+// Forgot Password Route
+app.post('/api/auth/forgot-password', (req, res) => {
+  const { emailOrPhone } = req.body;
+  connection.query('SELECT * FROM users WHERE email = ? OR phone_number = ?', [emailOrPhone, emailOrPhone], (err, results) => {
+    if (err) return res.status(500).json({ error: 'Database error' });
+    if (results.length === 0) return res.status(404).json({ error: 'User not found' });
+
+    const user = results[0];
+    const token = generateToken();
+    const resetLink = `https://edusify.vercel.app/reset-password/${token}`;
+
+    // Store the token in the database
+    connection.query('INSERT INTO password_resets (email, token, expires_at) VALUES (?, ?, ?)', [user.email, token, new Date(Date.now() + 3600000)], (err) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+
+      // Send email
+      transporter.sendMail({
+        to: user.email,
+        subject: 'Password Reset',
+        text: `Click the following link to reset your password: ${resetLink}`
+      });
+
+      res.status(200).json({ message: 'Reset link sent' });
+    });
+  });
+});
+
+// Reset Password Route
+app.post('/api/auth/reset-password', (req, res) => {
+  const { token, password } = req.body;
+
+  // Validate token
+  connection.query('SELECT * FROM password_resets WHERE token = ? AND expires_at > NOW()', [token], (err, results) => {
+    if (err) return res.status(500).json({ error: 'Database error' });
+    if (results.length === 0) return res.status(400).json({ error: 'Invalid or expired token' });
+
+    const email = results[0].email;
+    const saltRounds = 10;
+
+    // Hash the new password
+    bcrypt.hash(password, saltRounds, (hashErr, hash) => {
+      if (hashErr) return res.status(500).json({ error: 'Internal server error' });
+
+      // Update the password in the database
+      connection.query('UPDATE users SET password = ? WHERE email = ?', [hash, email], (err) => {
+        if (err) return res.status(500).json({ error: 'Database error' });
+
+        // Deactivate the token
+        connection.query('DELETE FROM password_resets WHERE token = ?', [token], (err) => {
+          if (err) return res.status(500).json({ error: 'Database error' });
+
+          res.status(200).json({ message: 'Password successfully updated' });
+        });
+      });
+    });
+  });
+});
 
 // Start the server
 app.listen(PORT, () => {
