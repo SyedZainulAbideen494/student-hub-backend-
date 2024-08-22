@@ -1052,7 +1052,7 @@ app.get('/api/user/details/:id', async (req, res) => {
 
   try {
       const userId = await getUserIdFromToken(token);
-      connection.query('SELECT user_name FROM users WHERE id = ?', [user_id], (err, results) => {
+      connection.query('SELECT unique_id FROM users WHERE id = ?', [user_id], (err, results) => {
           if (err) {
               console.error('Error fetching user_name:', err);
               return res.status(500).send('Failed to fetch user name.');
@@ -1062,7 +1062,7 @@ app.get('/api/user/details/:id', async (req, res) => {
               return res.status(404).send('User not found.');
           }
 
-          res.json({ user_name: results[0].user_name });
+          res.json({ user_name: results[0].unique_id });
       });
   } catch (err) {
       res.status(401).send(err.message);
@@ -1211,7 +1211,7 @@ app.get('/api/groups/members/:group_id', (req, res) => {
 
       // Query to get user names from the users table
       const usersQuery = `
-          SELECT id, user_name
+          SELECT id, unique_id
           FROM users
           WHERE id IN (?)
       `;
