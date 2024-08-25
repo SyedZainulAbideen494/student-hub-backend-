@@ -18,6 +18,8 @@ const nodemailer = require('nodemailer');
 const request = require('request');
 const webpush = require('web-push');
 const crypto = require('crypto');
+const stripe = require('stripe')('sk_test_51LoS3iSGyKMMAZwstPlmLCEi1eBUy7MsjYxiKsD1lT31LQwvPZYPvqCdfgH9xl8KgeJoVn6EVPMgnMRsFInhnnnb00WhKhMOq7');
+const cron = require('node-cron');
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
@@ -83,6 +85,14 @@ connection.getConnection((err) => {
     console.log("Connected to MySQL database");
   }
 });
+
+const BASE_URL = 'https://mn4jqd3r-5000.inc1.devtunnels.ms';
+const FRONTEND_BASE_URL = 'https://edusify.vercel.app'; // Update this if your frontend runs on a different URL
+
+// Backend success and cancel URLs
+const SUCCESS_URL = `${BASE_URL}/success?session_id={CHECKOUT_SESSION_ID}&sender_id=`;
+const CANCEL_URL = `${BASE_URL}/cancel`;
+
 
 
 const baseURL = 'https://mn4jqd3r-8080.inc1.devtunnels.ms';
@@ -2374,6 +2384,182 @@ app.post('/api/auth/reset-password', (req, res) => {
       });
     });
   });
+});
+
+app.post('/api/leave-group/:id', (req, res) => {
+  const { id: groupId } = req.params;
+  const token = req.headers.authorization.split(' ')[1];
+
+  getUserIdFromToken(token)
+    .then(userId => {
+      connection.query('DELETE FROM user_groups WHERE user_id = ? AND group_id = ?', [userId, groupId], (error, result) => {
+        if (error) {
+          console.error(error);
+          res.status(500).json({ error: 'Server error' });
+        } else {
+          if (result.affectedRows > 0) {
+            res.status(200).json({ message: 'Left group successfully' });
+          } else {
+            res.status(400).json({ error: 'Failed to leave group' });
+          }
+        }
+      });
+    })
+    .catch(error => {
+      console.error(error);
+      res.status(500).json({ error: 'Server error' });
+    });
+});
+
+
+
+
+// Create Checkout Session
+app.post('/api/create-checkout-session', (req, res) => {
+  const { token } = req.body; // Token sent from the client
+
+  // Retrieve userId from token
+  getUserIdFromToken(token)
+    .then(senderId => {
+      return stripe.checkout.sessions.create({
+        payment_method_types: ['card'],
+        line_items: [{
+          price_data: {
+            currency: 'USD',
+            product_data: {
+              name: 'edusify premium',
+              description: 'Unlock premium features of edusify!',
+            },
+            unit_amount: 60, // Amount in cents (e.g., $1.00)
+          },
+          quantity: 1,
+        }],
+        mode: 'payment',
+        success_url: `${SUCCESS_URL}${senderId}`, // Redirect to backend success URL
+        cancel_url: CANCEL_URL, // Redirect to backend cancel URL
+      });
+    })
+    .then(session => {
+      res.json({ url: session.url });
+    })
+    .catch(error => {
+      console.error('Error creating checkout session:', error);
+      res.status(500).send('Internal Server Error');
+    });
+});
+
+const handlePaymentSuccess = (sessionId, senderId, callback) => {
+  stripe.checkout.sessions.retrieve(sessionId)
+    .then(session => {
+      const currentDate = new Date();
+      const expiryDate = new Date(currentDate);
+      expiryDate.setDate(currentDate.getDate() + 30); // Set expiry date to 30 days from now
+
+      const query = 'UPDATE users SET is_premium = 1, premium_expiry_date = ? WHERE id = ?';
+      connection.query(query, [expiryDate, senderId], (err, result) => {
+        if (err) {
+          console.error('Error updating user subscription:', err);
+          callback(err);
+        } else {
+          console.log('User subscription updated successfully');
+          callback(null);
+        }
+      });
+    })
+    .catch(error => {
+      console.error('Error handling payment success:', error);
+      callback(error);
+    });
+};
+
+// Success Endpoint
+app.get('/success', (req, res) => {
+  const sessionId = req.query.session_id;
+  const senderId = req.query.sender_id;
+
+  handlePaymentSuccess(sessionId, senderId, (err) => {
+    if (err) {
+      console.error('Error handling payment success:', err);
+      res.redirect(`${FRONTEND_BASE_URL}/payment-success?success=false`);
+    } else {
+      res.redirect(`${FRONTEND_BASE_URL}/payment-success?success=true`);
+    }
+  });
+});
+
+// Cancel Endpoint
+app.get('/cancel', (req, res) => {
+  res.redirect(FRONTEND_BASE_URL); // Redirect to the frontend home or cancel page
+});
+
+
+// Function to check and update expired premium accounts
+const checkExpiredPremiums = () => {
+  const currentDate = new Date();
+
+  const query = `
+    UPDATE users 
+    SET is_premium = 0 
+    WHERE is_premium = 1 AND premium_expiry_date < ?`;
+
+  connection.query(query, [currentDate], (err, results) => {
+    if (err) {
+      console.error('Error updating expired premium accounts:', err);
+    } else {
+      console.log(`Updated ${results.affectedRows} expired premium accounts.`);
+    }
+  });
+};
+
+// Schedule the cron job to run every 24 hours (midnight)
+cron.schedule('0 0 * * *', () => {
+  console.log('Running check for expired premium accounts...');
+  checkExpiredPremiums();
+});
+
+
+// Example in Node.js with Express
+app.post('/api/verifyPremium', (req, res) => {
+  const { token } = req.body;
+
+  getUserIdFromToken(token)
+    .then(userId => {
+      connection.query('SELECT is_premium FROM users WHERE id = ?', [userId], (error, results) => {
+        if (error) {
+          return res.status(500).json({ message: 'Error verifying premium status', error });
+        }
+
+        if (results.length > 0) {
+          res.json({ is_premium: results[0].is_premium === 1 });
+        } else {
+          res.status(404).json({ message: 'User not found' });
+        }
+      });
+    })
+    .catch(error => {
+      res.status(500).json({ message: 'Error verifying premium status', error });
+    });
+});
+
+
+app.post('/getEduScribe/user/profile', (req, res) => {
+  const { token } = req.body;
+
+  getUserIdFromToken(token)
+    .then(userId => {
+      if (!userId) {
+        return res.status(401).json({ message: 'Invalid token' });
+      }
+
+      return query('SELECT * FROM eduscribes WHERE user_id = ?', [userId]);
+    })
+    .then(eduscribes => {
+      res.json(eduscribes);
+    })
+    .catch(error => {
+      console.error('Error fetching EduScribe data:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    });
 });
 
 // Start the server
