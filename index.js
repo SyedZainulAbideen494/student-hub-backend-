@@ -2562,6 +2562,21 @@ app.post('/getEduScribe/user/profile', (req, res) => {
     });
 });
 
+// Delete EduScribe
+app.delete('/api/deleteEduScribe/:id', (req, res) => {
+  const id = req.params.id;
+
+  const query = 'DELETE FROM eduscribes WHERE id = ?';
+  connection.query(query, [id], (err, result) => {
+    if (err) {
+      console.error('Error deleting eduscribe:', err);
+      res.status(500).json({ message: 'Error deleting eduscribe' });
+    } else {
+      res.status(200).json({ message: 'EduScribe deleted successfully' });
+    }
+  });
+});
+
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
