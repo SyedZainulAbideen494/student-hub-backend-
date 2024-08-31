@@ -10,7 +10,7 @@ const saltRounds = 10;
 const jwt = require("jsonwebtoken");
 const multer = require("multer");
 const path = require("path");
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 8080;
 const axios = require('axios');
 const cheerio = require('cheerio');
 const querystring = require('querystring');
@@ -20,6 +20,8 @@ const webpush = require('web-push');
 const crypto = require('crypto');
 const stripe = require('stripe')('sk_test_51LoS3iSGyKMMAZwstPlmLCEi1eBUy7MsjYxiKsD1lT31LQwvPZYPvqCdfgH9xl8KgeJoVn6EVPMgnMRsFInhnnnb00WhKhMOq7');
 const cron = require('node-cron');
+
+
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
@@ -2576,6 +2578,45 @@ app.delete('/api/deleteEduScribe/:id', (req, res) => {
     }
   });
 });
+
+
+// Backend API endpoint (Node.js + Express)
+app.post('/get-user-results', (req, res) => {
+  const token = req.body.token;
+
+  getUserIdFromToken(token)
+    .then(userId => {
+      // Query user_quizzes table
+      return query('SELECT * FROM user_quizzes WHERE user_id = ?', [userId]);
+    })
+    .then(userQuizzes => {
+      const quizIds = userQuizzes.map(q => q.quiz_id);
+      if (quizIds.length === 0) {
+        return []; // No quizzes found, return empty array
+      }
+
+      // Query quizzes table
+      return query('SELECT * FROM quizzes WHERE id IN (?)', [quizIds])
+        .then(quizzes => {
+          // Merge results from both queries
+          const results = userQuizzes.map(quiz => {
+            const quizInfo = quizzes.find(q => q.id === quiz.quiz_id);
+            return {
+              ...quiz,
+              quiz_title: quizInfo ? quizInfo.title : 'Unknown Quiz'
+            };
+          });
+          res.json({ results });
+        });
+    })
+    .catch(error => {
+      console.error('Error fetching results:', error);
+      res.status(500).json({ message: 'Error fetching results' });
+    });
+});
+
+
+
 
 // Start the server
 app.listen(PORT, () => {
