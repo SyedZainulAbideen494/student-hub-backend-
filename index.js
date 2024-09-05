@@ -88,7 +88,7 @@ connection.getConnection((err) => {
   }
 });
 
-const BASE_URL = 'https://mn4jqd3r-5000.inc1.devtunnels.ms';
+const BASE_URL = 'https://mn4jqd3r-8080.inc1.devtunnels.ms';
 const FRONTEND_BASE_URL = 'https://edusify.vercel.app'; // Update this if your frontend runs on a different URL
 
 // Backend success and cancel URLs
@@ -253,6 +253,43 @@ app.get('/webhook', (req, res) => {
   }
 });
 
+app.post('/check-unique-id', (req, res) => {
+  const { unique_id } = req.body;
+
+  const checkUniqueIdQuery = 'SELECT * FROM users WHERE unique_id = ?';
+  connection.query(checkUniqueIdQuery, [unique_id], (err, results) => {
+    if (err) {
+      console.error('Error checking unique_id:', err);
+      res.status(500).json({ error: 'Internal server error' });
+    } else if (results.length > 0) {
+      // If unique_id already exists, return a message
+      res.status(409).json({ error: 'Unique ID already taken' });
+    } else {
+      // If unique_id doesn't exist, return success
+      res.status(200).json({ message: 'Unique ID available' });
+    }
+  });
+});
+
+
+app.post('/generate-alternatives', (req, res) => {
+  const { unique_id } = req.body;
+  
+  // Generate some alternative unique IDs (mocked here for simplicity)
+  const generateAlternatives = (base) => {
+    const alternatives = [];
+    for (let i = 1; i <= 5; i++) {
+      alternatives.push(`${base}${i}`);
+    }
+    return alternatives;
+  };
+
+  // Generate alternatives based on the provided unique_id
+  const alternatives = generateAlternatives(unique_id);
+  res.status(200).json({ alternatives });
+});
+
+
 app.post('/signup', (req, res) => {
   const {
     phone,
@@ -341,121 +378,101 @@ function generateOTP() {
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
-      user: 'dropmentset@gmail.com',
-      pass: 'pgpq ydgd qztt mcex',
+      user: 'edusyfy@gmail.com',
+      pass: 'kjcr qfwn bueu tjyg',
   },
 });
 
+// Login route
 app.post("/login", (req, res) => {
-  const phone = req.body.phone;
+  const identifier = req.body.identifier;
   const password = req.body.password;
 
-  connection.query(
-      "SELECT * FROM users WHERE phone_number = ?",
-      [phone],
-      (err, result) => {
-          if (err) {
-              return res.send({ err: err });
-          }
-          if (result.length > 0) {
-              bcrypt.compare(password, result[0].password, (error, response) => {
-                  if (response) {
-                      // Generate OTP and save in database
-                      const otp = generateOTP();
-                      connection.query(
-                          "INSERT INTO 2fa (phone_number, otp) VALUES (?, ?)",
-                          [phone, otp],
-                          (err, otpResult) => {
+  let query;
+  if (identifier.includes('@')) {
+      query = "SELECT * FROM users WHERE email = ?";
+  } else if (!isNaN(identifier)) {
+      query = "SELECT * FROM users WHERE phone_number = ?";
+  } else {
+      query = "SELECT * FROM users WHERE user_name = ?";
+  }
+
+  connection.query(query, [identifier], (err, result) => {
+      if (err) return res.status(500).send({ message: "Database error", error: err });
+
+      if (result.length > 0) {
+          bcrypt.compare(password, result[0].password, (error, response) => {
+              if (response) {
+                  // Correct password
+                  const otp = generateOTP();
+                  connection.query(
+                      "INSERT INTO 2fa (phone_number, otp, active) VALUES (?, ?, 1)",
+                      [result[0].phone_number, otp],
+                      (err, otpResult) => {
+                          if (err) return res.status(500).send({ message: "Error generating OTP", error: err });
+
+                          // Send OTP via Email
+                          const mailOptions = {
+                              from: 'edusyfy@gmail.com',
+                              to: result[0].email,
+                              subject: 'Your OTP for Login',
+                              text: `Your OTP for login is ${otp}`
+                          };
+
+                          transporter.sendMail(mailOptions, (err, info) => {
                               if (err) {
-                                  console.log(err);
-                                  return res.status(500).send({ message: "Error generating OTP" });
+                                  console.log('Error sending email:', err);
+                                  return res.status(500).send({ message: "Error sending OTP email" });
                               }
-
-                              // Send OTP via Email
-                              const mailOptions = {
-                                  from: 'dropmentset@gmail.com',
-                                  to: result[0].email, // Ensure the user table has an email column
-                                  subject: 'Your OTP for Login',
-                                  text: `Your OTP for login is ${otp}`
-                              };
-
-                              transporter.sendMail(mailOptions, (err, info) => {
-                                  if (err) {
-                                      console.log(err);
-                                  } else {
-                                      console.log('Email sent: ' + info.response);
-                                  }
-                              });
-
-                              res.json({ auth: true, message: "OTP sent for verification" });
-                          }
-                      );
-                  } else {
-                      res.json({ auth: false, message: "Phone number or password is wrong" });
-                  }
-              });
-          } else {
-              res.json({ auth: false, message: "User does not exist" });
-          }
+                              console.log('Email sent:', info.response);
+                              res.json({ auth: true, message: "OTP sent for verification", phone: result[0].phone_number });
+                          });
+                      }
+                  );
+              } else {
+                  res.json({ auth: false, message: "Incorrect password" });
+              }
+          });
+      } else {
+          res.json({ auth: false, message: "User not found" });
       }
-  );
+  });
 });
 
-
-
+// OTP verification route
 app.post("/verify-otp", (req, res) => {
   const phone = req.body.phone;
   const otp = req.body.otp;
 
-  // Verify the OTP
+  if (!phone || !otp) return res.status(400).send({ message: "Phone and OTP are required" });
+
   connection.query(
       "SELECT * FROM 2fa WHERE phone_number = ? AND otp = ? AND active = 1 AND created_at >= NOW() - INTERVAL 2 MINUTE",
       [phone, otp],
       (err, result) => {
-          if (err) {
-              console.error("Database error while verifying OTP:", err);
-              return res.status(500).send({ message: "Database error while verifying OTP" });
-          }
+          if (err) return res.status(500).send({ message: "Database error while verifying OTP", error: err });
 
           if (result.length > 0) {
-              // OTP is valid, now fetch user details
               connection.query(
                   "SELECT * FROM users WHERE phone_number = ?",
                   [phone],
                   (userErr, userResult) => {
-                      if (userErr) {
-                          console.error("Database error while fetching user details:", userErr);
-                          return res.status(500).send({ message: "Database error while fetching user details" });
-                      }
+                      if (userErr) return res.status(500).send({ message: "Database error while fetching user details", error: userErr });
 
                       if (userResult.length > 0) {
                           const userId = userResult[0].id;
-
-                          // Update OTP status to inactive
                           connection.query(
                               "UPDATE 2fa SET active = 0 WHERE phone_number = ? AND otp = ?",
                               [phone, otp],
-                              (updateErr, updateResult) => {
-                                  if (updateErr) {
-                                      console.error("Error updating OTP status:", updateErr);
-                                      return res.status(500).send({ message: "Error updating OTP status" });
-                                  }
+                              (updateErr) => {
+                                  if (updateErr) return res.status(500).send({ message: "Error updating OTP status", error: updateErr });
 
-                                  // Proceed with login if OTP is verified
-                                  const token = jwt.sign({ id: userId }, "jwtsecret", {
-                                      expiresIn: 86400, // 24 hours
-                                  });
-
-                                  // Create a session for the user
+                                  const token = jwt.sign({ id: userId }, "jwtsecret", { expiresIn: 86400 });
                                   connection.query(
                                       "INSERT INTO session (user_id, jwt) VALUES (?, ?)",
                                       [userId, token],
-                                      (sessionErr, sessionResult) => {
-                                          if (sessionErr) {
-                                              console.error("Error creating session:", sessionErr);
-                                              return res.status(500).send({ message: "Error creating session" });
-                                          }
-
+                                      (sessionErr) => {
+                                          if (sessionErr) return res.status(500).send({ message: "Error creating session", error: sessionErr });
                                           res.json({ auth: true, token: token, result: userResult });
                                       }
                                   );
@@ -2615,7 +2632,28 @@ app.post('/get-user-results', (req, res) => {
     });
 });
 
+app.post('/api/deleteQuiz', async (req, res) => {
+  const { quizId } = req.body;
 
+  try {
+    // Delete quiz references in user_quizzes
+    await query('DELETE FROM user_quizzes WHERE quiz_id = ?', [quizId]);
+
+    // Delete quiz answers
+    await query('DELETE FROM answers WHERE question_id IN (SELECT id FROM questions WHERE quiz_id = ?)', [quizId]);
+
+    // Delete questions
+    await query('DELETE FROM questions WHERE quiz_id = ?', [quizId]);
+
+    // Delete quiz
+    await query('DELETE FROM quizzes WHERE id = ?', [quizId]);
+
+    res.status(200).send({ message: 'Quiz deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting quiz:', error);
+    res.status(500).send({ message: 'Failed to delete quiz' });
+  }
+});
 
 
 // Start the server
