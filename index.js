@@ -88,7 +88,7 @@ connection.getConnection((err) => {
   }
 });
 
-const BASE_URL = 'https://mn4jqd3r-8080.inc1.devtunnels.ms';
+const BASE_URL = 'https://dropment.online';
 const FRONTEND_BASE_URL = 'https://edusify.vercel.app'; // Update this if your frontend runs on a different URL
 
 // Backend success and cancel URLs
@@ -97,7 +97,7 @@ const CANCEL_URL = `${BASE_URL}/cancel`;
 
 
 
-const baseURL = 'https://mn4jqd3r-8080.inc1.devtunnels.ms';
+const baseURL = 'https://dropment.online';
 // Replace these with your actual VAPID keys
 const vapidKeys = {
   publicKey: 'BB0t-WTOpYNRM6b24mcvZKliaHnYK0umXovnqouKrFpSD8Zeq07V9N_z1jTwhenXBJ-Rlf_UxplpYculchlM3ug',
