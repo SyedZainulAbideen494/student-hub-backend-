@@ -312,7 +312,7 @@ app.post("/login", (req, res) => {
                   <h2>${otp}</h2>
                   <p>Enter this OTP on the login page to complete the process.</p>
                   <p>If you did not request this login, please ignore this email.</p>
-                  <p>Best regards,<br>Your Company</p>
+                  <p>Best regards,<br>Edusify</p>
                 `
               };
 
