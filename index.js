@@ -278,52 +278,63 @@ app.post("/login", (req, res) => {
 
   let query;
   if (identifier.includes('@')) {
-      query = "SELECT * FROM users WHERE email = ?";
+    query = "SELECT * FROM users WHERE email = ?";
   } else if (!isNaN(identifier)) {
-      query = "SELECT * FROM users WHERE phone_number = ?";
+    query = "SELECT * FROM users WHERE phone_number = ?";
   } else {
-      query = "SELECT * FROM users WHERE user_name = ?";
+    query = "SELECT * FROM users WHERE user_name = ?";
   }
 
   connection.query(query, [identifier], (err, result) => {
-      if (err) return res.status(500).send({ message: "Database error", error: err });
+    if (err) return res.status(500).send({ message: "Database error", error: err });
 
-      if (result.length > 0) {
-          bcrypt.compare(password, result[0].password, (error, response) => {
-              if (response) {
-                  // Correct password
-                  const otp = generateOTP();
-                  connection.query(
-                      "INSERT INTO 2fa (phone_number, otp, active) VALUES (?, ?, 1)",
-                      [result[0].phone_number, otp],
-                      (err, otpResult) => {
-                          if (err) return res.status(500).send({ message: "Error generating OTP", error: err });
+    if (result.length > 0) {
+      bcrypt.compare(password, result[0].password, (error, response) => {
+        if (error) return res.status(500).send({ message: "Password comparison error", error });
 
-                          // Send OTP via Email
-                          const mailOptions = {
-                              from: 'edusyfy@gmail.com',
-                              to: result[0].email,
-                              subject: 'Your OTP for Login',
-                              text: `Your OTP for login is ${otp}`
-                          };
+        if (response) {
+          // Correct password
+          const otp = generateOTP();
+          connection.query(
+            "INSERT INTO 2fa (phone_number, otp, active) VALUES (?, ?, 1)",
+            [result[0].phone_number, otp],
+            (err, otpResult) => {
+              if (err) return res.status(500).send({ message: "Error generating OTP", error: err });
 
-                          transporter.sendMail(mailOptions, (err, info) => {
-                              if (err) {
-                                  console.log('Error sending email:', err);
-                                  return res.status(500).send({ message: "Error sending OTP email" });
-                              }
-                              console.log('Email sent:', info.response);
-                              res.json({ auth: true, message: "OTP sent for verification", phone: result[0].phone_number });
-                          });
-                      }
-                  );
-              } else {
-                  res.json({ auth: false, message: "Incorrect password" });
-              }
-          });
-      } else {
-          res.json({ auth: false, message: "User not found" });
-      }
+              // Send OTP via Email
+              const mailOptions = {
+                from: 'edusyfy@gmail.com',
+                to: result[0].email,
+                subject: 'Your OTP for Secure Login',
+                html: `
+                  <p>Hello ${result[0].user_name},</p>
+                  <p>We’ve received a login request for your account. To complete the login process, please use the One-Time Password (OTP) below:</p>
+                  <h2>${otp}</h2>
+                  <p>Click the button below to copy the OTP:</p>
+                  <button style="background-color: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; display: block; margin: 10px 0;" onclick="navigator.clipboard.writeText('${otp}')">Copy OTP</button>
+                  <p>Enter this OTP on the login page to complete the process.</p>
+                  <p>If you did not request this login, please ignore this email.</p>
+                  <p>Best regards,<br>Your Company</p>
+                `
+              };
+
+              transporter.sendMail(mailOptions, (err, info) => {
+                if (err) {
+                  console.log('Error sending email:', err);
+                  return res.status(500).send({ message: "Error sending OTP email" });
+                }
+                console.log('Email sent:', info.response);
+                res.json({ auth: true, message: "OTP sent for verification", phone: result[0].phone_number });
+              });
+            }
+          );
+        } else {
+          res.json({ auth: false, message: "Incorrect password" });
+        }
+      });
+    } else {
+      res.json({ auth: false, message: "User not found" });
+    }
   });
 });
 
