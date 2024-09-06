@@ -98,121 +98,6 @@ const CANCEL_URL = `${BASE_URL}/cancel`;
 
 
 const baseURL = 'https://dropment.online';
-// Replace these with your actual VAPID keys
-const vapidKeys = {
-  publicKey: 'BB0t-WTOpYNRM6b24mcvZKliaHnYK0umXovnqouKrFpSD8Zeq07V9N_z1jTwhenXBJ-Rlf_UxplpYculchlM3ug',
-  privateKey: 'WofqigD5KWG-9XLsCYLxp_IThRwSW6e9qNKMYc6_23I'
-};
-
-webpush.setVapidDetails(
-  'mailto:example@yourdomain.org',
-  vapidKeys.publicKey,
-  vapidKeys.privateKey
-);
-
-let subscriptions = [];
-
-// Serve the HTML and client-side JS
-app.get('/', (req, res) => {
-  res.send(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>Push Notifications</title>
-      <script>
-        // Register Service Worker
-        if ('serviceWorker' in navigator) {
-          navigator.serviceWorker.register('/service-worker.js')
-            .then(reg => {
-              console.log('Service Worker Registered', reg);
-              if ('PushManager' in window) {
-                reg.pushManager.getSubscription()
-                  .then(subscription => {
-                    if (!subscription) {
-                      return reg.pushManager.subscribe({
-                        userVisibleOnly: true,
-                        applicationServerKey: urlBase64ToUint8Array('${vapidKeys.publicKey}')
-                      }).then(newSubscription => {
-                        fetch('/save-subscription', {
-                          method: 'POST',
-                          body: JSON.stringify(newSubscription),
-                          headers: { 'Content-Type': 'application/json' }
-                        }).then(() => console.log('Subscription saved'));
-                      });
-                    }
-                  });
-              }
-            });
-        }
-
-        function urlBase64ToUint8Array(base64String) {
-          const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-          const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
-          const rawData = window.atob(base64);
-          const outputArray = new Uint8Array(rawData.length);
-          for (let i = 0; i < rawData.length; ++i) {
-            outputArray[i] = rawData.charCodeAt(i);
-          }
-          return outputArray;
-        }
-
-        // Send notification from the client
-        function sendNotification() {
-          fetch('/send-notification', {
-            method: 'POST',
-            body: JSON.stringify({ message: 'Hello from server!' }),
-            headers: { 'Content-Type': 'application/json' }
-          }).then(response => response.json())
-            .then(data => console.log(data));
-        }
-      </script>
-    </head>
-    <body>
-      <h1>Push Notifications</h1>
-      <button onclick="sendNotification()">Send Notification</button>
-    </body>
-    </html>
-  `);
-});
-
-// Service worker script
-app.get('/service-worker.js', (req, res) => {
-  res.send(`
-    self.addEventListener('push', function(event) {
-      const data = event.data.json();
-      self.registration.showNotification(data.title, {
-        body: data.message,
-        icon: data.icon || 'default-icon.png',
-      });
-    });
-  `);
-});
-
-
-app.post('/save-subscription', (req, res) => {
-  console.log('Received subscription:', req.body); // Log subscription details
-  subscriptions.push(req.body);
-  res.sendStatus(201);
-});
-
-app.post('/send-notification', (req, res) => {
-  const { message } = req.body;
-  const payload = JSON.stringify({ title: 'New Notification', message });
-
-  console.log('Sending notification with payload:', payload);
-
-  Promise.all(subscriptions.map(sub =>
-    webpush.sendNotification(sub, payload)
-      .then(() => console.log('Notification sent'))
-      .catch(err => console.error('Error sending notification:', err))
-  )).then(() => {
-    res.json({ success: true });
-  }).catch(err => {
-    console.error('Error in sending notifications:', err);
-    res.sendStatus(500);
-  });
-});
-
 
 
 
@@ -235,6 +120,16 @@ function sendWhatsAppMessage(data) {
       console.error('Error sending message:', error.response.data);
     });
 }
+
+app.get('/', (req, res) => {
+  // Send a JSON response indicating the server is working
+  res.json({
+    message: 'Server is working. You are being redirected...',
+  });
+
+
+});
+
 
 // Webhook verification endpoint (GET request)
 app.get('/webhook', (req, res) => {
