@@ -1698,6 +1698,12 @@ app.get('/download/android', (req, res) => {
   res.download(file);
 });
 
+// Route for iOS download
+app.get('/download/ios', (req, res) => {
+  const file = path.join(__dirname, 'public', 'app', 'Educify.shortcut'); // Adjust path as necessary
+  res.download(file);
+});
+
 // Endpoint to check token
 app.post('/api/session-check', (req, res) => {
   const { token } = req.body;
