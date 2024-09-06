@@ -46,7 +46,7 @@ app.use(cors({
 // Define storage for multer
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-      cb(null, '/root/dropment/student-hub-backend-/public/images');
+      cb(null, '/root/dropment/student-hub-backend-/public/');
   },
   filename: (req, file, cb) => {
       const ext = path.extname(file.originalname);
