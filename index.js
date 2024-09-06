@@ -1671,24 +1671,30 @@ app.post('/api/events/update', (req, res) => {
   });
 });
 
+// Improved API endpoint for validating token session
 app.post('/api/validate-token-session', (req, res) => {
   const { token } = req.body;
+  
+  // Check if token is provided
   if (!token) {
-      return res.status(400).json({ valid: false, message: 'No token provided' });
+    return res.status(400).json({ valid: false, message: 'Token is required' });
   }
 
   const query = 'SELECT * FROM session WHERE jwt = ?';
   connection.query(query, [token], (err, results) => {
-      if (err) {
-          console.error('Database query error:', err);
-          return res.status(500).json({ valid: false, message: 'Internal server error' });
-      }
+    if (err) {
+      console.error('Database query error:', err);
+      return res.status(500).json({ valid: false, message: 'Internal server error. Please try again later.' });
+    }
 
-      if (results.length === 0) {
-          return res.status(401).json({ valid: false, message: 'Invalid token' });
-      }
+    // Token not found in the database
+    if (results.length === 0) {
+      return res.status(401).json({ valid: false, message: 'Invalid token or session expired' });
+    }
 
-      return res.status(200).json({ valid: true });
+
+    // If the token is valid
+    return res.status(200).json({ valid: true });
   });
 });
 
