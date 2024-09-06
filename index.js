@@ -310,8 +310,6 @@ app.post("/login", (req, res) => {
                   <p>Hello ${result[0].user_name},</p>
                   <p>We’ve received a login request for your account. To complete the login process, please use the One-Time Password (OTP) below:</p>
                   <h2>${otp}</h2>
-                  <p>Click the button below to copy the OTP:</p>
-                  <button style="background-color: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; display: block; margin: 10px 0;" onclick="navigator.clipboard.writeText('${otp}')">Copy OTP</button>
                   <p>Enter this OTP on the login page to complete the process.</p>
                   <p>If you did not request this login, please ignore this email.</p>
                   <p>Best regards,<br>Your Company</p>
@@ -2274,13 +2272,27 @@ app.post('/api/auth/forgot-password', (req, res) => {
       if (err) return res.status(500).json({ error: 'Database error' });
 
       // Send email
-      transporter.sendMail({
+      const mailOptions = {
         to: user.email,
-        subject: 'Password Reset',
-        text: `Click the following link to reset your password: ${resetLink}`
-      });
+        from: 'support@edusify.com',
+        subject: 'Password Reset Request',
+        html: `
+          <p>Hi ${user.name || 'there'},</p>
+          <p>We received a request to reset your password. Click the button below to reset your password:</p>
+          <a href="${resetLink}" style="display: inline-block; padding: 10px 20px; font-size: 16px; color: #fff; background-color: #4CAF50; text-decoration: none; border-radius: 5px;">Reset Password</a>
+          <p>If you didn't request this, please ignore this email.</p>
+          <p>Best regards,<br>Your Edusify Team</p>
+        `
+      };
 
-      res.status(200).json({ message: 'Reset link sent' });
+      transporter.sendMail(mailOptions, (err, info) => {
+        if (err) {
+          console.log('Error sending email:', err);
+          return res.status(500).json({ error: 'Error sending email' });
+        }
+        console.log('Email sent:', info.response);
+        res.status(200).json({ message: 'Reset link sent' });
+      });
     });
   });
 });
