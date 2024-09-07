@@ -94,13 +94,7 @@ const FRONTEND_BASE_URL = 'https://edusify.vercel.app'; // Update this if your f
 // Backend success and cancel URLs
 const SUCCESS_URL = `${BASE_URL}/success?session_id={CHECKOUT_SESSION_ID}&sender_id=`;
 const CANCEL_URL = `${BASE_URL}/cancel`;
-
-
-
 const baseURL = 'https://dropment.online';
-
-
-
 
 
 // Function to send WhatsApp message
@@ -2074,10 +2068,16 @@ app.post('/api/solve-math', async (req, res) => {
   }
 });
 
+// Wolfram Alpha Science Query Endpoint with Fallback
 app.get('/wolfram/science', async (req, res) => {
   const query = req.query.input;
+  if (!query) {
+    return res.status(400).json({ error: 'Query parameter is required' });
+  }
+
   try {
-    const response = await axios.get('https://api.wolframalpha.com/v2/query', {
+    // Attempt to fetch from Wolfram Alpha
+    const wolframResponse = await axios.get('https://api.wolframalpha.com/v2/query', {
       params: {
         input: query,
         format: 'plaintext,image',
@@ -2085,22 +2085,74 @@ app.get('/wolfram/science', async (req, res) => {
         appid: 'XH7LLE-WVTQHYEG2U'
       }
     });
-    
-    console.log(response.data); // Debugging line
-    
-    const result = response.data.queryresult;
-    
-    // Ensure result is not undefined
+
+    const result = wolframResponse.data.queryresult;
     if (result) {
-      res.json(result);
+      return res.json(result);
     } else {
-      res.status(404).json({ error: 'No results found' });
+      // If no result, fallback to DuckDuckGo and Wikipedia
+      const fallbackData = await getFallbackData(query);
+      if (fallbackData) {
+        return res.json(fallbackData);
+      } else {
+        return res.status(404).json({ error: 'No results found' });
+      }
     }
   } catch (error) {
-    console.error(error); // Debugging line
-    res.status(500).json({ error: 'Error fetching data' });
+    console.error('Error fetching data from Wolfram Alpha:', error.message);
+    // Try fallback even if Wolfram Alpha request fails
+    try {
+      const fallbackData = await getFallbackData(query);
+      if (fallbackData) {
+        return res.json(fallbackData);
+      }
+    } catch (fallbackError) {
+      console.error('Error fetching fallback data:', fallbackError.message);
+    }
+    return res.status(500).json({ error: 'Error fetching data' });
   }
 });
+
+// Function for fallback data retrieval
+async function getFallbackData(query) {
+  try {
+    // DuckDuckGo API request
+    const duckduckgoResponse = await axios.get('https://api.duckduckgo.com/', {
+      params: {
+        q: query,
+        format: 'json',
+        pretty: 1
+      }
+    });
+
+    if (duckduckgoResponse.data.AbstractText) {
+      return [{ title: duckduckgoResponse.data.Heading, content: duckduckgoResponse.data.AbstractText }];
+    }
+
+    // Fallback to Wikipedia
+    const wikiResponse = await axios.get('https://en.wikipedia.org/w/api.php', {
+      params: {
+        action: 'query',
+        format: 'json',
+        prop: 'extracts',
+        titles: query,
+        exintro: true,
+        explaintext: true
+      }
+    });
+
+    const pages = wikiResponse.data.query.pages;
+    const page = Object.values(pages)[0];
+    if (page.extract) {
+      return [{ title: page.title, content: page.extract }];
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error fetching fallback data:', error.message);
+    return null;
+  }
+}
 
 
 app.get('/search', (req, res) => {
@@ -2171,6 +2223,8 @@ app.post('/api/remove-avatar', (req, res) => {
     res.status(200).json({ message: 'Avatar removed and set to default image' });
   });
 });
+
+
 app.post('/api/commerce', async (req, res) => {
   const { query } = req.body;
 
@@ -2254,6 +2308,8 @@ async function getFallbackData(query) {
     return null;
   }
 }
+
+
 const generateToken = () => crypto.randomBytes(20).toString('hex');
 
 // Forgot Password Route
