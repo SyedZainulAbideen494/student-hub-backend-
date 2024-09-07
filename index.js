@@ -525,7 +525,7 @@ const checkTasksAndSendReminders = () => {
 
           // Send email
           const mailOptions = {
-              from: 'dropmentset@gmail.com',
+              from: 'edusyfy@gmail.com',
               to: email,
               subject: 'Task Reminder',
               text: messageBody
@@ -559,7 +559,7 @@ const checkTasksAndSendReminders = () => {
 
           // Send email
           const mailOptions = {
-              from: 'dropmentset@gmail.com',
+              from: 'edusyfy@gmail.com',
               to: email,
               subject: 'Event Reminder',
               text: messageBody
