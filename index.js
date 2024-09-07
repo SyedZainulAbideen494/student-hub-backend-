@@ -577,7 +577,7 @@ const checkTasksAndSendReminders = () => {
 };
 
 // Run the task-checking function every 24 hours
-setInterval(checkTasksAndSendReminders, 5000); // 24 hours in milliseconds
+setInterval(checkTasksAndSendReminders, 86400000); // 24 hours in milliseconds
 
 app.post('/api/add/flashcards', upload.array('images'), (req, res) => {
   const { title, description, isPublic, token, headings } = req.body;
