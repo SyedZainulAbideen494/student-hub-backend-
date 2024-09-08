@@ -252,19 +252,14 @@ const transporter = nodemailer.createTransport({
 
 // Login route
 app.post("/login", (req, res) => {
-  const identifier = req.body.identifier;
+  const email = req.body.email;
   const password = req.body.password;
 
-  let query;
-  if (identifier.includes('@')) {
-    query = "SELECT * FROM users WHERE email = ?";
-  } else if (!isNaN(identifier)) {
-    query = "SELECT * FROM users WHERE phone_number = ?";
-  } else {
-    query = "SELECT * FROM users WHERE user_name = ?";
-  }
+  if (!email || !password) return res.status(400).send({ message: "Email and password are required" });
 
-  connection.query(query, [identifier], (err, result) => {
+  const query = "SELECT * FROM users WHERE email = ?";
+
+  connection.query(query, [email], (err, result) => {
     if (err) return res.status(500).send({ message: "Database error", error: err });
 
     if (result.length > 0) {
@@ -275,8 +270,8 @@ app.post("/login", (req, res) => {
           // Correct password
           const otp = generateOTP();
           connection.query(
-            "INSERT INTO 2fa (phone_number, otp, active) VALUES (?, ?, 1)",
-            [result[0].phone_number, otp],
+            "INSERT INTO 2fa (email, otp, active) VALUES (?, ?, 1)",
+            [result[0].email, otp],
             (err, otpResult) => {
               if (err) return res.status(500).send({ message: "Error generating OTP", error: err });
 
@@ -301,7 +296,7 @@ app.post("/login", (req, res) => {
                   return res.status(500).send({ message: "Error sending OTP email" });
                 }
                 console.log('Email sent:', info.response);
-                res.json({ auth: true, message: "OTP sent for verification", phone: result[0].phone_number });
+                res.json({ auth: true, message: "OTP sent for verification", email: result[0].email });
               });
             }
           );
@@ -317,54 +312,55 @@ app.post("/login", (req, res) => {
 
 // OTP verification route
 app.post("/verify-otp", (req, res) => {
-  const phone = req.body.phone;
+  const email = req.body.email;
   const otp = req.body.otp;
 
-  if (!phone || !otp) return res.status(400).send({ message: "Phone and OTP are required" });
+  if (!email || !otp) return res.status(400).send({ message: "Email and OTP are required" });
 
   connection.query(
-      "SELECT * FROM 2fa WHERE phone_number = ? AND otp = ? AND active = 1 AND created_at >= NOW() - INTERVAL 2 MINUTE",
-      [phone, otp],
-      (err, result) => {
-          if (err) return res.status(500).send({ message: "Database error while verifying OTP", error: err });
+    "SELECT * FROM 2fa WHERE email = ? AND otp = ? AND active = 1 AND created_at >= NOW() - INTERVAL 2 MINUTE",
+    [email, otp],
+    (err, result) => {
+      if (err) return res.status(500).send({ message: "Database error while verifying OTP", error: err });
 
-          if (result.length > 0) {
+      if (result.length > 0) {
+        connection.query(
+          "SELECT * FROM users WHERE email = ?",
+          [email],
+          (userErr, userResult) => {
+            if (userErr) return res.status(500).send({ message: "Database error while fetching user details", error: userErr });
+
+            if (userResult.length > 0) {
+              const userId = userResult[0].id;
               connection.query(
-                  "SELECT * FROM users WHERE phone_number = ?",
-                  [phone],
-                  (userErr, userResult) => {
-                      if (userErr) return res.status(500).send({ message: "Database error while fetching user details", error: userErr });
+                "UPDATE 2fa SET active = 0 WHERE email = ? AND otp = ?",
+                [email, otp],
+                (updateErr) => {
+                  if (updateErr) return res.status(500).send({ message: "Error updating OTP status", error: updateErr });
 
-                      if (userResult.length > 0) {
-                          const userId = userResult[0].id;
-                          connection.query(
-                              "UPDATE 2fa SET active = 0 WHERE phone_number = ? AND otp = ?",
-                              [phone, otp],
-                              (updateErr) => {
-                                  if (updateErr) return res.status(500).send({ message: "Error updating OTP status", error: updateErr });
-
-                                  const token = jwt.sign({ id: userId }, "jwtsecret", { expiresIn: 86400 });
-                                  connection.query(
-                                      "INSERT INTO session (user_id, jwt) VALUES (?, ?)",
-                                      [userId, token],
-                                      (sessionErr) => {
-                                          if (sessionErr) return res.status(500).send({ message: "Error creating session", error: sessionErr });
-                                          res.json({ auth: true, token: token, result: userResult });
-                                      }
-                                  );
-                              }
-                          );
-                      } else {
-                          res.status(404).send({ message: "User not found" });
-                      }
-                  }
+                  const token = jwt.sign({ id: userId }, "jwtsecret", { expiresIn: 86400 });
+                  connection.query(
+                    "INSERT INTO session (user_id, jwt) VALUES (?, ?)",
+                    [userId, token],
+                    (sessionErr) => {
+                      if (sessionErr) return res.status(500).send({ message: "Error creating session", error: sessionErr });
+                      res.json({ auth: true, token: token, result: userResult });
+                    }
+                  );
+                }
               );
-          } else {
-              res.json({ auth: false, message: "Invalid OTP or OTP expired" });
+            } else {
+              res.status(404).send({ message: "User not found" });
+            }
           }
+        );
+      } else {
+        res.json({ auth: false, message: "Invalid OTP or OTP expired" });
       }
+    }
   );
 });
+
 
 app.post('/add/tasks', async (req, res) => {
   const { title, description, due_date, priority, token } = req.body;
