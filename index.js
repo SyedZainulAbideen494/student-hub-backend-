@@ -180,38 +180,43 @@ app.post('/generate-alternatives', (req, res) => {
 
 
 app.post('/signup', (req, res) => {
-  const {
-      password,
-      email,
-      unique_id,
-      phone_number // Add phone_number to the backend
-  } = req.body;
+  const { password, email, unique_id, phone_number } = req.body;
 
-  bcrypt.hash(password, saltRounds, (hashErr, hash) => {
+  // Query to check if email or phone number already exists
+  const checkQuery = 'SELECT * FROM users WHERE email = ? OR phone_number = ?';
+  connection.query(checkQuery, [email, phone_number], (checkErr, checkResults) => {
+    if (checkErr) {
+      console.error('Error checking existing user:', checkErr);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+    
+    if (checkResults.length > 0) {
+      return res.status(400).json({ error: 'Email or phone number already in use' });
+    }
+
+    // Proceed with hashing the password and inserting the new user
+    bcrypt.hash(password, saltRounds, (hashErr, hash) => {
       if (hashErr) {
-          console.error('Error hashing password:', hashErr);
-          res.status(500).json({ error: 'Internal server error' });
-      } else {
-          const insertQuery = 'INSERT INTO users (password, email, unique_id, phone_number) VALUES (?, ?, ?, ?)'; // Include phone_number
-          const values = [
-              hash,
-              email,
-              unique_id,
-              phone_number // Add phone_number to the values
-          ];
+        console.error('Error hashing password:', hashErr);
+        return res.status(500).json({ error: 'Internal server error' });
+      } 
 
-          connection.query(insertQuery, values, (insertErr, insertResults) => {
-              if (insertErr) {
-                  console.error('Error inserting user:', insertErr);
-                  res.status(500).json({ error: 'Internal server error' });
-              } else {
-                  console.log('User registration successful!');
-                  res.sendStatus(200);
-              }
-          });
-      }
+      const insertQuery = 'INSERT INTO users (password, email, unique_id, phone_number) VALUES (?, ?, ?, ?)';
+      const values = [hash, email, unique_id, phone_number];
+
+      connection.query(insertQuery, values, (insertErr, insertResults) => {
+        if (insertErr) {
+          console.error('Error inserting user:', insertErr);
+          return res.status(500).json({ error: 'Internal server error' });
+        } 
+        
+        console.log('User registration successful!');
+        res.sendStatus(200);
+      });
+    });
   });
 });
+
 
 
 const verifyjwt = (req, res) => {
