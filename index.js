@@ -181,51 +181,36 @@ app.post('/generate-alternatives', (req, res) => {
 
 app.post('/signup', (req, res) => {
   const {
-    phone,
-    password,
-    email,
-    unique_id,
+      password,
+      email,
+      unique_id,
   } = req.body;
 
-  // Check if the phone number already exists in the database
-  const checkPhoneQuery = 'SELECT * FROM users WHERE phone_number = ?';
-  connection.query(checkPhoneQuery, [phone], (err, results) => {
-    if (err) {
-      console.error('Error checking phone number:', err);
-      res.status(500).json({ error: 'Internal server error' });
-    } else if (results.length > 0) {
-      // If phone number already exists, return a message
-      res.status(409).json({ error: 'User with this phone number already exists' });
-    } else {
-      // If phone number doesn't exist, proceed with user registration
-      bcrypt.hash(password, saltRounds, (hashErr, hash) => {
-        if (hashErr) {
+  bcrypt.hash(password, saltRounds, (hashErr, hash) => {
+      if (hashErr) {
           console.error('Error hashing password:', hashErr);
           res.status(500).json({ error: 'Internal server error' });
-        } else {
-          const insertQuery =
-            'INSERT INTO users (phone_number, password, email, unique_id) VALUES (?, ?, ?, ?)';
+      } else {
+          const insertQuery = 'INSERT INTO users (password, email, unique_id) VALUES (?, ?, ?)';
           const values = [
-            phone,
-            hash,
-            email,
-            unique_id
+              hash,
+              email,
+              unique_id
           ];
 
           connection.query(insertQuery, values, (insertErr, insertResults) => {
-            if (insertErr) {
-              console.error('Error inserting user:', insertErr);
-              res.status(500).json({ error: 'Internal server error' });
-            } else {
-              console.log('User registration successful!');
-              res.sendStatus(200);
-            }
+              if (insertErr) {
+                  console.error('Error inserting user:', insertErr);
+                  res.status(500).json({ error: 'Internal server error' });
+              } else {
+                  console.log('User registration successful!');
+                  res.sendStatus(200);
+              }
           });
-        }
-      });
-    }
+      }
   });
 });
+
 
 const verifyjwt = (req, res) => {
   const token = req.headers["x-access-token"];
