@@ -1574,42 +1574,16 @@ app.post('/api/validate-token-session', (req, res) => {
   });
 });
 
-// Route for the Android app download
+// Route for the app download
 app.get('/download/android', (req, res) => {
   const file = path.join(__dirname, 'public', 'app', 'Edusify.apk');
-  
-  // Check if file exists
-  if (fs.existsSync(file)) {
-    res.setHeader('Content-Type', 'application/vnd.android.package-archive');
-    res.setHeader('Content-Disposition', 'attachment; filename="Edusify.apk"');
-    res.download(file, (err) => {
-      if (err) {
-        console.error('Error downloading Android app:', err);
-        res.status(500).send('Error downloading file.');
-      }
-    });
-  } else {
-    res.status(404).send('File not found.');
-  }
+  res.download(file);
 });
 
 // Route for iOS download
 app.get('/download/ios', (req, res) => {
-  const file = path.join(__dirname, 'public', 'app', 'Educify.shortcut');
-  
-  // Check if file exists
-  if (fs.existsSync(file)) {
-    res.setHeader('Content-Type', 'application/x-apple-ascii');
-    res.setHeader('Content-Disposition', 'attachment; filename="Educify.shortcut"');
-    res.download(file, (err) => {
-      if (err) {
-        console.error('Error downloading iOS file:', err);
-        res.status(500).send('Error downloading file.');
-      }
-    });
-  } else {
-    res.status(404).send('File not found.');
-  }
+  const file = path.join(__dirname, 'public', 'app', 'Educify.shortcut'); // Adjust path as necessary
+  res.download(file);
 });
 
 // Endpoint to check token
