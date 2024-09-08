@@ -263,7 +263,7 @@ app.post("/login", (req, res) => {
   } else if (!isNaN(identifier)) {
     query = "SELECT * FROM users WHERE phone_number = ?";
   } else {
-    query = "SELECT * FROM users WHERE user_name = ?";
+    query = "SELECT * FROM users WHERE unique_id = ?";
   }
 
   connection.query(query, [identifier], (err, result) => {
@@ -288,7 +288,7 @@ app.post("/login", (req, res) => {
                 to: result[0].email,
                 subject: 'Your OTP for Secure Login',
                 html: `
-                  <p>Hello ${result[0].user_name},</p>
+                  <p>Hello ${result[0].unique_id},</p>
                   <p>We’ve received a login request for your account. To complete the login process, please use the One-Time Password (OTP) below:</p>
                   <h2>${otp}</h2>
                   <p>Enter this OTP on the login page to complete the process.</p>
