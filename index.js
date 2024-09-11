@@ -2216,7 +2216,6 @@ app.post('/api/remove-avatar', (req, res) => {
   });
 });
 
-
 app.post('/api/commerce', async (req, res) => {
   const { query } = req.body;
 
@@ -2239,10 +2238,20 @@ app.post('/api/commerce', async (req, res) => {
 
     const wolframPods = wolframResponse.data.queryresult.pods;
     if (wolframPods) {
-      const results = wolframPods.map(pod => ({
-        title: pod.title,
-        content: pod.subpods.map(subpod => subpod.plaintext).join('\n')
-      }));
+      const results = wolframPods.flatMap(pod => {
+        return pod.subpods.map(subpod => {
+          // Clean up the text
+          const cleanedText = subpod.plaintext
+            .replace(/^\d+\s*\|\s*\w+\s*\|\s*/, '') // Remove list numbering and labels
+            .replace(/\s{2,}/g, ' ') // Replace multiple spaces with a single space
+            .trim(); // Remove any leading or trailing whitespace
+
+          return {
+            title: pod.title,
+            content: cleanedText
+          };
+        });
+      });
       return res.json(results);
     } else {
       // Fallback API calls
@@ -2271,10 +2280,11 @@ async function getFallbackData(query) {
     });
 
     if (duckduckgoResponse.data.AbstractText) {
-      return [{ title: duckduckgoResponse.data.Heading, content: duckduckgoResponse.data.AbstractText }];
+      return [{
+        title: duckduckgoResponse.data.Heading,
+        content: duckduckgoResponse.data.AbstractText.replace(/\.\s+/g, '.\n') // Clean up sentences
+      }];
     }
-
-
 
     // Fallback to Wikipedia if no other results are found
     const wikiResponse = await axios.get('https://en.wikipedia.org/w/api.php', {
@@ -2291,7 +2301,10 @@ async function getFallbackData(query) {
     const pages = wikiResponse.data.query.pages;
     const page = Object.values(pages)[0];
     if (page.extract) {
-      return [{ title: page.title, content: page.extract }];
+      return [{
+        title: page.title,
+        content: page.extract.replace(/\.\s+/g, '.\n') // Clean up sentences
+      }];
     }
 
     return null;
