@@ -199,7 +199,7 @@ app.post('/signup', (req, res) => {
       if (hashErr) {
         console.error('Error hashing password:', hashErr);
         return res.status(500).json({ error: 'Internal server error' });
-      } 
+      }
 
       const insertQuery = 'INSERT INTO users (password, email, unique_id, phone_number) VALUES (?, ?, ?, ?)';
       const values = [hash, email, unique_id, phone_number];
@@ -208,14 +208,31 @@ app.post('/signup', (req, res) => {
         if (insertErr) {
           console.error('Error inserting user:', insertErr);
           return res.status(500).json({ error: 'Internal server error' });
-        } 
-        
-        console.log('User registration successful!');
-        res.sendStatus(200);
+        }
+
+        // User successfully registered, now generate JWT token
+        const userId = insertResults.insertId;
+        const token = jwt.sign({ id: userId }, 'jwtsecret', { expiresIn: 86400 }); // 24 hours
+
+        // Insert the token into the session table
+        connection.query(
+          'INSERT INTO session (user_id, jwt) VALUES (?, ?)',
+          [userId, token],
+          (sessionErr) => {
+            if (sessionErr) {
+              console.error('Error creating session:', sessionErr);
+              return res.status(500).send({ message: 'Error creating session', error: sessionErr });
+            }
+
+            console.log('User registration and session creation successful!');
+            res.json({ auth: true, token: token });
+          }
+        );
       });
     });
   });
 });
+
 
 
 
