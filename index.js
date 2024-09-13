@@ -406,14 +406,18 @@ app.post('/add/tasks', async (req, res) => {
 
     const user_id = userResults[0].user_id;
 
-    // Step 2: Insert Task
+    // Step 2: Handle due_date
+    // If due_date is not provided, set it to the current date and time
+    const formattedDueDate = due_date ? due_date : new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+    // Step 3: Insert Task
     const [insertResults] = await connection.promise().query(
       'INSERT INTO tasks (title, description, due_date, priority, user_id) VALUES (?, ?, ?, ?, ?)',
-      [title, description, due_date, priority, user_id]
+      [title, description, formattedDueDate, priority, user_id]
     );
 
-    // Step 3: Send response
-    res.status(201).send({ id: insertResults.insertId, title, description, due_date, priority });
+    // Step 4: Send response
+    res.status(201).send({ id: insertResults.insertId, title, description, due_date: formattedDueDate, priority });
   } catch (err) {
     console.error('Error adding task:', err);
     res.status(500).send({ message: 'Internal server error' });
@@ -2656,6 +2660,24 @@ app.post('/api/deleteQuiz', async (req, res) => {
   }
 });
 
+// Route to increment download count only
+app.post('/notes/increment-download-count/:id', (req, res) => {
+  const noteId = req.params.id;
+
+  // Increment the download count in the database
+  connection.query(
+      'UPDATE flashcards SET download_count = download_count + 1 WHERE id = ?',
+      [noteId],
+      (err, result) => {
+          if (err) {
+              console.error('Error updating download count:', err);
+              return res.status(500).json({ error: 'Error updating download count' });
+          }
+
+          res.status(200).json({ message: 'Download count updated successfully' });
+      }
+  );
+});
 
 // Start the server
 app.listen(PORT, () => {
