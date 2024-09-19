@@ -1913,10 +1913,14 @@ app.get('/api/eduscribes/comments/:id', async (req, res) => {
   });
 });
 
+// Route to get user profile, including followers and following counts
 app.get('/api/profile/view/guest/:user_id', (req, res) => {
   const userId = req.params.user_id;
-  const query = 'SELECT * FROM users WHERE id = ?';
-  connection.query(query, [userId], (err, results) => {
+  const profileQuery = 'SELECT * FROM users WHERE id = ?';
+  const followersQuery = 'SELECT COUNT(*) AS count FROM followers WHERE following_id = ?';
+  const followingQuery = 'SELECT COUNT(*) AS count FROM followers WHERE follower_id = ?';
+
+  connection.query(profileQuery, [userId], (err, results) => {
     if (err) {
       console.error('Error fetching user profile:', err);
       return res.status(500).json({ error: 'Failed to fetch user profile' });
@@ -1924,7 +1928,54 @@ app.get('/api/profile/view/guest/:user_id', (req, res) => {
     if (results.length === 0) {
       return res.status(404).json({ error: 'User not found' });
     }
-    res.json(results[0]);
+
+    const profile = results[0];
+
+    connection.query(followersQuery, [userId], (err, followersResults) => {
+      if (err) {
+        console.error('Error fetching followers count:', err);
+        return res.status(500).json({ error: 'Failed to fetch followers count' });
+      }
+
+      connection.query(followingQuery, [userId], (err, followingResults) => {
+        if (err) {
+          console.error('Error fetching following count:', err);
+          return res.status(500).json({ error: 'Failed to fetch following count' });
+        }
+
+        res.json({
+          ...profile,
+          followersCount: followersResults[0].count,
+          followingCount: followingResults[0].count,
+        });
+      });
+    });
+  });
+});
+
+// Route to get followers
+app.get('/api/profile/followers/:user_id', (req, res) => {
+  const userId = req.params.user_id;
+  const query = 'SELECT u.unique_id, u.avatar FROM followers f JOIN users u ON f.follower_id = u.id WHERE f.following_id = ?';
+  connection.query(query, [userId], (err, results) => {
+    if (err) {
+      console.error('Error fetching followers:', err);
+      return res.status(500).json({ error: 'Failed to fetch followers' });
+    }
+    res.json(results);
+  });
+});
+
+// Route to get following users
+app.get('/api/profile/following/:user_id', (req, res) => {
+  const userId = req.params.user_id;
+  const query = 'SELECT u.unique_id, u.avatar FROM followers f JOIN users u ON f.following_id = u.id WHERE f.follower_id = ?';
+  connection.query(query, [userId], (err, results) => {
+    if (err) {
+      console.error('Error fetching following users:', err);
+      return res.status(500).json({ error: 'Failed to fetch following users' });
+    }
+    res.json(results);
   });
 });
 
