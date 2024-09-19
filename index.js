@@ -1956,7 +1956,7 @@ app.get('/api/profile/view/guest/:user_id', (req, res) => {
 // Route to get followers
 app.get('/api/profile/followers/:user_id', (req, res) => {
   const userId = req.params.user_id;
-  const query = 'SELECT u.unique_id, u.avatar FROM followers f JOIN users u ON f.follower_id = u.id WHERE f.following_id = ?';
+  const query = 'SELECT u.unique_id, u.avatar, u.id FROM followers f JOIN users u ON f.follower_id = u.id WHERE f.following_id = ?';
   connection.query(query, [userId], (err, results) => {
     if (err) {
       console.error('Error fetching followers:', err);
@@ -1969,7 +1969,7 @@ app.get('/api/profile/followers/:user_id', (req, res) => {
 // Route to get following users
 app.get('/api/profile/following/:user_id', (req, res) => {
   const userId = req.params.user_id;
-  const query = 'SELECT u.unique_id, u.avatar FROM followers f JOIN users u ON f.following_id = u.id WHERE f.follower_id = ?';
+  const query = 'SELECT u.unique_id, u.avatar, u.id FROM followers f JOIN users u ON f.following_id = u.id WHERE f.follower_id = ?';
   connection.query(query, [userId], (err, results) => {
     if (err) {
       console.error('Error fetching following users:', err);
