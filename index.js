@@ -20,7 +20,12 @@ const webpush = require('web-push');
 const crypto = require('crypto');
 const stripe = require('stripe')('sk_test_51LoS3iSGyKMMAZwstPlmLCEi1eBUy7MsjYxiKsD1lT31LQwvPZYPvqCdfgH9xl8KgeJoVn6EVPMgnMRsFInhnnnb00WhKhMOq7');
 const cron = require('node-cron');
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
+
+// Initialize Google Generative AI
+const genAI = new GoogleGenerativeAI('AIzaSyDNx6QYkHkvFYd8-lc-O1HgFgCDaChGkV0');
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
 
 app.use(express.urlencoded({ extended: true }));
@@ -2091,44 +2096,16 @@ app.post('/api/isFollowing', async (req, res) => {
 });
 
 
+// Endpoint to solve math queries with Gemini AI
 app.post('/api/solve-math', async (req, res) => {
-  const { query } = req.body;
+  const { query } = req.body; // Use the query from the request body
 
   try {
-    const response = await axios.get('https://api.wolframalpha.com/v2/query', {
-      params: {
-        input: query,
-        format: 'plaintext,image', // Request both plaintext and images
-        output: 'JSON',
-        appid: 'XH7LLE-R26W3Q9YTA', // Replace with your Wolfram|Alpha API key
-      },
-    });
-
-    console.log('Raw API Response:', response.data); // Log the raw response
-
-    const pods = response.data.queryresult.pods;
-
-    if (pods && pods.length > 0) {
-      const results = pods.map(pod => ({
-        title: pod.title,
-        content: pod.subpods
-          .map(subpod => subpod.plaintext || 'No content available')
-          .join('\n'),
-        images: pod.subpods
-          .filter(subpod => subpod.img && subpod.img.src)
-          .map(subpod => {
-            const imgSrc = subpod.img.src.startsWith('http') ? subpod.img.src : `https:${subpod.img.src}`;
-            return imgSrc;
-          })
-      }));
-
-      res.json({ results });
-    } else {
-      res.status(404).json({ error: 'No result found' });
-    }
+      const result = await model.generateContent(query); // Send the query as the prompt
+      res.json({ response: result.response.text() }); // Return the response
   } catch (error) {
-    console.error('Error:', error); // Log the error for debugging
-    res.status(500).json({ error: 'An error occurred while processing the request' });
+      console.error("Error generating content:", error);
+      res.status(500).json({ error: 'Failed to generate content' });
   }
 });
 
