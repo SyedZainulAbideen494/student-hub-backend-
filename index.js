@@ -2707,6 +2707,19 @@ app.post('/notes/increment-download-count/:id', (req, res) => {
   );
 });
 
+
+// Image upload route
+app.post('/api/upload/images/flashcard', upload.single('image'), (req, res) => {
+  if (!req.file) {
+      return res.status(400).json({ message: 'No file uploaded.' });
+  }
+
+  // Construct the URL for the uploaded image
+  const imageUrl = `${req.protocol}://${req.get('host')}/public/${req.file.filename}`;
+  res.status(200).json({ imageUrl });
+});
+
+
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
