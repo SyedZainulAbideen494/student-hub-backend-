@@ -2715,7 +2715,7 @@ app.post('/api/upload/images/flashcard', upload.single('image'), (req, res) => {
   }
 
   // Construct the URL for the uploaded image
-  const imageUrl = `${req.protocol}://${req.get('host')}/public/${req.file.filename}`;
+  const imageUrl = `${req.protocol}://${req.get('host')}/${req.file.filename}`;
   res.status(200).json({ imageUrl });
 });
 
