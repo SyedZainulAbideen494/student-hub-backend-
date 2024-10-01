@@ -2780,6 +2780,76 @@ app.post('/api/upload/images/flashcard', upload.single('image'), (req, res) => {
   res.status(200).json({ imageUrl });
 });
 
+// Check user details
+app.post('/api/check-user-details', async (req, res) => {
+  const { token } = req.body;
+
+  if (!token) {
+    return res.status(400).json({ message: 'Token not provided' });
+  }
+
+  try {
+    const userId = await getUserIdFromToken(token); // Assuming this function is already defined
+
+    const results = await query('SELECT * FROM users WHERE id = ?', [userId]);
+
+    if (results.length > 0) {
+      const user = results[0];
+      const emailMissing = !user.email || user.email.trim() === '';
+      const phoneMissing = !user.phone_number || user.phone_number.trim() === '';
+      return res.status(200).json({ emailMissing, phoneMissing });
+    } else {
+      return res.status(404).json({ message: 'User not found' });
+    }
+  } catch (error) {
+    console.error('Error checking user details:', error);
+    return res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+// Update user details
+app.post('/api/update-user-details', async (req, res) => {
+  const { token, email, phone } = req.body;
+
+  // Check for the presence of the token
+  if (!token) {
+    return res.status(400).json({ message: 'Missing token' });
+  }
+
+  // Get userId from token
+  let userId;
+  try {
+    userId = await getUserIdFromToken(token); // Assuming this function is defined
+  } catch (error) {
+    return res.status(401).json({ message: 'Invalid token' });
+  }
+
+  const updates = [];
+  const params = [];
+
+  if (email) {
+    updates.push('email = ?');
+    params.push(email);
+  }
+  if (phone) {
+    updates.push('phone_number = ?');
+    params.push(phone);
+  }
+
+  if (updates.length === 0) {
+    return res.status(400).json({ message: 'No fields to update' });
+  }
+
+  try {
+    await query(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, [...params, userId]);
+    return res.status(200).json({ message: 'User details updated successfully' });
+  } catch (error) {
+    console.error('Error updating user details:', error);
+    return res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+
 
 // Start the server
 app.listen(PORT, () => {
