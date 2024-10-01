@@ -2290,15 +2290,14 @@ app.put('/user/update', upload.single('avatar'), (req, res) => {
     }
 
     const { unique_id, user_name, bio, location, phone_number } = req.body;
-    const avatar = req.file ? req.file.filename : null;
 
     const query = `
       UPDATE users
-      SET unique_id = ?, user_name = ?, bio = ?, location = ?, phone_number = ?, avatar = ?
+      SET unique_id = ?, user_name = ?, bio = ?, location = ?, phone_number = ?
       WHERE id = ?
     `;
 
-    connection.query(query, [unique_id, user_name, bio, location, phone_number, avatar, userId], (err, results) => {
+    connection.query(query, [unique_id, user_name, bio, location, phone_number, userId], (err, results) => {
       if (err) {
         console.error('Error updating profile:', err);
         return res.status(500).send('Error updating profile');
