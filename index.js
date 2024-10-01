@@ -2278,49 +2278,8 @@ app.get('/search', (req, res) => {
 });
 
 
-// Route to update user avatar
-app.put('/user/update/avatar', upload.single('avatar'), (req, res) => {
+app.put('/user/update', upload.single('avatar'), (req, res) => {
   const token = req.headers.authorization ? req.headers.authorization.split(' ')[1] : null;
-
-  if (!token) {
-    return res.status(401).send('Unauthorized');
-  }
-
-  getUserIdFromToken(token).then(userId => {
-    if (!userId) {
-      return res.status(400).send('User ID is missing');
-    }
-
-    const avatar = req.file ? req.file.filename : null;
-
-    if (!avatar) {
-      return res.status(400).send('No avatar file uploaded');
-    }
-
-    // Prepare the query to update avatar
-    const query = `
-      UPDATE users
-      SET avatar = ?
-      WHERE id = ?
-    `;
-    
-    connection.query(query, [avatar, userId], (err, results) => {
-      if (err) {
-        console.error('Error updating avatar:', err);
-        return res.status(500).send('Error updating avatar');
-      }
-      res.status(200).send('Avatar updated successfully');
-    });
-  }).catch(err => {
-    console.error('Error fetching user ID:', err);
-    res.status(500).send('Internal server error');
-  });
-});
-
-// Route to update user profile details (excluding avatar)
-app.put('/user/update', (req, res) => {
-  const token = req.headers.authorization ? req.headers.authorization.split(' ')[1] : null;
-
   if (!token) {
     return res.status(401).send('Unauthorized');
   }
@@ -2331,15 +2290,15 @@ app.put('/user/update', (req, res) => {
     }
 
     const { unique_id, user_name, bio, location, phone_number } = req.body;
+    const avatar = req.file ? req.file.filename : null;
 
-    // Prepare the query to update user details
     const query = `
       UPDATE users
-      SET unique_id = ?, user_name = ?, bio = ?, location = ?, phone_number = ?
+      SET unique_id = ?, user_name = ?, bio = ?, location = ?, phone_number = ?, avatar = ?
       WHERE id = ?
     `;
 
-    connection.query(query, [unique_id, user_name, bio, location, phone_number, userId], (err, results) => {
+    connection.query(query, [unique_id, user_name, bio, location, phone_number, avatar, userId], (err, results) => {
       if (err) {
         console.error('Error updating profile:', err);
         return res.status(500).send('Error updating profile');
@@ -2351,7 +2310,6 @@ app.put('/user/update', (req, res) => {
     res.status(500).send('Internal server error');
   });
 });
-
 
 // API route to remove avatar and set default image
 app.post('/api/remove-avatar', (req, res) => {
