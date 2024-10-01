@@ -502,30 +502,33 @@ app.post('/delete/task', (req, res) => {
 });
 
 
-
 const MILLISECONDS_IN_A_DAY = 86400000;
 
 // Function to calculate the delay to the target hour (7:00 AM, 3:00 PM, 9:00 PM IST)
 const calculateDelayToTime = (targetHour) => {
     const now = new Date();
+    const istOffset = 5.5 * 60 * 60 * 1000; // IST is UTC +5:30
+    const nowInIST = new Date(now.getTime() + istOffset);
     const targetTime = new Date();
 
-    // Set the target time (e.g., 7:00 AM, 3:00 PM, 9:00 PM)
+    // Set the target time (e.g., 7:00 AM, 3:00 PM, 9:00 PM IST)
     targetTime.setHours(targetHour, 0, 0, 0);
 
     // If the target time has already passed for today, schedule for tomorrow
-    if (now > targetTime) {
+    if (nowInIST > targetTime) {
         targetTime.setDate(targetTime.getDate() + 1);
     }
 
-    return targetTime - now; // Return the delay in milliseconds
+    return targetTime - nowInIST; // Return the delay in milliseconds
 };
 
 // Main function to check tasks and send reminders
 const checkTasksAndSendReminders = () => {
-    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-    const tomorrow = new Date(new Date().setDate(new Date().getDate() + 1)).toISOString().split('T')[0];
-    const dayAfter = new Date(new Date().setDate(new Date().getDate() + 2)).toISOString().split('T')[0];
+    const today = new Date();
+    const istOffset = 5.5 * 60 * 60 * 1000; // IST is UTC +5:30
+    const todayInIST = new Date(today.getTime() + istOffset).toISOString().split('T')[0]; // YYYY-MM-DD
+    const tomorrow = new Date(new Date(todayInIST).setDate(new Date(todayInIST).getDate() + 1)).toISOString().split('T')[0];
+    const dayAfter = new Date(new Date(todayInIST).setDate(new Date(todayInIST).getDate() + 2)).toISOString().split('T')[0];
 
     // Query to get tasks due today, tomorrow, or day after
     const tasksQuery = `
@@ -544,7 +547,7 @@ const checkTasksAndSendReminders = () => {
     `;
 
     // Handle tasks
-    connection.query(tasksQuery, [today, tomorrow, dayAfter], (err, taskResults) => {
+    connection.query(tasksQuery, [todayInIST, tomorrow, dayAfter], (err, taskResults) => {
         if (err) {
             console.error('Error fetching tasks:', err);
             return;
@@ -593,7 +596,7 @@ const checkTasksAndSendReminders = () => {
     });
 
     // Handle events
-    connection.query(eventsQuery, [today, tomorrow, dayAfter], (err, eventResults) => {
+    connection.query(eventsQuery, [todayInIST, tomorrow, dayAfter], (err, eventResults) => {
         if (err) {
             console.error('Error fetching events:', err);
             return;
@@ -655,6 +658,7 @@ const scheduleReminder = (targetHour) => {
 scheduleReminder(7);   // 7:00 AM IST
 scheduleReminder(15);  // 3:00 PM IST
 scheduleReminder(21);  // 9:00 PM IST
+
 
 
 
