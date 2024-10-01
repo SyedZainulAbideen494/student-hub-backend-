@@ -330,7 +330,7 @@ app.post("/login", (req, res) => {
                   return res.status(500).send({ message: "Error sending OTP email" });
                 }
                 console.log('Email sent:', info.response);
-                res.json({ auth: true, message: "OTP sent for verification", phone: result[0].phone_number });
+                res.json({ auth: true, message: "OTP sent for verification", email: result[0].email });
               });
             }
           );
@@ -2293,7 +2293,7 @@ app.put('/user/update', upload.single('avatar'), (req, res) => {
 
     const query = `
       UPDATE users
-      SET unique_id = ?, user_name = ?, bio = ?, location = ?, phone_number = ?,
+      SET unique_id = ?, user_name = ?, bio = ?, location = ?, phone_number = ?
       WHERE id = ?
     `;
 
