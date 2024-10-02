@@ -2868,6 +2868,7 @@ app.post('/api/feedback', (req, res) => {
     .then(() => {
       // If successful, send success response
       return res.status(200).json({ message: 'Feedback saved successfully' });
+      console.log('u got a feedback:', message);
     })
     .catch((error) => {
       // Handle errors from getting user ID or saving feedback
