@@ -2885,9 +2885,11 @@ app.post('/api/feedback', (req, res) => {
       return query(sql, [userId, feedback]); // Use the promisified query function
     })
     .then(() => {
+      // Log feedback on successful save
+      console.log('User feedback received:', feedback); 
+
       // If successful, send success response
       return res.status(200).json({ message: 'Feedback saved successfully' });
-      console.log('u got a feedback:', feedback);
     })
     .catch((error) => {
       // Handle errors from getting user ID or saving feedback
@@ -2900,6 +2902,7 @@ app.post('/api/feedback', (req, res) => {
       return res.status(500).json({ message: 'Error saving feedback' });
     });
 });
+
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
