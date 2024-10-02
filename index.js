@@ -2168,9 +2168,9 @@ app.post('/api/solve-math', async (req, res) => {
   try {
       const result = await model.generateContent(query); // Send the query as the prompt
       res.json({ response: result.response.text() }); // Return the response
-      console.log("Ai responded!");
+      console.log("Ai responded!", query);
   } catch (error) {
-      console.error("Error generating content:", error);
+      console.error("Error generating content:", error, query);
       res.status(500).json({ error: 'Failed to generate content' });
   }
 });
