@@ -2931,7 +2931,7 @@ app.post('/api/chat/ai', async (req, res) => {
     res.json({ response: result.response.text() });
   } catch (error) {
     console.error('Error communicating with Gemini API:', error);
-    res.status(500).json({ error: 'Failed to communicate with the API' });
+    res.status(500).json({ error: 'Failed to communicate with the API', message });
   }
 });
 
