@@ -2920,13 +2920,21 @@ app.post('/api/chat/ai', async (req, res) => {
       ],
     });
 
+    // Log the user's question
+    console.log('User asked:', message);
+
     const result = await chat.sendMessage(message);
+    
+    // Log that the AI was asked
+    console.log('AI was asked for response.');
+
     res.json({ response: result.response.text() });
   } catch (error) {
     console.error('Error communicating with Gemini API:', error);
     res.status(500).json({ error: 'Failed to communicate with the API' });
   }
 });
+
 
 
 // Start the server
