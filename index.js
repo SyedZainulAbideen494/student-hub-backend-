@@ -2903,6 +2903,32 @@ app.post('/api/feedback', (req, res) => {
     });
 });
 
+app.post('/api/chat/ai', async (req, res) => {
+  const { message, chatHistory } = req.body;
+
+  try {
+    const chat = model.startChat({
+      history: chatHistory || [
+        {
+          role: 'user',
+          parts: [{ text: 'Hello' }],
+        },
+        {
+          role: 'model',
+          parts: [{ text: 'Great to meet you. What would you like to know?' }],
+        },
+      ],
+    });
+
+    const result = await chat.sendMessage(message);
+    res.json({ response: result.response.text() });
+  } catch (error) {
+    console.error('Error communicating with Gemini API:', error);
+    res.status(500).json({ error: 'Failed to communicate with the API' });
+  }
+});
+
+
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
