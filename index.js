@@ -343,7 +343,7 @@ app.post("/login", (req, res) => {
                   return res.status(500).send({ message: "Error sending OTP email" });
                 }
                 console.log('Email sent:', info.response);
-                res.json({ auth: true, message: "OTP sent for verification", email: result[0].email });
+                res.json({ auth: true, message: "OTP sent for verification", phone: result[0].phone_number });
               });
             }
           );
