@@ -1685,17 +1685,36 @@ app.post('/api/validate-token-session', (req, res) => {
   });
 });
 
-// Route for the app download
+// Route for the app download (Android)
 app.get('/download/android', (req, res) => {
   const file = path.join(__dirname, 'public', 'app', 'Edusify.apk');
-  res.download(file);
+  
+  console.log('Android app download requested:', req.ip); // Log the request IP address
+  res.download(file, (err) => {
+    if (err) {
+      console.error('Error downloading Android app:', err);
+      res.status(500).send('Error downloading file');
+    } else {
+      console.log('Android app download successful:', req.ip); // Log successful download
+    }
+  });
 });
 
 // Route for iOS download
 app.get('/download/ios', (req, res) => {
   const file = path.join(__dirname, 'public', 'app', 'Educify.shortcut'); // Adjust path as necessary
-  res.download(file);
+  
+  console.log('iOS app download requested:', req.ip); // Log the request IP address
+  res.download(file, (err) => {
+    if (err) {
+      console.error('Error downloading iOS app:', err);
+      res.status(500).send('Error downloading file');
+    } else {
+      console.log('iOS app download successful:', req.ip); // Log successful download
+    }
+  });
 });
+
 
 // Endpoint to check token
 app.post('/api/session-check', (req, res) => {
@@ -2868,7 +2887,7 @@ app.post('/api/feedback', (req, res) => {
     .then(() => {
       // If successful, send success response
       return res.status(200).json({ message: 'Feedback saved successfully' });
-      console.log('u got a feedback:', message);
+      console.log('u got a feedback:', feedback);
     })
     .catch((error) => {
       // Handle errors from getting user ID or saving feedback
