@@ -129,6 +129,19 @@ app.get('/', (req, res) => {
 
 });
 
+// Promisify query function
+const query = (sql, params) => {
+  return new Promise((resolve, reject) => {
+    connection.query(sql, params, (error, results) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve(results);
+      }
+    });
+  });
+};
+
 
 // Webhook verification endpoint (GET request)
 app.get('/webhook', (req, res) => {
@@ -2064,18 +2077,7 @@ app.get('/api/user/profile/items/:id', async (req, res) => {
   }
 });
 
-// Promisify query function
-const query = (sql, params) => {
-  return new Promise((resolve, reject) => {
-    connection.query(sql, params, (error, results) => {
-      if (error) {
-        reject(error);
-      } else {
-        resolve(results);
-      }
-    });
-  });
-};
+
 
 
 // Follow endpoint
@@ -2853,8 +2855,31 @@ app.post('/api/update-user-details', async (req, res) => {
   }
 });
 
+app.post('/api/feedback', (req, res) => {
+  const { feedback, token } = req.body;
 
-
+  // Retrieve user ID from token using the helper function
+  getUserIdFromToken(token)
+    .then((userId) => {
+      // Prepare SQL query to save feedback and user ID into MySQL
+      const sql = 'INSERT INTO feedback (user_id, message) VALUES (?, ?)';
+      return query(sql, [userId, feedback]); // Use the promisified query function
+    })
+    .then(() => {
+      // If successful, send success response
+      return res.status(200).json({ message: 'Feedback saved successfully' });
+    })
+    .catch((error) => {
+      // Handle errors from getting user ID or saving feedback
+      console.error('Error processing feedback:', error);
+      if (error instanceof jwt.JsonWebTokenError) {
+        // If the error is due to invalid token
+        return res.status(401).json({ message: 'Invalid token' });
+      }
+      // If the error is related to database insertion
+      return res.status(500).json({ message: 'Error saving feedback' });
+    });
+});
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
