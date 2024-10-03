@@ -1686,18 +1686,8 @@ app.post('/api/validate-token-session', (req, res) => {
   });
 });
 
-// Function to ensure HTTPS
-const ensureHttps = (req, res, next) => {
-  // Check if the request is secure
-  if (!req.secure && req.headers['x-forwarded-proto'] !== 'https') {
-    // Redirect to HTTPS
-    return res.redirect(`https://${req.headers.host}${req.originalUrl}`);
-  }
-  next();
-};
-
 // Route for the app download (Android)
-app.get('/download/android', ensureHttps, (req, res) => {
+app.get('/download/android', (req, res) => {
   const file = path.join(__dirname, 'public', 'app', 'Edusify.apk');
   
   console.log('Android app download requested:', req.ip); // Log the request IP address
@@ -1712,7 +1702,7 @@ app.get('/download/android', ensureHttps, (req, res) => {
 });
 
 // Route for iOS download
-app.get('/download/ios', ensureHttps, (req, res) => {
+app.get('/download/ios', (req, res) => {
   const file = path.join(__dirname, 'public', 'app', 'Educify.shortcut'); // Adjust path as necessary
   
   console.log('iOS app download requested:', req.ip); // Log the request IP address
@@ -1725,6 +1715,7 @@ app.get('/download/ios', ensureHttps, (req, res) => {
     }
   });
 });
+
 
 // Endpoint to check token
 app.post('/api/session-check', (req, res) => {
