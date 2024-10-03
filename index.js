@@ -3035,6 +3035,25 @@ app.post('/api/update-avatar', upload.single('avatar'), async (req, res) => {
   }
 });
 
+// Add a new route to handle avatar removal
+app.delete('/api/remove-avatar', async (req, res) => {
+  try {
+    const token = req.headers.authorization.split(' ')[1]; // Extract Bearer token from the header
+    const userId = await getUserIdFromToken(token); // Get userId from token
+
+    const defaultAvatar = 'defPic.png'; // or whatever your default is
+    const query = 'UPDATE users SET avatar = ? WHERE id = ?';
+    connection.query(query, [defaultAvatar, userId], (err) => {
+      if (err) {
+        return res.status(500).send('Error removing avatar');
+      }
+      res.status(200).send('Avatar removed successfully');
+    });
+  } catch (error) {
+    res.status(500).send('Error processing request');
+  }
+});
+
 
 
 // Start the server
