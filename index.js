@@ -1661,7 +1661,7 @@ app.post('/api/events/update', (req, res) => {
 // Improved API endpoint for validating token session
 app.post('/api/validate-token-session', (req, res) => {
   const { token } = req.body;
-  
+
   // Check if token is provided
   if (!token) {
     return res.status(400).json({ valid: false, message: 'Token is required' });
@@ -1676,17 +1676,27 @@ app.post('/api/validate-token-session', (req, res) => {
 
     // Token not found in the database
     if (results.length === 0) {
+      console.log('Token not found or session expired:', token);
       return res.status(401).json({ valid: false, message: 'Invalid token or session expired' });
     }
 
-
     // If the token is valid
+    console.log('Valid token:', token);
     return res.status(200).json({ valid: true });
   });
 });
 
+// Function to ensure HTTPS
+const ensureHttps = (req, res, next) => {
+  if (req.headers['x-forwarded-proto'] !== 'https') {
+    // Redirect to HTTPS
+    return res.redirect(`https://${req.headers.host}${req.originalUrl}`);
+  }
+  next();
+};
+
 // Route for the app download (Android)
-app.get('/download/android', (req, res) => {
+app.get('/download/android', ensureHttps, (req, res) => {
   const file = path.join(__dirname, 'public', 'app', 'Edusify.apk');
   
   console.log('Android app download requested:', req.ip); // Log the request IP address
@@ -1701,7 +1711,7 @@ app.get('/download/android', (req, res) => {
 });
 
 // Route for iOS download
-app.get('/download/ios', (req, res) => {
+app.get('/download/ios', ensureHttps, (req, res) => {
   const file = path.join(__dirname, 'public', 'app', 'Educify.shortcut'); // Adjust path as necessary
   
   console.log('iOS app download requested:', req.ip); // Log the request IP address
@@ -1714,7 +1724,6 @@ app.get('/download/ios', (req, res) => {
     }
   });
 });
-
 
 // Endpoint to check token
 app.post('/api/session-check', (req, res) => {
