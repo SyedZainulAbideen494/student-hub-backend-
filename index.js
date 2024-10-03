@@ -3007,6 +3007,30 @@ app.post('/api/events/today/data/home', async (req, res) => {
   }
 });
 
+// Update avatar route
+app.post('/api/update-avatar', upload.single('avatar'), async (req, res) => {
+  try {
+    const userId = await getUserIdFromToken(token); // Get userId from token
+
+    if (!req.file) {
+      return res.status(400).send('No file uploaded');
+    }
+
+    const avatarFileName = req.file.filename;
+
+    const query = 'UPDATE users SET avatar = ? WHERE id = ?';
+    connection.query(query, [avatarFileName, userId], (err) => {
+      if (err) {
+        return res.status(500).send('Error updating avatar');
+      }
+      res.status(200).send('Avatar updated successfully');
+    });
+  } catch (error) {
+    res.status(500).send('Error processing request');
+  }
+});
+
+
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
