@@ -1680,8 +1680,6 @@ app.post('/api/validate-token-session', (req, res) => {
       return res.status(401).json({ valid: false, message: 'Invalid token or session expired' });
     }
 
-    // If the token is valid
-    console.log('Valid token:', token);
     return res.status(200).json({ valid: true });
   });
 });
