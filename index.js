@@ -1701,6 +1701,10 @@ app.get('/download/android', (req, res) => {
   });
 });
 
+app.get('/download/test/route', (req, res) => {
+  res.redirect('https://edusify.vercel.app/'); // Redirect to the specified URL
+});
+
 // Route for iOS download
 app.get('/download/ios', (req, res) => {
   const file = path.join(__dirname, 'public', 'app', 'Educify.shortcut'); // Adjust path as necessary
@@ -2936,7 +2940,74 @@ app.post('/api/chat/ai', async (req, res) => {
   }
 });
 
+app.post('/api/getUserData/home/box', async (req, res) => {
+  const { token } = req.body;
 
+  try {
+    const userId = await getUserIdFromToken(token); // Get userId from token
+
+    // Fetch today's tasks and events
+    const todayTasks = await query('SELECT * FROM tasks WHERE user_id = ? AND due_date = CURDATE()', [userId]);
+    const todayEvents = await query('SELECT * FROM events WHERE user_id = ? AND date = CURDATE()', [userId]);
+
+    // Fetch upcoming tasks and events
+    const upcomingTasks = await query('SELECT * FROM tasks WHERE user_id = ? AND due_date > CURDATE()', [userId]);
+    const upcomingEvents = await query('SELECT * FROM events WHERE user_id = ? AND date > CURDATE()', [userId]);
+
+    // Respond with the data
+    res.json({
+      todayTasks: todayTasks, // Today's tasks
+      todayEvents: todayEvents, // Today's events
+      upcomingTasks: upcomingTasks, // Upcoming tasks
+      upcomingEvents: upcomingEvents, // Upcoming events
+    });
+  } catch (error) {
+    console.error('Error fetching user data:', error);
+    res.status(500).json({ error: 'Failed to fetch user data' });
+  }
+});
+
+
+
+app.post('/api/tasks/today/data/home', async (req, res) => {
+  const token = req.headers['authorization']; // Get token from authorization header
+
+  if (!token) {
+      return res.status(401).send('No token provided.');
+  }
+
+  try {
+      const userId = await getUserIdFromToken(token); // Get userId from token
+      const dueDate = req.body.due_date; // Get due_date from request body
+
+      const sql = 'SELECT * FROM tasks WHERE user_id = ? AND due_date = ?';
+      const tasks = await query(sql, [userId, dueDate]); // Use the promisified query function
+      res.json(tasks);
+  } catch (error) {
+      console.error('Error fetching tasks:', error);
+      res.status(500).send('Error fetching tasks'); // Handle errors
+  }
+});
+
+app.post('/api/events/today/data/home', async (req, res) => {
+  const token = req.headers['authorization']; // Get token from authorization header
+
+  if (!token) {
+      return res.status(401).send('No token provided.');
+  }
+
+  try {
+      const userId = await getUserIdFromToken(token); // Get userId from token
+      const eventDate = req.body.event_date; // Get event_date from request body
+
+      const sql = 'SELECT * FROM events WHERE user_id = ? AND date = ?';
+      const events = await query(sql, [userId, eventDate]); // Use the promisified query function
+      res.json(events);
+  } catch (error) {
+      console.error('Error fetching events:', error);
+      res.status(500).send('Error fetching events'); // Handle errors
+  }
+});
 
 // Start the server
 app.listen(PORT, () => {
