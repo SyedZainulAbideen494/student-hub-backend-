@@ -3007,9 +3007,14 @@ app.post('/api/events/today/data/home', async (req, res) => {
   }
 });
 
-// Update avatar route
 app.post('/api/update-avatar', upload.single('avatar'), async (req, res) => {
   try {
+    const token = req.headers.authorization.split(' ')[1]; // Extract Bearer token from the header
+
+    if (!token) {
+      return res.status(401).send('No token provided');
+    }
+
     const userId = await getUserIdFromToken(token); // Get userId from token
 
     if (!req.file) {
@@ -3029,6 +3034,7 @@ app.post('/api/update-avatar', upload.single('avatar'), async (req, res) => {
     res.status(500).send('Error processing request');
   }
 });
+
 
 
 // Start the server
