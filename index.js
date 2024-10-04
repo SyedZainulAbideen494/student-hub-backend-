@@ -3054,7 +3054,33 @@ app.delete('/api/remove-avatar', async (req, res) => {
   }
 });
 
+// POST route to handle invitations
+app.post('/invite/friend', async (req, res) => {
+  try {
+      const { token } = req.body;
+      if (!token) return res.status(400).json({ error: 'No token provided' });
 
+      // Call your helper function to get the userId
+      const userId = await getUserIdFromToken(token);
+      if (!userId) return res.status(401).json({ error: 'Invalid token' });
+
+      // Insert the invitation event into the database
+      connection.query('INSERT INTO invites (user_id) VALUES (?)', [userId], (err, result) => {
+          if (err) {
+              console.error('Error inserting invite:', err);
+              return res.status(500).json({ error: 'Failed to log the invite' });
+          }
+
+          // Log to the console that the user invited someone
+          console.log(`User ID ${userId} invited a friend!`);
+
+          return res.status(200).json({ message: 'Invite logged successfully' });
+      });
+  } catch (error) {
+      console.error('Error processing invite:', error);
+      return res.status(500).json({ error: 'An error occurred' });
+  }
+});
 
 // Start the server
 app.listen(PORT, () => {
