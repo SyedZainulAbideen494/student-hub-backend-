@@ -3082,6 +3082,45 @@ app.post('/invite/friend', async (req, res) => {
   }
 });
 
+app.post('/api/start/pomodoro', (req, res) => {
+  const token = req.headers['authorization']?.split(' ')[1]; // Extract token from the authorization header
+
+  if (!token) {
+      return res.status(401).json({ message: 'Token is required' });
+  }
+
+  getUserIdFromToken(token)
+      .then((userId) => {
+          // Log start for userId
+          console.log(`Pomodoro started for user: ${userId}`);
+          res.status(200).json({ message: 'Pomodoro started' });
+      })
+      .catch((error) => {
+          console.error('Error retrieving userId from token:', error);
+          res.status(403).json({ message: 'Invalid token' });
+      });
+});
+
+app.post('/api/stop/pomodoro', (req, res) => {
+  const token = req.headers['authorization']?.split(' ')[1]; // Extract token from the authorization header
+
+  if (!token) {
+      return res.status(401).json({ message: 'Token is required' });
+  }
+
+  getUserIdFromToken(token)
+      .then((userId) => {
+          // Log stop for userId
+          console.log(`Pomodoro stopped for user: ${userId}`);
+          res.status(200).json({ message: 'Pomodoro stopped' });
+      })
+      .catch((error) => {
+          console.error('Error retrieving userId from token:', error);
+          res.status(403).json({ message: 'Invalid token' });
+      });
+});
+
+
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
