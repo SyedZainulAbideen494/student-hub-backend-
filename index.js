@@ -21,11 +21,27 @@ const crypto = require('crypto');
 const stripe = require('stripe')('sk_test_51LoS3iSGyKMMAZwstPlmLCEi1eBUy7MsjYxiKsD1lT31LQwvPZYPvqCdfgH9xl8KgeJoVn6EVPMgnMRsFInhnnnb00WhKhMOq7');
 const cron = require('node-cron');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
-
+const { HarmBlockThreshold, HarmCategory } = require("@google/generative-ai");
 
 // Initialize Google Generative AI
 const genAI = new GoogleGenerativeAI('AIzaSyDNx6QYkHkvFYd8-lc-O1HgFgCDaChGkV0');
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+const safetySettings = [
+  {
+    category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+    threshold: HarmBlockThreshold.BLOCK_NONE,
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+    threshold: HarmBlockThreshold.BLOCK_NONE,
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+    threshold: HarmBlockThreshold.BLOCK_NONE
+  },
+];
+
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash", safetySettings: safetySettings });
 
 
 app.use(express.urlencoded({ extended: true }));
@@ -2941,10 +2957,7 @@ app.post('/api/chat/ai', async (req, res) => {
 
     // Safely access error response properties
     if (error.response) {
-      // Check if the error contains a status and message
-      const status = error.response.status ? error.response.status : 'unknown status';
-      const message = error.response.data && error.response.data.message ? error.response.data.message : 'No message available';
-      errorMessage = `Error: ${status} - ${message}`;
+      errorMessage = `Error: ${error.response.status} - ${error.response.data?.message || error.response.statusText}`;
     } else if (error.message) {
       errorMessage = `Error: ${error.message}`;
     }
@@ -2956,7 +2969,6 @@ app.post('/api/chat/ai', async (req, res) => {
     res.status(500).json({ error: errorMessage });
   }
 });
-
 
 
 
