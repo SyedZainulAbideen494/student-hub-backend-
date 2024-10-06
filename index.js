@@ -2571,7 +2571,7 @@ app.post('/api/create-checkout-session', (req, res) => {
               name: 'edusify premium',
               description: 'Unlock premium features of edusify!',
             },
-            unit_amount: 60, // Amount in cents (e.g., $1.00)
+            unit_amount: 118, // Amount in cents (e.g., $1.00)
           },
           quantity: 1,
         }],
@@ -2906,6 +2906,7 @@ app.post('/api/feedback', (req, res) => {
     });
 });
 
+
 app.post('/api/chat/ai', async (req, res) => {
   const { message, chatHistory } = req.body;
 
@@ -2934,9 +2935,31 @@ app.post('/api/chat/ai', async (req, res) => {
     res.json({ response: result.response.text() });
   } catch (error) {
     console.error('Error communicating with Gemini API:', error);
-    res.status(500).json({ error: 'Failed to communicate with the API', message });
+
+    // Provide a default error message
+    let errorMessage = 'Failed to communicate with the API';
+
+    // Safely access error response properties
+    if (error.response) {
+      // Check if the error contains a status and message
+      const status = error.response.status ? error.response.status : 'unknown status';
+      const message = error.response.data && error.response.data.message ? error.response.data.message : 'No message available';
+      errorMessage = `Error: ${status} - ${message}`;
+    } else if (error.message) {
+      errorMessage = `Error: ${error.message}`;
+    }
+
+    // Log the final error message for debugging
+    console.error('Final error message sent to user:', errorMessage);
+
+    // Send a user-friendly error message
+    res.status(500).json({ error: errorMessage });
   }
 });
+
+
+
+
 
 app.post('/api/getUserData/home/box', async (req, res) => {
   const { token } = req.body;
@@ -3119,6 +3142,88 @@ app.post('/api/stop/pomodoro', (req, res) => {
           res.status(403).json({ message: 'Invalid token' });
       });
 });
+
+
+// Your API credentials (replace with your actual API Key and Secret)
+const CLIENT_ID = "test_8VvZJe61lMpGxxE6fckRu0WvfgzQJkP3keM";
+const CLIENT_SECRET = "test_aK2KbAfwNuSOwbLwhaONFKqsRQk4mHy6zFhnk1VnZaIIS7ez3QdIHrNtNrTwwVciVUB98kf4BavVRAb2VLNYBd1Ies6LPoXV7bAJ4MbK8pNZPYcDRVdQFNzuHha";
+const INSTAMOJO_ENDPOINT = "https://test.instamojo.com/v2/payment_requests/";  // Use the live URL if in production
+
+
+const getAuthToken = async () => {
+  try {
+    const response = await axios.post('https://test.instamojo.com/oauth2/token/', {
+      grant_type: 'client_credentials',
+      client_id: CLIENT_ID,    // Your Instamojo Client ID
+      client_secret: CLIENT_SECRET, // Your Instamojo Client Secret
+    });
+
+    return response.data.access_token;  // Return the access token
+  } catch (err) {
+    console.error('Error generating auth token:', err.response ? err.response.data : err.message);
+    throw new Error('Failed to generate auth token');
+  }
+};
+
+app.post("/create-payment/insta/mojo", async (req, res) => {
+  const { amount, name, email, phone } = req.body;
+
+  try {
+    // Get the OAuth token
+    const token = await getAuthToken();
+
+    // Prepare the payment request data
+    const paymentData = {
+      purpose: "Event Registration",
+      amount: amount,
+      buyer_name: name,
+      email: email,
+      phone: phone,
+      redirect_url: "http://localhost:3000/payment-success",
+      webhook: "http://localhost:8080/payment-webhook",
+      allow_repeated_payments: false
+    };
+
+    // Make the API request to Instamojo
+    const response = await axios.post(INSTAMOJO_ENDPOINT, paymentData, {
+      headers: {
+        "Authorization": `Bearer ${token}`
+      }
+    });
+
+    if (response.data.success) {
+      const paymentId = response.data.payment_request.id;
+
+      // Save payment details in MySQL
+      const sql = `INSERT INTO payments (payment_id, name, email, phone, amount) VALUES (?, ?, ?, ?, ?)`;
+      connection.query(sql, [paymentId, name, email, phone, amount], (err, result) => {
+        if (err) {
+          console.error("MySQL Insertion Error:", err);
+          return res.status(500).json({ error: "Database insertion error" });
+        }
+        res.json({ paymentUrl: response.data.payment_request.longurl });
+      });
+    } else {
+      console.error("Instamojo Response Error:", response.data);
+      res.status(400).json({ error: response.data });
+    }
+  } catch (err) {
+    console.error("Error creating payment:", err.response ? err.response.data : err.message);
+    res.status(500).json({ error: "Failed to create payment request" });
+  }
+});
+
+// Webhook endpoint to capture payment status
+app.post("/payment-webhook", (req, res) => {
+  const { payment_id, status } = req.body;
+
+  const sql = `UPDATE payments SET status = ? WHERE payment_id = ?`;
+  connection.query(sql, [status, payment_id], (err, result) => {
+    if (err) throw err;
+    res.status(200).send("Webhook received");
+  });
+});
+
 
 
 // Start the server
