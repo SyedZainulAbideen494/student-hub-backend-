@@ -3243,6 +3243,18 @@ app.post("/payment-webhook", (req, res) => {
 });
 
 
+// API to get total users count
+app.get("/api/total-users/admin", (req, res) => {
+  const query = "SELECT COUNT(*) AS totalUsers FROM users"; // Replace 'users' with your table name
+  connection.query(query, (err, result) => {
+    if (err) {
+      console.error("Error fetching data:", err);
+      res.status(500).json({ error: "Database query error" });
+      return;
+    }
+    res.json({ totalUsers: result[0].totalUsers });
+  });
+});
 
 // Start the server
 app.listen(PORT, () => {
