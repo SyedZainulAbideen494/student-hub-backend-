@@ -456,8 +456,35 @@ app.post('/add/tasks', async (req, res) => {
       [title, description, formattedDueDate, priority, user_id]
     );
 
-    // Step 4: Send response
-    res.status(201).send({ id: insertResults.insertId, title, description, due_date: formattedDueDate, priority });
+    // Step 4: Update Points
+    const [pointsResults] = await connection.promise().query(
+      'SELECT * FROM user_points WHERE user_id = ?',
+      [user_id]
+    );
+
+    if (pointsResults.length > 0) {
+      // If user exists, update points
+      await connection.promise().query(
+        'UPDATE user_points SET points = points + 5 WHERE user_id = ?',
+        [user_id]
+      );
+    } else {
+      // If user does not exist, insert new record with 5 points
+      await connection.promise().query(
+        'INSERT INTO user_points (user_id, points) VALUES (?, ?)',
+        [user_id, 5]
+      );
+    }
+
+    // Step 5: Send response
+    res.status(201).send({
+      id: insertResults.insertId,
+      title,
+      description,
+      due_date: formattedDueDate,
+      priority,
+      message: 'Task added and points updated successfully'
+    });
   } catch (err) {
     console.error('Error adding task:', err);
     res.status(500).send({ message: 'Internal server error' });
@@ -517,24 +544,59 @@ app.post('/delete/task', (req, res) => {
 
   const getUserQuery = 'SELECT user_id FROM session WHERE jwt = ?';
   connection.query(getUserQuery, [token], (err, results) => {
-      if (err) {
-          return res.status(500).send(err);
-      }
-      if (results.length === 0) {
-          return res.status(404).send({ message: 'User not found' });
-      }
+    if (err) {
+      return res.status(500).send(err);
+    }
+    if (results.length === 0) {
+      return res.status(404).send({ message: 'User not found' });
+    }
 
-      const user_id = results[0].user_id;
-      const deleteQuery = 'DELETE FROM tasks WHERE id = ? AND user_id = ?';
-      connection.query(deleteQuery, [id, user_id], (err, results) => {
-          if (err) {
-              return res.status(500).send(err);
-          }
-         
-          res.send({ message: 'Task deleted successfully' });
+    const user_id = results[0].user_id;
+    const deleteQuery = 'DELETE FROM tasks WHERE id = ? AND user_id = ?';
+    
+    // Step 1: Delete the Task
+    connection.query(deleteQuery, [id, user_id], (err, deleteResults) => {
+      if (err) {
+        return res.status(500).send(err);
+      }
+      
+      // Step 2: Update Points
+      const pointsQuery = 'SELECT * FROM user_points WHERE user_id = ?';
+      connection.query(pointsQuery, [user_id], (err, pointsResults) => {
+        if (err) {
+          return res.status(500).send(err);
+        }
+
+        if (pointsResults.length > 0) {
+          // If user exists, update points
+          connection.query(
+            'UPDATE user_points SET points = points + 3 WHERE user_id = ?',
+            [user_id],
+            (err) => {
+              if (err) {
+                return res.status(500).send(err);
+              }
+              res.send({ message: 'Task deleted successfully and points updated.' });
+            }
+          );
+        } else {
+          // If user does not exist, insert new record with 3 points
+          connection.query(
+            'INSERT INTO user_points (user_id, points) VALUES (?, ?)',
+            [user_id, 3],
+            (err) => {
+              if (err) {
+                return res.status(500).send(err);
+              }
+              res.send({ message: 'Task deleted successfully and points added.' });
+            }
+          );
+        }
       });
+    });
   });
 });
+
 
 
 const MILLISECONDS_IN_A_DAY = 86400000;
@@ -696,45 +758,80 @@ scheduleReminder(21);  // 9:00 PM IST
 
 
 
-
 app.post('/api/add/flashcards', upload.array('images'), (req, res) => {
   const { title, description, isPublic, token, headings } = req.body;
 
   if (!token) {
-      return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ message: 'Unauthorized' });
   }
 
   connection.query('SELECT user_id FROM session WHERE jwt = ?', [token], (err, results) => {
-      if (err) {
-          console.error('Error fetching user_id:', err);
-          return res.status(500).json({ message: 'Failed to authenticate user.' });
+    if (err) {
+      console.error('Error fetching user_id:', err);
+      return res.status(500).json({ message: 'Failed to authenticate user.' });
+    }
+
+    if (results.length === 0) {
+      return res.status(401).json({ message: 'Invalid or expired token.' });
+    }
+
+    const userId = results[0].user_id;
+    const imageNames = req.files ? req.files.map(file => file.filename) : [];
+
+    console.log('Image filenames:', imageNames); // Log image filenames
+
+    const query = `
+        INSERT INTO flashcards (title, description, images, is_public, user_id, headings) 
+        VALUES (?, ?, ?, ?, ?, ?)
+    `;
+    const values = [title, description, JSON.stringify(imageNames), isPublic, userId, headings];
+
+    connection.query(query, values, (error) => {
+      if (error) {
+        console.error('Error inserting flashcard:', error);
+        return res.status(500).json({ message: 'Failed to save flashcard.' });
       }
 
-      if (results.length === 0) {
-          return res.status(401).json({ message: 'Invalid or expired token.' });
-      }
+      // Step 1: Update Points
+      const pointsQuery = 'SELECT * FROM user_points WHERE user_id = ?';
+      connection.query(pointsQuery, [userId], (err, pointsResults) => {
+        if (err) {
+          console.error('Error fetching user points:', err);
+          return res.status(500).json({ message: 'Failed to update points.' });
+        }
 
-      const userId = results[0].user_id;
-      const imageNames = req.files ? req.files.map(file => file.filename) : [];
-
-      console.log('Image filenames:', imageNames); // Log image filenames
-
-      const query = `
-          INSERT INTO flashcards (title, description, images, is_public, user_id, headings) 
-          VALUES (?, ?, ?, ?, ?, ?)
-      `;
-      const values = [title, description, JSON.stringify(imageNames), isPublic, userId, headings];
-
-      connection.query(query, values, (error) => {
-          if (error) {
-              console.error('Error inserting flashcard:', error);
-              return res.status(500).json({ message: 'Failed to save flashcard.' });
-          }
-
-          res.status(200).json({ message: 'Flashcard saved successfully!' });
+        if (pointsResults.length > 0) {
+          // If user exists, update points
+          connection.query(
+            'UPDATE user_points SET points = points + 10 WHERE user_id = ?',
+            [userId],
+            (err) => {
+              if (err) {
+                console.error('Error updating points:', err);
+                return res.status(500).json({ message: 'Failed to update points.' });
+              }
+              res.status(200).json({ message: 'Flashcard saved successfully! Points updated.' });
+            }
+          );
+        } else {
+          // If user does not exist, insert new record with 10 points
+          connection.query(
+            'INSERT INTO user_points (user_id, points) VALUES (?, ?)',
+            [userId, 10],
+            (err) => {
+              if (err) {
+                console.error('Error inserting points:', err);
+                return res.status(500).json({ message: 'Failed to update points.' });
+              }
+              res.status(200).json({ message: 'Flashcard saved successfully! Points added.' });
+            }
+          );
+        }
       });
+    });
   });
 });
+
 
 app.get('/api/get/user/notes', (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
@@ -808,6 +905,7 @@ app.put('/api/update/note/:note_id', (req, res) => {
       res.status(200).json({ message: 'Note updated successfully!' });
   });
 });
+
 // Route to delete a specific note by note_id
 app.delete('/api/delete/note/:note_id', (req, res) => {
   const noteId = req.params.note_id;
@@ -1061,23 +1159,60 @@ app.post('/shareFlashCard', async (req, res) => {
   const token = req.headers.authorization.split(' ')[1]; // Extract token from header
 
   try {
-      // Extract user ID from token
-      const senderId = await getUserIdFromToken(token);
+    // Extract user ID from token
+    const senderId = await getUserIdFromToken(token);
 
-      // Insert message into the messages table
-      const query = 'INSERT INTO messages (sender, group_id, type, content) VALUES (?, ?, ?, ?)';
-      connection.query(query, [senderId, groupId, 'flashcard', id], (err, results) => {
-          if (err) {
-              console.error('Error inserting message:', err);
-              return res.status(500).send('Error sharing flashcard');
-          }
-          res.status(200).send('Flashcard shared successfully');
+    // Step 1: Insert message into the messages table
+    const query = 'INSERT INTO messages (sender, group_id, type, content) VALUES (?, ?, ?, ?)';
+    connection.query(query, [senderId, groupId, 'flashcard', id], (err, results) => {
+      if (err) {
+        console.error('Error inserting message:', err);
+        return res.status(500).send('Error sharing flashcard');
+      }
+
+      // Step 2: Update Points
+      const pointsQuery = 'SELECT * FROM user_points WHERE user_id = ?';
+      connection.query(pointsQuery, [senderId], (err, pointsResults) => {
+        if (err) {
+          console.error('Error fetching user points:', err);
+          return res.status(500).send('Failed to update points.');
+        }
+
+        if (pointsResults.length > 0) {
+          // If user exists, update points
+          connection.query(
+            'UPDATE user_points SET points = points + 2 WHERE user_id = ?',
+            [senderId],
+            (err) => {
+              if (err) {
+                console.error('Error updating points:', err);
+                return res.status(500).send('Failed to update points.');
+              }
+              res.status(200).send('Flashcard shared successfully! Points updated.');
+            }
+          );
+        } else {
+          // If user does not exist, insert new record with 2 points
+          connection.query(
+            'INSERT INTO user_points (user_id, points) VALUES (?, ?)',
+            [senderId, 2],
+            (err) => {
+              if (err) {
+                console.error('Error inserting points:', err);
+                return res.status(500).send('Failed to update points.');
+              }
+              res.status(200).send('Flashcard shared successfully! Points added.');
+            }
+          );
+        }
       });
+    });
   } catch (error) {
-      console.error('Error sharing flashcard:', error);
-      res.status(401).send('Failed to authenticate user');
+    console.error('Error sharing flashcard:', error);
+    res.status(401).send('Failed to authenticate user');
   }
 });
+
 
 // Route to get user name by token
 app.get('/api/user/details/:id', async (req, res) => {
@@ -1430,25 +1565,39 @@ app.post('/createQuiz', async (req, res) => {
   const { token, title, description, questions } = req.body;
 
   try {
-      const userId = await getUserIdFromToken(token);
-      if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+    const userId = await getUserIdFromToken(token);
+    if (!userId) return res.status(401).json({ message: 'Unauthorized' });
 
-      const [result] = await connection.promise().query('INSERT INTO quizzes (title, description, creator_id) VALUES (?, ?, ?)', [title, description, userId]);
-      const quizId = result.insertId;
+    // Step 1: Insert the quiz
+    const [result] = await connection.promise().query('INSERT INTO quizzes (title, description, creator_id) VALUES (?, ?, ?)', [title, description, userId]);
+    const quizId = result.insertId;
 
-      for (const question of questions) {
-          const [questionResult] = await connection.promise().query('INSERT INTO questions (quiz_id, question_text) VALUES (?, ?)', [quizId, question.text]);
-          const questionId = questionResult.insertId;
+    // Step 2: Insert questions and answers
+    for (const question of questions) {
+      const [questionResult] = await connection.promise().query('INSERT INTO questions (quiz_id, question_text) VALUES (?, ?)', [quizId, question.text]);
+      const questionId = questionResult.insertId;
 
-          for (const answer of question.answers) {
-              await connection.promise().query('INSERT INTO answers (question_id, answer_text, is_correct) VALUES (?, ?, ?)', [questionId, answer.text, answer.is_correct]);
-          }
+      for (const answer of question.answers) {
+        await connection.promise().query('INSERT INTO answers (question_id, answer_text, is_correct) VALUES (?, ?, ?)', [questionId, answer.text, answer.is_correct]);
       }
+    }
 
-      res.json({ message: 'Quiz created successfully', quizId });
+    // Step 3: Update Points
+    const pointsQuery = 'SELECT * FROM user_points WHERE user_id = ?';
+    const [pointsResults] = await connection.promise().query(pointsQuery, [userId]);
+
+    if (pointsResults.length > 0) {
+      // If user exists, update points
+      await connection.promise().query('UPDATE user_points SET points = points + 8 WHERE user_id = ?', [userId]);
+    } else {
+      // If user does not exist, insert new record with 8 points
+      await connection.promise().query('INSERT INTO user_points (user_id, points) VALUES (?, ?)', [userId, 8]);
+    }
+
+    res.json({ message: 'Quiz created successfully', quizId });
   } catch (error) {
-      console.error('Error creating quiz:', error);
-      res.status(500).json({ message: 'Error creating quiz' });
+    console.error('Error creating quiz:', error);
+    res.status(500).json({ message: 'Error creating quiz' });
   }
 });
 
@@ -1501,6 +1650,7 @@ app.post('/submitQuiz', async (req, res) => {
     const userId = await getUserIdFromToken(token);
     let correctCount = 0;
 
+    // Step 1: Check answers
     for (const answer of answers) {
       if (typeof answer.answerId !== 'number' || typeof answer.questionId !== 'number') {
         console.error('Invalid answer format:', answer);
@@ -1515,6 +1665,7 @@ app.post('/submitQuiz', async (req, res) => {
       if (result.length) correctCount++;
     }
 
+    // Step 2: Get total questions
     const [questions] = await connection.promise().query(
       'SELECT COUNT(*) AS count FROM questions WHERE quiz_id = ?',
       [quizId]
@@ -1528,10 +1679,23 @@ app.post('/submitQuiz', async (req, res) => {
 
     const score = (correctCount / totalQuestions) * 100;
 
+    // Step 3: Save score to user_quizzes
     await connection.promise().query(
       'INSERT INTO user_quizzes (user_id, quiz_id, score) VALUES (?, ?, ?)',
       [userId, quizId, score]
     );
+
+    // Step 4: Update Points
+    const pointsQuery = 'SELECT * FROM user_points WHERE user_id = ?';
+    const [pointsResults] = await connection.promise().query(pointsQuery, [userId]);
+
+    if (pointsResults.length > 0) {
+      // If user exists, update points
+      await connection.promise().query('UPDATE user_points SET points = points + 15 WHERE user_id = ?', [userId]);
+    } else {
+      // If user does not exist, insert new record with 15 points
+      await connection.promise().query('INSERT INTO user_points (user_id, points) VALUES (?, ?)', [userId, 15]);
+    }
 
     res.json({ score });
 
@@ -1546,23 +1710,32 @@ app.post('/shareQuiz', async (req, res) => {
   const token = req.headers.authorization.split(' ')[1]; // Extract token from header
 
   try {
-      // Extract user ID from token
-      const senderId = await getUserIdFromToken(token);
+    // Extract user ID from token
+    const senderId = await getUserIdFromToken(token);
 
-      // Insert message into the messages table
-      const query = 'INSERT INTO messages (sender, group_id, type, content) VALUES (?, ?, ?, ?)';
-      connection.query(query, [senderId, groupId, 'quiz', quizId], (err, results) => {
-          if (err) {
-              console.error('Error inserting message:', err);
-              return res.status(500).send('Error sharing quiz');
-          }
-          res.status(200).send('Quiz shared successfully');
-      });
+    // Insert message into the messages table
+    const query = 'INSERT INTO messages (sender, group_id, type, content) VALUES (?, ?, ?, ?)';
+    await connection.promise().query(query, [senderId, groupId, 'quiz', quizId]);
+
+    // Step 1: Update Points
+    const pointsQuery = 'SELECT * FROM user_points WHERE user_id = ?';
+    const [pointsResults] = await connection.promise().query(pointsQuery, [senderId]);
+
+    if (pointsResults.length > 0) {
+      // If user exists, update points
+      await connection.promise().query('UPDATE user_points SET points = points + 6 WHERE user_id = ?', [senderId]);
+    } else {
+      // If user does not exist, insert new record with 6 points
+      await connection.promise().query('INSERT INTO user_points (user_id, points) VALUES (?, ?)', [senderId, 6]);
+    }
+
+    res.status(200).send('Quiz shared successfully');
   } catch (error) {
-      console.error('Error sharing quiz:', error);
-      res.status(401).send('Failed to authenticate user');
+    console.error('Error sharing quiz:', error);
+    res.status(401).send('Failed to authenticate user');
   }
 });
+
 
 app.post('/api/getUserResults', async (req, res) => {
   const token = req.body.token;
@@ -1634,17 +1807,35 @@ app.post('/api/fetchEvents', async (req, res) => {
 // Add event route
 app.post('/api/addEvent', async (req, res) => {
   const { title, date, token } = req.body;
+
   try {
-      const userId = await getUserIdFromToken(token);
-      const sql = 'INSERT INTO events (title, date, user_id) VALUES (?, ?, ?)';
-      connection.query(sql, [title, date, userId], (err, result) => {
-          if (err) return res.status(500).send(err);
-          res.send({ id: result.insertId });
-      });
+    const userId = await getUserIdFromToken(token);
+
+    // Step 1: Insert event
+    const sql = 'INSERT INTO events (title, date, user_id) VALUES (?, ?, ?)';
+    connection.query(sql, [title, date, userId], async (err, result) => {
+      if (err) return res.status(500).send(err);
+
+      // Step 2: Update Points
+      const pointsQuery = 'SELECT * FROM user_points WHERE user_id = ?';
+      const [pointsResults] = await connection.promise().query(pointsQuery, [userId]);
+
+      if (pointsResults.length > 0) {
+        // If user exists, update points
+        await connection.promise().query('UPDATE user_points SET points = points + 3 WHERE user_id = ?', [userId]);
+      } else {
+        // If user does not exist, insert new record with 3 points
+        await connection.promise().query('INSERT INTO user_points (user_id, points) VALUES (?, ?)', [userId, 3]);
+      }
+
+      // Send response with event ID
+      res.send({ id: result.insertId });
+    });
   } catch (error) {
-      res.status(401).send(error.message);
+    res.status(401).send(error.message);
   }
 });
+
 
 
 app.post('/api/fetchUserActivities', async (req, res) => {
@@ -1662,13 +1853,40 @@ app.post('/api/fetchUserActivities', async (req, res) => {
 });
 
 // Remove Event
-app.post('/api/events/remove', (req, res) => {
+app.post('/api/events/remove', async (req, res) => {
   const { id, token } = req.body; // Assuming token-based authentication
-  connection.query('DELETE FROM events WHERE id = ?', [id], err => {
-      if (err) throw err;
+
+  try {
+    // Step 1: Get User ID from token
+    const userId = await getUserIdFromToken(token);
+
+    // Step 2: Delete the event
+    connection.query('DELETE FROM events WHERE id = ? AND user_id = ?', [id, userId], async (err) => {
+      if (err) {
+        console.error('Error deleting event:', err);
+        return res.status(500).json({ success: false, message: 'Error deleting event' });
+      }
+
+      // Step 3: Update Points
+      const pointsQuery = 'SELECT * FROM user_points WHERE user_id = ?';
+      const [pointsResults] = await connection.promise().query(pointsQuery, [userId]);
+
+      if (pointsResults.length > 0) {
+        // If user exists, update points
+        await connection.promise().query('UPDATE user_points SET points = points + 1 WHERE user_id = ?', [userId]);
+      } else {
+        // If user does not exist, insert new record with 1 point
+        await connection.promise().query('INSERT INTO user_points (user_id, points) VALUES (?, ?)', [userId, 1]);
+      }
+
       res.json({ success: true });
-  });
+    });
+  } catch (error) {
+    console.error('Error in remove event:', error);
+    res.status(401).json({ success: false, message: 'Unauthorized' });
+  }
 });
+
 
 // Update Event
 app.post('/api/events/update', (req, res) => {
@@ -1858,6 +2076,8 @@ app.post('/api/profile/user', async (req, res) => {
     res.status(401).send(error);
   }
 });
+
+
 app.get('/api/eduscribes', async (req, res) => {
   try {
     // Extract token from request headers
@@ -1933,11 +2153,25 @@ app.post('/api/add/eduscribes', upload.single('image'), async (req, res) => {
   try {
     const userId = await getUserIdFromToken(token);
     const sql = 'INSERT INTO eduscribes (content, user_id, image) VALUES (?, ?, ?)';
-    connection.query(sql, [question, userId, imageName], (err, result) => {
+
+    connection.query(sql, [question, userId, imageName], async (err, result) => {
       if (err) {
         console.error('Error executing query:', err);
         return res.status(500).json({ error: 'Internal Server Error' });
       }
+
+      // Step 2: Update Points
+      const pointsQuery = 'SELECT * FROM user_points WHERE user_id = ?';
+      const [pointsResults] = await connection.promise().query(pointsQuery, [userId]);
+
+      if (pointsResults.length > 0) {
+        // If user exists, update points
+        await connection.promise().query('UPDATE user_points SET points = points + 10 WHERE user_id = ?', [userId]);
+      } else {
+        // If user does not exist, insert new record with 10 points
+        await connection.promise().query('INSERT INTO user_points (user_id, points) VALUES (?, ?)', [userId, 10]);
+      }
+
       res.status(200).json({ message: 'Eduscribe submitted successfully!', id: result.insertId });
     });
   } catch (error) {
@@ -3123,42 +3357,68 @@ app.post('/invite/friend', async (req, res) => {
   }
 });
 
-app.post('/api/start/pomodoro', (req, res) => {
+// Start Pomodoro
+app.post('/api/start/pomodoro', async (req, res) => {
   const token = req.headers['authorization']?.split(' ')[1]; // Extract token from the authorization header
 
   if (!token) {
       return res.status(401).json({ message: 'Token is required' });
   }
 
-  getUserIdFromToken(token)
-      .then((userId) => {
-          // Log start for userId
-          console.log(`Pomodoro started for user: ${userId}`);
-          res.status(200).json({ message: 'Pomodoro started' });
-      })
-      .catch((error) => {
-          console.error('Error retrieving userId from token:', error);
-          res.status(403).json({ message: 'Invalid token' });
-      });
+  try {
+      const userId = await getUserIdFromToken(token);
+      // Log start for userId
+      console.log(`Pomodoro started for user: ${userId}`);
+
+      // Update points
+      const pointsQuery = 'SELECT * FROM user_points WHERE user_id = ?';
+      const [pointsResults] = await connection.promise().query(pointsQuery, [userId]);
+
+      if (pointsResults.length > 0) {
+          // If user exists, update points
+          await connection.promise().query('UPDATE user_points SET points = points + 5 WHERE user_id = ?', [userId]);
+      } else {
+          // If user does not exist, insert new record with 5 points
+          await connection.promise().query('INSERT INTO user_points (user_id, points) VALUES (?, ?)', [userId, 5]);
+      }
+
+      res.status(200).json({ message: 'Pomodoro started' });
+  } catch (error) {
+      console.error('Error retrieving userId from token:', error);
+      res.status(403).json({ message: 'Invalid token' });
+  }
 });
 
-app.post('/api/stop/pomodoro', (req, res) => {
+// Stop Pomodoro
+app.post('/api/stop/pomodoro', async (req, res) => {
   const token = req.headers['authorization']?.split(' ')[1]; // Extract token from the authorization header
 
   if (!token) {
       return res.status(401).json({ message: 'Token is required' });
   }
 
-  getUserIdFromToken(token)
-      .then((userId) => {
-          // Log stop for userId
-          console.log(`Pomodoro stopped for user: ${userId}`);
-          res.status(200).json({ message: 'Pomodoro stopped' });
-      })
-      .catch((error) => {
-          console.error('Error retrieving userId from token:', error);
-          res.status(403).json({ message: 'Invalid token' });
-      });
+  try {
+      const userId = await getUserIdFromToken(token);
+      // Log stop for userId
+      console.log(`Pomodoro stopped for user: ${userId}`);
+
+      // Update points
+      const pointsQuery = 'SELECT * FROM user_points WHERE user_id = ?';
+      const [pointsResults] = await connection.promise().query(pointsQuery, [userId]);
+
+      if (pointsResults.length > 0) {
+          // If user exists, update points
+          await connection.promise().query('UPDATE user_points SET points = points + 5 WHERE user_id = ?', [userId]);
+      } else {
+          // If user does not exist, insert new record with 5 points
+          await connection.promise().query('INSERT INTO user_points (user_id, points) VALUES (?, ?)', [userId, 5]);
+      }
+
+      res.status(200).json({ message: 'Pomodoro stopped' });
+  } catch (error) {
+      console.error('Error retrieving userId from token:', error);
+      res.status(403).json({ message: 'Invalid token' });
+  }
 });
 
 
