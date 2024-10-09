@@ -3503,6 +3503,26 @@ app.post("/payment-webhook", (req, res) => {
 });
 
 
+// API endpoint to fetch leaderboard data
+app.get('/api/leaderboard', (req, res) => {
+  const sql = `
+      SELECT u.id, u.unique_id, u.user_name, p.points, u.avatar
+      FROM users u
+      JOIN user_points p ON u.id = p.user_id
+      ORDER BY p.points DESC
+      LIMIT 10
+  `;
+
+  connection.query(sql, (err, results) => {
+      if (err) {
+          console.error('Error fetching leaderboard data:', err);
+          return res.status(500).json({ error: 'Failed to fetch leaderboard data' });
+      }
+      res.json(results); // Return the leaderboard data as JSON
+  });
+});
+
+
 // API to get total users count
 app.get("/api/total-users/admin", (req, res) => {
   const query = "SELECT COUNT(*) AS totalUsers FROM users"; // Replace 'users' with your table name
