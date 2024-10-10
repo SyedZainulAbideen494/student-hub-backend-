@@ -3422,86 +3422,6 @@ app.post('/api/stop/pomodoro', async (req, res) => {
 });
 
 
-// Your API credentials (replace with your actual API Key and Secret)
-const CLIENT_ID = "test_8VvZJe61lMpGxxE6fckRu0WvfgzQJkP3keM";
-const CLIENT_SECRET = "test_aK2KbAfwNuSOwbLwhaONFKqsRQk4mHy6zFhnk1VnZaIIS7ez3QdIHrNtNrTwwVciVUB98kf4BavVRAb2VLNYBd1Ies6LPoXV7bAJ4MbK8pNZPYcDRVdQFNzuHha";
-const INSTAMOJO_ENDPOINT = "https://test.instamojo.com/v2/payment_requests/";  // Use the live URL if in production
-
-
-const getAuthToken = async () => {
-  try {
-    const response = await axios.post('https://test.instamojo.com/oauth2/token/', {
-      grant_type: 'client_credentials',
-      client_id: CLIENT_ID,    // Your Instamojo Client ID
-      client_secret: CLIENT_SECRET, // Your Instamojo Client Secret
-    });
-
-    return response.data.access_token;  // Return the access token
-  } catch (err) {
-    console.error('Error generating auth token:', err.response ? err.response.data : err.message);
-    throw new Error('Failed to generate auth token');
-  }
-};
-
-app.post("/create-payment/insta/mojo", async (req, res) => {
-  const { amount, name, email, phone } = req.body;
-
-  try {
-    // Get the OAuth token
-    const token = await getAuthToken();
-
-    // Prepare the payment request data
-    const paymentData = {
-      purpose: "Event Registration",
-      amount: amount,
-      buyer_name: name,
-      email: email,
-      phone: phone,
-      redirect_url: "http://localhost:3000/payment-success",
-      webhook: "http://localhost:8080/payment-webhook",
-      allow_repeated_payments: false
-    };
-
-    // Make the API request to Instamojo
-    const response = await axios.post(INSTAMOJO_ENDPOINT, paymentData, {
-      headers: {
-        "Authorization": `Bearer ${token}`
-      }
-    });
-
-    if (response.data.success) {
-      const paymentId = response.data.payment_request.id;
-
-      // Save payment details in MySQL
-      const sql = `INSERT INTO payments (payment_id, name, email, phone, amount) VALUES (?, ?, ?, ?, ?)`;
-      connection.query(sql, [paymentId, name, email, phone, amount], (err, result) => {
-        if (err) {
-          console.error("MySQL Insertion Error:", err);
-          return res.status(500).json({ error: "Database insertion error" });
-        }
-        res.json({ paymentUrl: response.data.payment_request.longurl });
-      });
-    } else {
-      console.error("Instamojo Response Error:", response.data);
-      res.status(400).json({ error: response.data });
-    }
-  } catch (err) {
-    console.error("Error creating payment:", err.response ? err.response.data : err.message);
-    res.status(500).json({ error: "Failed to create payment request" });
-  }
-});
-
-// Webhook endpoint to capture payment status
-app.post("/payment-webhook", (req, res) => {
-  const { payment_id, status } = req.body;
-
-  const sql = `UPDATE payments SET status = ? WHERE payment_id = ?`;
-  connection.query(sql, [status, payment_id], (err, result) => {
-    if (err) throw err;
-    res.status(200).send("Webhook received");
-  });
-});
-
 
 // API endpoint to fetch leaderboard data
 app.get('/api/leaderboard', (req, res) => {
@@ -3521,6 +3441,271 @@ app.get('/api/leaderboard', (req, res) => {
       res.json(results); // Return the leaderboard data as JSON
   });
 });
+
+app.post('/api/flashcards/generate', async (req, res) => {
+  const { set_id } = req.body; // Get the set ID from the request body
+
+  try {
+    // Fetch the subject and topic based on the set_id
+    const setQuery = 'SELECT subject, topic FROM flashcard_sets WHERE id = ?';
+    connection.query(setQuery, [set_id], async (err, results) => {
+      if (err || results.length === 0) {
+        console.error('Error fetching flashcard set:', err);
+        return res.status(500).json({ error: 'Flashcard set not found' });
+      }
+
+      const { subject, topic } = results[0];
+
+      // AI prompt to generate 15 question and answer flashcards
+      const prompt = `Generate 15 flashcards in JSON format with questions and answers for the subject: ${subject} and topic: ${topic}. Each flashcard should be an object with 'question' and 'answer' fields, ensuring no additional text is included. Please do not use any Markdown formatting or backticks.`;
+
+      const chat = model.startChat({
+        history: [
+          {
+            role: 'user',
+            parts: [{ text: 'Hello' }],
+          },
+          {
+            role: 'model',
+            parts: [{ text: 'I can help generate flashcards for your study!' }],
+          },
+        ],
+      });
+
+      console.log('Generating flashcards with prompt:', prompt);
+      const result = await chat.sendMessage(prompt);
+
+      // Sanitize the response to remove any unwanted characters
+      const sanitizedResponse = result.response.text().replace(/```json|```|`/g, '').trim();
+
+      // Expecting a JSON format response
+      let flashcards;
+      try {
+        flashcards = JSON.parse(sanitizedResponse);
+      } catch (parseError) {
+        console.error('Failed to parse JSON:', parseError);
+        return res.status(500).json({ error: 'Invalid JSON response from the AI model' });
+      }
+
+      // Prepare flashcards data to insert
+      const flashcardsData = [];
+
+      // Ensure that we have valid question-answer pairs
+      for (const card of flashcards) {
+        const question = card.question?.trim();
+        const answer = card.answer?.trim();
+
+        // Validate question and answer
+        if (question && answer) {
+          flashcardsData.push({ set_id, subject, topic, question, answer });
+        } else {
+          console.warn(`Skipping pair due to missing question or answer: ${question || 'No question'} - ${answer || 'No answer'}`);
+        }
+      }
+
+      // Insert flashcards into the database if there are valid pairs
+      if (flashcardsData.length > 0) {
+        const flashcardsValues = flashcardsData.map(({ set_id, question, answer }) => [set_id, question, answer]);
+
+        connection.query(
+          'INSERT INTO flashcard (set_id, question, answer) VALUES ?',
+          [flashcardsValues],
+          (err) => {
+            if (err) {
+              console.error('Error inserting into database:', err);
+              return res.status(500).json({ error: 'Database error' });
+            }
+
+            // Return the generated flashcards
+            res.json({ flashcards: flashcardsData });
+          }
+        );
+      } else {
+        res.status(400).json({ error: 'No valid flashcards generated' });
+      }
+    });
+  } catch (error) {
+    console.error('Error generating flashcards:', error);
+    let errorMessage = 'Failed to generate flashcards';
+    if (error.response) {
+      errorMessage = `Error: ${error.response.status} - ${error.response.data?.message || error.response.statusText}`;
+    } else if (error.message) {
+      errorMessage = `Error: ${error.message}`;
+    }
+    res.status(500).json({ error: errorMessage });
+  }
+});
+
+
+
+app.get('/api/flashcards/view/individual/:id', (req, res) => {
+  const { id } = req.params;
+
+  const query = 'SELECT * FROM flashcard WHERE id = ?';
+  connection.query(query, [id], (err, results) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+
+    // Check if any result was found
+    if (results.length === 0) {
+      return res.status(404).json({ error: 'Flashcard not found' });
+    }
+
+    // Send the flashcard details
+    res.json(results[0]);
+  });
+});
+
+
+// API to fetch all flashcard sets for a user
+app.post('/api/flashcard-sets', async (req, res) => {
+  const { token } = req.body; // Extract token from the body
+
+  if (!token) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+
+  try {
+    // Ensure that getUserIdFromToken is an async function and return the user ID correctly
+    const userId = await getUserIdFromToken(token); // Await the promise here
+
+    const queryText = 'SELECT * FROM flashcard_sets WHERE user_id = ?'; // Ensure this query is correct
+    const results = await query(queryText, [userId]); // Use the query function
+
+    res.json({ sets: results }); // Return sets for the user
+  } catch (error) {
+    console.error('Error:', error.message); // Log any errors
+    res.status(500).json({ error: 'An error occurred while fetching flashcard sets.' });
+  }
+});
+
+
+// API to create a new flashcard set
+app.post('/api/flashcard-sets/create', async (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1]; // Extract token from headers
+  if (!token) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+
+  try {
+    const userId = await getUserIdFromToken(token); // Get userId from token
+    const { name, subject, topic } = req.body;
+    
+    const query = 'INSERT INTO flashcard_sets (name, subject, topic, user_id) VALUES (?, ?, ?, ?)';
+    connection.query(query, [name, subject, topic, userId], (err, results) => {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+      res.json({ id: results.insertId });
+    });
+  } catch (error) {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+});
+
+// API to fetch flashcards for a specific set along with set details
+app.get('/api/flashcards/set/:id', (req, res) => {
+  const { id } = req.params;
+  const query = `
+    SELECT 
+      f.*, 
+      s.name AS set_name, 
+      s.topic AS set_topic, 
+      s.subject AS set_subject 
+    FROM 
+      flashcard f
+    JOIN 
+      flashcard_sets s ON f.set_id = s.id
+    WHERE 
+      f.set_id = ?`;
+
+  connection.query(query, [id], (err, results) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+
+    // Extract flashcards
+    const flashcards = results.map(result => ({
+      id: result.id,
+      question: result.question,
+      answer: result.answer,
+      set_id: result.set_id,
+      set_name: result.set_name,
+      set_topic: result.set_topic,
+      set_subject: result.set_subject,
+    }));
+
+    // If no flashcards were found, return empty array and set details
+    if (flashcards.length === 0) {
+      return res.json({
+        flashcards: [],
+        setDetails: {
+          name: '',
+          topic: '',
+          subject: '',
+        },
+      });
+    }
+
+    // Return flashcards and set details
+    res.json({
+      flashcards,
+      setDetails: {
+        name: flashcards[0].set_name,
+        topic: flashcards[0].set_topic,
+        subject: flashcards[0].set_subject,
+      },
+    });
+  });
+});
+
+// API endpoint to get flashcard set data
+app.get('/api/flashcard-set/data/:setId', (req, res) => {
+  const { setId } = req.params;
+
+  // Query to get the flashcard set data from the database
+  const query = 'SELECT * FROM flashcard_sets WHERE id = ?'; // Adjust table name based on your schema
+
+  connection.query(query, [setId], (error, results) => {
+    if (error) {
+      console.error('Error fetching flashcard set data:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+
+    if (results.length > 0) {
+      // If a set is found, return the entire row
+      return res.json(results[0]);
+    } else {
+      return res.status(404).json({ error: 'Flashcard set not found' });
+    }
+  });
+});
+
+app.put('/api/flashcards/update-status/:id', async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body; // Get status from request body
+
+  // Validate the input
+  if (!status) {
+    return res.status(400).json({ message: 'Status is required.' });
+  }
+
+  try {
+    // Use the promisified query function
+    const result = await query('UPDATE flashcard SET status = ? WHERE id = ?', [status, id]);
+    
+    if (result.affectedRows > 0) {
+      res.status(200).json({ message: 'Flashcard status updated successfully.' });
+    } else {
+      res.status(404).json({ message: 'Flashcard not found.' });
+    }
+  } catch (error) {
+    console.error('Error updating flashcard status:', error);
+    res.status(500).json({ message: 'Server error.', error: error.message });
+  }
+});
+
 
 
 // API to get total users count
