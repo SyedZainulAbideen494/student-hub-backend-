@@ -3745,7 +3745,7 @@ app.post('/api/flashcards/stats', (req, res) => {
 
 
 // API endpoint to delete a flashcard
-app.delete('/api/flashcards/:id', (req, res) => {
+app.delete('/api/flashcards/individual/:id', (req, res) => {
   const flashcardId = req.params.id;
 
   connection.query('DELETE FROM flashcard WHERE id = ?', [flashcardId], (err, results) => {
