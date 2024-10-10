@@ -3744,6 +3744,21 @@ app.post('/api/flashcards/stats', (req, res) => {
 });
 
 
+// API endpoint to delete a flashcard
+app.delete('/api/flashcards/:id', (req, res) => {
+  const flashcardId = req.params.id;
+
+  connection.query('DELETE FROM flashcard WHERE id = ?', [flashcardId], (err, results) => {
+      if (err) {
+          return res.status(500).json({ error: err.message });
+      }
+
+      res.json({ message: 'Flashcard deleted successfully' });
+  });
+});
+
+
+
 // API to get total users count
 app.get("/api/total-users/admin", (req, res) => {
   const query = "SELECT COUNT(*) AS totalUsers FROM users"; // Replace 'users' with your table name
