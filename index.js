@@ -3707,6 +3707,42 @@ app.put('/api/flashcards/update-status/:id', async (req, res) => {
 });
 
 
+// API endpoint to get flashcard stats
+app.get('/api/flashcards/stats', (req, res) => {
+  const setId = req.query.set_id;
+
+  if (!setId) {
+      return res.status(400).json({ message: 'set_id is required' });
+  }
+
+  connection.query('SELECT * FROM flashcard WHERE set_id = ?', [setId], (err, results) => {
+      if (err) {
+          return res.status(500).json({ error: err.message });
+      }
+
+      const totalCards = results.length;
+      let knownCount = 0;
+      let unknownCount = 0;
+
+      results.forEach(card => {
+          if (card.status === 'I Know') {
+              knownCount++;
+          } else if (card.status === "I Don't Know") {
+              unknownCount++;
+          }
+      });
+
+      const knownPercentage = totalCards ? (knownCount / totalCards) * 100 : 0;
+
+      res.json({
+          totalCards,
+          knownCount,
+          unknownCount,
+          knownPercentage: knownPercentage.toFixed(2),
+      });
+  });
+});
+
 
 // API to get total users count
 app.get("/api/total-users/admin", (req, res) => {
