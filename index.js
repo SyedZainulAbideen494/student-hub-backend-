@@ -3758,6 +3758,56 @@ app.delete('/api/flashcards/individual/:id', (req, res) => {
 });
 
 
+// API endpoint to create a flashcard
+app.post('/api/flashcards/create/manual', (req, res) => {
+  const { question, set_id, answer } = req.body;
+
+  // Validate the input
+  if (!question || !set_id || !answer) {
+    return res.status(400).json({ message: 'Question, set_id, and answer are required' });
+  }
+
+  // SQL query to insert a new flashcard
+  const sql = 'INSERT INTO flashcard (question, set_id, answer) VALUES (?, ?, ?)';
+  const values = [question, set_id, answer];
+
+  connection.query(sql, values, (err, result) => {
+    if (err) {
+      console.error('Error inserting flashcard:', err);
+      return res.status(500).json({ error: 'Failed to create flashcard' });
+    }
+
+    res.status(201).json({ message: 'Flashcard created successfully', flashcardId: result.insertId });
+  });
+});
+
+// API endpoint to delete a flashcard set and its associated flashcards
+app.delete('/api/flashcards/set/delete/:id', async (req, res) => {
+  const setId = req.params.id;
+
+  try {
+    // Start a transaction
+    await query('START TRANSACTION');
+
+    // SQL query to delete all flashcards associated with the set_id
+    await query('DELETE FROM flashcard WHERE set_id = ?', [setId]);
+
+    // SQL query to delete the flashcard set
+    await query('DELETE FROM flashcard_sets WHERE id = ?', [setId]);
+
+    // Commit the transaction
+    await query('COMMIT');
+
+    // Successful deletion
+    res.status(200).json({ message: 'Flashcard set and associated flashcards deleted successfully' });
+  } catch (error) {
+    // Rollback in case of an error
+    await query('ROLLBACK');
+    console.error('Error deleting flashcard set or associated flashcards:', error);
+    res.status(500).json({ error: 'Failed to delete flashcard set or associated flashcards' });
+  }
+});
+
 
 // API to get total users count
 app.get("/api/total-users/admin", (req, res) => {
