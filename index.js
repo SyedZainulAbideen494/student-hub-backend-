@@ -3708,8 +3708,8 @@ app.put('/api/flashcards/update-status/:id', async (req, res) => {
 
 
 // API endpoint to get flashcard stats
-app.get('/api/flashcards/stats', (req, res) => {
-  const setId = req.query.set_id;
+app.post('/api/flashcards/stats', (req, res) => {
+  const setId = req.body.set_id; // Get set_id from request body
 
   if (!setId) {
       return res.status(400).json({ message: 'set_id is required' });
