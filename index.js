@@ -3362,30 +3362,48 @@ app.post('/api/start/pomodoro', async (req, res) => {
   const token = req.headers['authorization']?.split(' ')[1]; // Extract token from the authorization header
 
   if (!token) {
-      return res.status(401).json({ message: 'Token is required' });
+    return res.status(401).json({ message: 'Token is required' });
   }
 
   try {
-      const userId = await getUserIdFromToken(token);
-      // Log start for userId
-      console.log(`Pomodoro started for user: ${userId}`);
+    const userId = await getUserIdFromToken(token);
+    // Log start for userId
+    console.log(`Pomodoro started for user: ${userId}`);
 
-      // Update points
+    // Check the `updated_at` column to see when the last session was
+    const lastSessionQuery = 'SELECT updated_at FROM user_points WHERE user_id = ?';
+    const [lastSessionResults] = await connection.promise().query(lastSessionQuery, [userId]);
+
+    let canAwardPoints = true;
+    if (lastSessionResults.length > 0) {
+      const lastUpdated = new Date(lastSessionResults[0].updated_at);
+      const now = new Date();
+      const differenceInMinutes = Math.floor((now - lastUpdated) / 1000 / 60);
+
+      // If the last session was less than 25 minutes ago, don't award points
+      if (differenceInMinutes < 25) {
+        canAwardPoints = false;
+      }
+    }
+
+    if (canAwardPoints) {
+      // Update or insert points
       const pointsQuery = 'SELECT * FROM user_points WHERE user_id = ?';
       const [pointsResults] = await connection.promise().query(pointsQuery, [userId]);
 
       if (pointsResults.length > 0) {
-          // If user exists, update points
-          await connection.promise().query('UPDATE user_points SET points = points + 5 WHERE user_id = ?', [userId]);
+        // If user exists, update points
+        await connection.promise().query('UPDATE user_points SET points = points + 5 WHERE user_id = ?', [userId]);
       } else {
-          // If user does not exist, insert new record with 5 points
-          await connection.promise().query('INSERT INTO user_points (user_id, points) VALUES (?, ?)', [userId, 5]);
+        // If user does not exist, insert new record with 5 points
+        await connection.promise().query('INSERT INTO user_points (user_id, points) VALUES (?, ?)', [userId, 5]);
       }
+    }
 
-      res.status(200).json({ message: 'Pomodoro started' });
+    res.status(200).json({ message: 'Pomodoro started' });
   } catch (error) {
-      console.error('Error retrieving userId from token:', error);
-      res.status(403).json({ message: 'Invalid token' });
+    console.error('Error retrieving userId from token:', error);
+    res.status(403).json({ message: 'Invalid token' });
   }
 });
 
@@ -3394,32 +3412,22 @@ app.post('/api/stop/pomodoro', async (req, res) => {
   const token = req.headers['authorization']?.split(' ')[1]; // Extract token from the authorization header
 
   if (!token) {
-      return res.status(401).json({ message: 'Token is required' });
+    return res.status(401).json({ message: 'Token is required' });
   }
 
   try {
-      const userId = await getUserIdFromToken(token);
-      // Log stop for userId
-      console.log(`Pomodoro stopped for user: ${userId}`);
+    const userId = await getUserIdFromToken(token);
+    // Log stop for userId
+    console.log(`Pomodoro stopped for user: ${userId}`);
 
-      // Update points
-      const pointsQuery = 'SELECT * FROM user_points WHERE user_id = ?';
-      const [pointsResults] = await connection.promise().query(pointsQuery, [userId]);
-
-      if (pointsResults.length > 0) {
-          // If user exists, update points
-          await connection.promise().query('UPDATE user_points SET points = points + 5 WHERE user_id = ?', [userId]);
-      } else {
-          // If user does not exist, insert new record with 5 points
-          await connection.promise().query('INSERT INTO user_points (user_id, points) VALUES (?, ?)', [userId, 5]);
-      }
-
-      res.status(200).json({ message: 'Pomodoro stopped' });
+    // Simply stop the Pomodoro without awarding points
+    res.status(200).json({ message: 'Pomodoro stopped' });
   } catch (error) {
-      console.error('Error retrieving userId from token:', error);
-      res.status(403).json({ message: 'Invalid token' });
+    console.error('Error retrieving userId from token:', error);
+    res.status(403).json({ message: 'Invalid token' });
   }
 });
+
 
 
 
