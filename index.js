@@ -759,7 +759,7 @@ scheduleReminder(21);  // 9:00 PM IST
 
 
 app.post('/api/add/flashcards', upload.array('images'), (req, res) => {
-  const { title, description, isPublic, token, headings } = req.body;
+  const { title, description, isPublic, token, headings, subjectId } = req.body; // Step 1: Extract subjectId
 
   if (!token) {
     return res.status(401).json({ message: 'Unauthorized' });
@@ -780,11 +780,12 @@ app.post('/api/add/flashcards', upload.array('images'), (req, res) => {
 
     console.log('Image filenames:', imageNames); // Log image filenames
 
+    // Step 2: Update the SQL query to include subjectId
     const query = `
-        INSERT INTO flashcards (title, description, images, is_public, user_id, headings) 
-        VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO flashcards (title, description, images, is_public, user_id, headings, subject_id) 
+      VALUES (?, ?, ?, ?, ?, ?, ?) 
     `;
-    const values = [title, description, JSON.stringify(imageNames), isPublic, userId, headings];
+    const values = [title, description, JSON.stringify(imageNames), isPublic, userId, headings, subjectId]; // Include subjectId in values
 
     connection.query(query, values, (error) => {
       if (error) {
@@ -792,7 +793,7 @@ app.post('/api/add/flashcards', upload.array('images'), (req, res) => {
         return res.status(500).json({ message: 'Failed to save flashcard.' });
       }
 
-      // Step 1: Update Points
+      // Step 3: Update Points
       const pointsQuery = 'SELECT * FROM user_points WHERE user_id = ?';
       connection.query(pointsQuery, [userId], (err, pointsResults) => {
         if (err) {
@@ -831,6 +832,7 @@ app.post('/api/add/flashcards', upload.array('images'), (req, res) => {
     });
   });
 });
+
 
 
 app.get('/api/get/user/notes', (req, res) => {
@@ -3133,11 +3135,15 @@ app.post('/api/update-user-details', async (req, res) => {
   }
 });
 
+
 app.post('/api/feedback', (req, res) => {
   const { feedback, token } = req.body;
 
-  // Retrieve user ID from token using the helper function
-  getUserIdFromToken(token)
+  // If no token, set userId to 'website'
+  const userIdPromise = token ? getUserIdFromToken(token) : Promise.resolve('website');
+
+  // Proceed to save feedback
+  userIdPromise
     .then((userId) => {
       // Prepare SQL query to save feedback and user ID into MySQL
       const sql = 'INSERT INTO feedback (user_id, message) VALUES (?, ?)';
@@ -3161,6 +3167,7 @@ app.post('/api/feedback', (req, res) => {
       return res.status(500).json({ message: 'Error saving feedback' });
     });
 });
+
 
 
 app.post('/api/chat/ai', async (req, res) => {
@@ -3815,6 +3822,93 @@ app.delete('/api/flashcards/set/delete/:id', async (req, res) => {
     res.status(500).json({ error: 'Failed to delete flashcard set or associated flashcards' });
   }
 });
+
+
+// API endpoint to create a subject
+app.post('/api/create-subject', async (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1]; // Extract token from header
+  const { subjectName } = req.body;
+
+  if (!token) {
+      return res.status(401).json({ message: 'Token is required' });
+  }
+
+  try {
+      const userId = await getUserIdFromToken(token); // Get userId from token
+
+      // Insert subject into the database
+      const result = await query('INSERT INTO subjects (user_id, name) VALUES (?, ?)', [userId, subjectName]);
+
+      // Respond with the created subject
+      return res.status(201).json({ subject: { id: result.insertId, userId, name: subjectName } });
+  } catch (error) {
+      console.error(error);
+      return res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+
+app.get('/api/get/user/subjects', (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+
+  if (!token) {
+      return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  connection.query('SELECT user_id FROM session WHERE jwt = ?', [token], (err, results) => {
+      if (err) {
+          console.error('Error fetching user_id:', err);
+          return res.status(500).json({ message: 'Failed to authenticate user.' });
+      }
+
+      if (results.length === 0) {
+          return res.status(401).json({ message: 'Invalid or expired token.' });
+      }
+
+      const userId = results[0].user_id;
+
+      connection.query('SELECT * FROM subjects WHERE user_id = ?', [userId], (err, notes) => {
+          if (err) {
+              console.error('Error fetching notes:', err);
+              return res.status(500).json({ message: 'Failed to retrieve notes.' });
+          }
+          res.json(notes);
+      });
+  });
+});
+app.get('/api/flashcards/:subjectId', (req, res) => {
+  const { subjectId } = req.params; // Get subjectId from URL parameters
+  const token = req.headers['authorization']?.split(' ')[1]; // Get token from headers
+
+  if (!token) {
+      return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  // Get user ID from the token
+  getUserIdFromToken(token)
+      .then((userId) => {
+          // Query to fetch flashcards and subject name based on subject ID
+          const query = `
+              SELECT f.*, s.name AS subject_name 
+              FROM flashcards f 
+              JOIN subjects s ON f.subject_id = s.id 
+              WHERE f.subject_id = ? AND f.user_id = ?
+          `;
+          connection.query(query, [subjectId, userId], (error, results) => {
+              if (error) {
+                  console.error('Error fetching flashcards:', error);
+                  return res.status(500).json({ message: 'Failed to fetch flashcards.' });
+              }
+
+              res.status(200).json(results); // Send the fetched flashcards and subject name as a response
+          });
+      })
+      .catch((error) => {
+          console.error('Error fetching user ID:', error);
+          res.status(500).json({ message: 'Failed to authenticate user.' });
+      });
+});
+
 
 
 // API to get total users count
