@@ -3648,6 +3648,7 @@ app.get('/api/flashcards/set/:id', (req, res) => {
       set_id: result.set_id,
       set_name: result.set_name,
       set_topic: result.set_topic,
+      status: result.status,
       set_subject: result.set_subject,
     }));
 
