@@ -458,21 +458,32 @@ app.post('/add/tasks', async (req, res) => {
 
     // Step 4: Update Points
     const [pointsResults] = await connection.promise().query(
-      'SELECT * FROM user_points WHERE user_id = ?',
+      'SELECT points, updated_at FROM user_points WHERE user_id = ?',
       [user_id]
     );
 
+    const currentTime = new Date();
+    const fiveMinutesAgo = new Date(currentTime.getTime() - 5 * 60000); // Subtract 5 minutes
+
+    let pointsToAdd = 5; // Default points to add
     if (pointsResults.length > 0) {
-      // If user exists, update points
+      // If user exists, check updated_at timestamp
+      const lastUpdated = new Date(pointsResults[0].updated_at);
+      if (lastUpdated > fiveMinutesAgo) {
+        // If last update was less than 5 minutes ago, add fewer points
+        pointsToAdd = 2; // Or any number you choose
+      }
+
+      // Update points
       await connection.promise().query(
-        'UPDATE user_points SET points = points + 5 WHERE user_id = ?',
-        [user_id]
+        'UPDATE user_points SET points = points + ?, updated_at = ? WHERE user_id = ?',
+        [pointsToAdd, currentTime, user_id]
       );
     } else {
-      // If user does not exist, insert new record with 5 points
+      // If user does not exist, insert new record with the points
       await connection.promise().query(
-        'INSERT INTO user_points (user_id, points) VALUES (?, ?)',
-        [user_id, 5]
+        'INSERT INTO user_points (user_id, points, updated_at) VALUES (?, ?, ?)',
+        [user_id, pointsToAdd, currentTime]
       );
     }
 
@@ -559,19 +570,30 @@ app.post('/delete/task', (req, res) => {
       if (err) {
         return res.status(500).send(err);
       }
-      
+
       // Step 2: Update Points
-      const pointsQuery = 'SELECT * FROM user_points WHERE user_id = ?';
+      const pointsQuery = 'SELECT points, updated_at FROM user_points WHERE user_id = ?';
       connection.query(pointsQuery, [user_id], (err, pointsResults) => {
         if (err) {
           return res.status(500).send(err);
         }
 
+        const currentTime = new Date();
+        const fiveMinutesAgo = new Date(currentTime.getTime() - 5 * 60000); // Subtract 5 minutes
+        let pointsToAdd = 3; // Default points to add
+
         if (pointsResults.length > 0) {
-          // If user exists, update points
+          // If user exists, check updated_at timestamp
+          const lastUpdated = new Date(pointsResults[0].updated_at);
+          if (lastUpdated > fiveMinutesAgo) {
+            // If last update was less than 5 minutes ago, add fewer points
+            pointsToAdd = 1; // Or any number you choose
+          }
+
+          // Update points
           connection.query(
-            'UPDATE user_points SET points = points + 3 WHERE user_id = ?',
-            [user_id],
+            'UPDATE user_points SET points = points + ?, updated_at = ? WHERE user_id = ?',
+            [pointsToAdd, currentTime, user_id],
             (err) => {
               if (err) {
                 return res.status(500).send(err);
@@ -580,10 +602,10 @@ app.post('/delete/task', (req, res) => {
             }
           );
         } else {
-          // If user does not exist, insert new record with 3 points
+          // If user does not exist, insert new record with the points
           connection.query(
-            'INSERT INTO user_points (user_id, points) VALUES (?, ?)',
-            [user_id, 3],
+            'INSERT INTO user_points (user_id, points, updated_at) VALUES (?, ?, ?)',
+            [user_id, pointsToAdd, currentTime],
             (err) => {
               if (err) {
                 return res.status(500).send(err);
@@ -757,9 +779,8 @@ scheduleReminder(15);  // 3:00 PM IST
 scheduleReminder(21);  // 9:00 PM IST
 
 
-
 app.post('/api/add/flashcards', upload.array('images'), (req, res) => {
-  const { title, description, isPublic, token, headings, subjectId } = req.body; // Step 1: Extract subjectId
+  const { title, description, isPublic, token, headings, subjectId } = req.body;
 
   if (!token) {
     return res.status(401).json({ message: 'Unauthorized' });
@@ -785,7 +806,7 @@ app.post('/api/add/flashcards', upload.array('images'), (req, res) => {
       INSERT INTO flashcards (title, description, images, is_public, user_id, headings, subject_id) 
       VALUES (?, ?, ?, ?, ?, ?, ?) 
     `;
-    const values = [title, description, JSON.stringify(imageNames), isPublic, userId, headings, subjectId]; // Include subjectId in values
+    const values = [title, description, JSON.stringify(imageNames), isPublic, userId, headings, subjectId];
 
     connection.query(query, values, (error) => {
       if (error) {
@@ -794,18 +815,29 @@ app.post('/api/add/flashcards', upload.array('images'), (req, res) => {
       }
 
       // Step 3: Update Points
-      const pointsQuery = 'SELECT * FROM user_points WHERE user_id = ?';
+      const pointsQuery = 'SELECT points, updated_at FROM user_points WHERE user_id = ?';
       connection.query(pointsQuery, [userId], (err, pointsResults) => {
         if (err) {
           console.error('Error fetching user points:', err);
           return res.status(500).json({ message: 'Failed to update points.' });
         }
 
+        const currentTime = new Date();
+        const fiveMinutesAgo = new Date(currentTime.getTime() - 5 * 60000); // Subtract 5 minutes
+        let pointsToAdd = 10; // Default points to add
+
         if (pointsResults.length > 0) {
-          // If user exists, update points
+          // If user exists, check updated_at timestamp
+          const lastUpdated = new Date(pointsResults[0].updated_at);
+          if (lastUpdated > fiveMinutesAgo) {
+            // If last update was less than 5 minutes ago, add fewer points
+            pointsToAdd = 2; // Or any number you choose
+          }
+
+          // Update points and set the updated_at timestamp
           connection.query(
-            'UPDATE user_points SET points = points + 10 WHERE user_id = ?',
-            [userId],
+            'UPDATE user_points SET points = points + ?, updated_at = ? WHERE user_id = ?',
+            [pointsToAdd, currentTime, userId],
             (err) => {
               if (err) {
                 console.error('Error updating points:', err);
@@ -815,10 +847,10 @@ app.post('/api/add/flashcards', upload.array('images'), (req, res) => {
             }
           );
         } else {
-          // If user does not exist, insert new record with 10 points
+          // If user does not exist, insert new record with the points
           connection.query(
-            'INSERT INTO user_points (user_id, points) VALUES (?, ?)',
-            [userId, 10],
+            'INSERT INTO user_points (user_id, points, updated_at) VALUES (?, ?, ?)',
+            [userId, pointsToAdd, currentTime],
             (err) => {
               if (err) {
                 console.error('Error inserting points:', err);
@@ -1585,15 +1617,32 @@ app.post('/createQuiz', async (req, res) => {
     }
 
     // Step 3: Update Points
-    const pointsQuery = 'SELECT * FROM user_points WHERE user_id = ?';
+    const pointsQuery = 'SELECT points, updated_at FROM user_points WHERE user_id = ?';
     const [pointsResults] = await connection.promise().query(pointsQuery, [userId]);
 
+    const currentTime = new Date();
+    const fiveMinutesAgo = new Date(currentTime.getTime() - 5 * 60000); // Subtract 5 minutes
+    let pointsToAdd = 8; // Default points to add
+
     if (pointsResults.length > 0) {
-      // If user exists, update points
-      await connection.promise().query('UPDATE user_points SET points = points + 8 WHERE user_id = ?', [userId]);
+      // If user exists, check updated_at timestamp
+      const lastUpdated = new Date(pointsResults[0].updated_at);
+      if (lastUpdated > fiveMinutesAgo) {
+        // If last update was less than 5 minutes ago, add fewer points
+        pointsToAdd = 2; // Or any number you choose
+      }
+
+      // Update points and set the updated_at timestamp
+      await connection.promise().query(
+        'UPDATE user_points SET points = points + ?, updated_at = ? WHERE user_id = ?',
+        [pointsToAdd, currentTime, userId]
+      );
     } else {
-      // If user does not exist, insert new record with 8 points
-      await connection.promise().query('INSERT INTO user_points (user_id, points) VALUES (?, ?)', [userId, 8]);
+      // If user does not exist, insert new record with the points
+      await connection.promise().query(
+        'INSERT INTO user_points (user_id, points, updated_at) VALUES (?, ?, ?)',
+        [userId, pointsToAdd, currentTime]
+      );
     }
 
     res.json({ message: 'Quiz created successfully', quizId });
@@ -1812,29 +1861,46 @@ app.post('/api/addEvent', async (req, res) => {
 
   try {
     const userId = await getUserIdFromToken(token);
+    if (!userId) return res.status(401).json({ message: 'Unauthorized' });
 
     // Step 1: Insert event
     const sql = 'INSERT INTO events (title, date, user_id) VALUES (?, ?, ?)';
-    connection.query(sql, [title, date, userId], async (err, result) => {
-      if (err) return res.status(500).send(err);
+    const [result] = await connection.promise().query(sql, [title, date, userId]);
 
-      // Step 2: Update Points
-      const pointsQuery = 'SELECT * FROM user_points WHERE user_id = ?';
-      const [pointsResults] = await connection.promise().query(pointsQuery, [userId]);
+    // Step 2: Update Points
+    const pointsQuery = 'SELECT points, updated_at FROM user_points WHERE user_id = ?';
+    const [pointsResults] = await connection.promise().query(pointsQuery, [userId]);
 
-      if (pointsResults.length > 0) {
-        // If user exists, update points
-        await connection.promise().query('UPDATE user_points SET points = points + 3 WHERE user_id = ?', [userId]);
-      } else {
-        // If user does not exist, insert new record with 3 points
-        await connection.promise().query('INSERT INTO user_points (user_id, points) VALUES (?, ?)', [userId, 3]);
+    const currentTime = new Date();
+    const fiveMinutesAgo = new Date(currentTime.getTime() - 5 * 60000); // Subtract 5 minutes
+    let pointsToAdd = 3; // Default points to add
+
+    if (pointsResults.length > 0) {
+      // If user exists, check updated_at timestamp
+      const lastUpdated = new Date(pointsResults[0].updated_at);
+      if (lastUpdated > fiveMinutesAgo) {
+        // If last update was less than 5 minutes ago, add fewer points
+        pointsToAdd = 1; // Or any number you choose
       }
 
-      // Send response with event ID
-      res.send({ id: result.insertId });
-    });
+      // Update points and set the updated_at timestamp
+      await connection.promise().query(
+        'UPDATE user_points SET points = points + ?, updated_at = ? WHERE user_id = ?',
+        [pointsToAdd, currentTime, userId]
+      );
+    } else {
+      // If user does not exist, insert new record with the points
+      await connection.promise().query(
+        'INSERT INTO user_points (user_id, points, updated_at) VALUES (?, ?, ?)',
+        [userId, pointsToAdd, currentTime]
+      );
+    }
+
+    // Send response with event ID
+    res.send({ id: result.insertId });
   } catch (error) {
-    res.status(401).send(error.message);
+    console.error('Error adding event:', error);
+    res.status(500).send({ message: 'Error adding event' });
   }
 });
 
@@ -2154,31 +2220,44 @@ app.post('/api/add/eduscribes', upload.single('image'), async (req, res) => {
 
   try {
     const userId = await getUserIdFromToken(token);
+    if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+
     const sql = 'INSERT INTO eduscribes (content, user_id, image) VALUES (?, ?, ?)';
+    const [result] = await connection.promise().query(sql, [question, userId, imageName]);
 
-    connection.query(sql, [question, userId, imageName], async (err, result) => {
-      if (err) {
-        console.error('Error executing query:', err);
-        return res.status(500).json({ error: 'Internal Server Error' });
+    // Step 2: Update Points
+    const pointsQuery = 'SELECT points, updated_at FROM user_points WHERE user_id = ?';
+    const [pointsResults] = await connection.promise().query(pointsQuery, [userId]);
+
+    const currentTime = new Date();
+    const fiveMinutesAgo = new Date(currentTime.getTime() - 5 * 60000); // Subtract 5 minutes
+    let pointsToAdd = 10; // Default points to add
+
+    if (pointsResults.length > 0) {
+      // If user exists, check updated_at timestamp
+      const lastUpdated = new Date(pointsResults[0].updated_at);
+      if (lastUpdated > fiveMinutesAgo) {
+        // If last update was less than 5 minutes ago, add fewer points
+        pointsToAdd = 3; // Adjust this value as needed
       }
 
-      // Step 2: Update Points
-      const pointsQuery = 'SELECT * FROM user_points WHERE user_id = ?';
-      const [pointsResults] = await connection.promise().query(pointsQuery, [userId]);
+      // Update points and set the updated_at timestamp
+      await connection.promise().query(
+        'UPDATE user_points SET points = points + ?, updated_at = ? WHERE user_id = ?',
+        [pointsToAdd, currentTime, userId]
+      );
+    } else {
+      // If user does not exist, insert new record with the points
+      await connection.promise().query(
+        'INSERT INTO user_points (user_id, points, updated_at) VALUES (?, ?, ?)',
+        [userId, pointsToAdd, currentTime]
+      );
+    }
 
-      if (pointsResults.length > 0) {
-        // If user exists, update points
-        await connection.promise().query('UPDATE user_points SET points = points + 10 WHERE user_id = ?', [userId]);
-      } else {
-        // If user does not exist, insert new record with 10 points
-        await connection.promise().query('INSERT INTO user_points (user_id, points) VALUES (?, ?)', [userId, 10]);
-      }
-
-      res.status(200).json({ message: 'Eduscribe submitted successfully!', id: result.insertId });
-    });
+    res.status(200).json({ message: 'Eduscribe submitted successfully!', id: result.insertId });
   } catch (error) {
     console.error('Error:', error);
-    res.status(401).json({ error: error.message });
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
