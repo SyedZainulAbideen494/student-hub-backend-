@@ -985,20 +985,22 @@ app.delete('/api/delete/note/:note_id', (req, res) => {
 // Utility function to extract user ID from token
 const getUserIdFromToken = (token) => {
   return new Promise((resolve, reject) => {
-      connection.query('SELECT user_id FROM session WHERE jwt = ?', [token], (err, results) => {
-          if (err) {
-              console.error('Error fetching user_id:', err);
-              reject(new Error('Failed to authenticate user.'));
-          }
+    connection.query('SELECT user_id FROM session WHERE jwt = ?', [token], (err, results) => {
+      if (err) {
+        console.error(`Error fetching user_id for token: ${token}`, err);
+        reject(new Error('Failed to authenticate user.'));
+      }
 
-          if (results.length === 0) {
-              reject(new Error('Invalid or expired token.'));
-          } else {
-              resolve(results[0].user_id);
-          }
-      });
+      if (results.length === 0) {
+        console.error(`Invalid or expired token: ${token}`);
+        reject(new Error('Invalid or expired token.'));
+      } else {
+        resolve(results[0].user_id);
+      }
+    });
   });
 };
+
 // Route to fetch joined groups
 app.get('/api/groups/joined', async (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
