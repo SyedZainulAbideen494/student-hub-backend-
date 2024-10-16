@@ -3992,6 +3992,150 @@ app.get('/api/flashcards/:subjectId', (req, res) => {
 });
 
 
+// Route to fetch stories for the users the current user follows
+app.post('/fetchStories', async (req, res) => {
+  const { token } = req.body;  // Token from the request body
+
+  try {
+    const userId = await getUserIdFromToken(token);
+    
+    // Fetching the list of following_ids
+    const followQuery = 'SELECT following_id FROM followers WHERE follower_id = ?';
+    const followingUsers = await query(followQuery, [userId]);
+
+    const followingIds = followingUsers.map(follow => follow.following_id);
+
+    if (followingIds.length === 0) {
+      return res.json({ stories: [] });
+    }
+
+    // Fetch stories from the followed users (within 24 hours)
+    const storyQuery = `
+      SELECT s.content, s.story_type, s.expires_at, u.user_name, u.avatar
+      FROM stories s
+      JOIN users u ON s.user_id = u.id
+      WHERE s.user_id IN (?) AND s.expires_at > NOW()
+    `;
+    const stories = await query(storyQuery, [followingIds]);
+
+    res.json({ stories });
+  } catch (error) {
+    console.error('Error fetching stories:', error);
+    res.status(500).json({ error: 'Failed to fetch stories' });
+  }
+});
+
+
+// Add a new story endpoint
+app.post('/addStory', upload.single('file'), async (req, res) => {
+  const { token } = req.body; // Token in the request body
+  const { storyType, content } = req.body;
+
+  try {
+    // Get user ID from token
+    const userId = await getUserIdFromToken(token);
+
+    // Calculate expiration time (24 hours from now)
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 24);
+
+    // Store file path if it's an image or video
+    let filePath = null;
+    if (req.file) {
+      filePath = req.file.path; // Get the file path from the uploaded file
+    }
+
+    // Insert new story into the database
+    const sql = `
+      INSERT INTO stories (user_id, story_type, content, file_path, expires_at)
+      VALUES (?, ?, ?, ?, ?)
+    `;
+    await query(sql, [userId, storyType, content, filePath, expiresAt]);
+
+    res.status(201).json({ message: 'Story uploaded successfully' });
+  } catch (error) {
+    console.error('Error uploading story:', error);
+    res.status(500).json({ error: 'Failed to upload story' });
+  }
+});
+
+
+
+app.post('/api/tasks/generate', async (req, res) => {
+  const { mainTask, days, token } = req.body;
+
+  try {
+    const userId = await getUserIdFromToken(token);
+    if (!userId) {
+      return res.status(401).json({ error: 'Invalid token or user not found' });
+    }
+
+    const prompt = `Generate a breakdown of tasks in JSON format with title, description, due date, and priority for the following task: "${mainTask}". 
+    The task should be completed in ${days} days. Spread the due dates evenly over the ${days} days, starting from today (${new Date().toISOString().split('T')[0]}). 
+    Each task should be an object with 'title', 'description', 'due_date' (YYYY-MM-DD format), and 'priority' ('Low', 'Normal', or 'High'). 
+    The tasks should be related to completing the main task efficiently within the given time frame.`;
+
+    const chat = model.startChat({
+      history: [
+        { role: 'user', parts: [{ text: 'Hello' }] },
+        { role: 'model', parts: [{ text: 'I can help generate tasks for your project!' }] },
+      ],
+    });
+
+    console.log('Generating tasks with prompt:', prompt);
+    const result = await chat.sendMessage(prompt);
+
+    // Log the raw AI response for debugging
+    console.log('AI Response:', result.response.text());
+
+    // Extract only the JSON part using a regular expression
+    const jsonResponse = result.response.text().match(/```json([\s\S]*?)```/);
+
+    if (!jsonResponse || jsonResponse.length < 2) {
+      return res.status(500).json({ error: 'Could not extract JSON from AI response' });
+    }
+
+    // Clean and parse the JSON
+    let tasks;
+    try {
+      tasks = JSON.parse(jsonResponse[1].trim());
+    } catch (parseError) {
+      console.error('Failed to parse JSON:', parseError);
+      return res.status(500).json({ error: 'Invalid JSON response from the AI model.' });
+    }
+
+    const tasksData = tasks.map(task => ({
+      userId,
+      title: task.title.trim(),
+      description: task.description.trim(),
+      due_date: task.due_date.trim(),
+      priority: task.priority.trim(),
+    }));
+
+    if (tasksData.length > 0) {
+      const tasksValues = tasksData.map(({ userId, title, description, due_date, priority }) => [userId, title, description, due_date, priority]);
+
+      // Insert tasks into the database
+      await query('INSERT INTO tasks (user_id, title, description, due_date, priority) VALUES ?', [tasksValues]);
+
+      res.json({ tasks: tasksData });
+    } else {
+      res.status(400).json({ error: 'No valid tasks generated' });
+    }
+  } catch (error) {
+    console.error('Error generating tasks:', error);
+    let errorMessage = 'Failed to generate tasks';
+    if (error.response) {
+      errorMessage = `Error: ${error.response.status} - ${error.response.data?.message || error.response.statusText}`;
+    } else if (error.message) {
+      errorMessage = `Error: ${error.message}`;
+    }
+    res.status(500).json({ error: errorMessage });
+  }
+});
+
+
+
 
 // API to get total users count
 app.get("/api/total-users/admin", (req, res) => {
