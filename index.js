@@ -4085,8 +4085,6 @@ app.post('/api/tasks/generate', async (req, res) => {
     console.log('Generating tasks with prompt:', prompt);
     const result = await chat.sendMessage(prompt);
 
-    // Log the raw AI response for debugging
-    console.log('AI Response:', result.response.text());
 
     // Extract only the JSON part using a regular expression
     const jsonResponse = result.response.text().match(/```json([\s\S]*?)```/);
