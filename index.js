@@ -3331,44 +3331,59 @@ app.post('/api/getUserData/home/box', async (req, res) => {
 
 
 app.post('/api/tasks/today/data/home', async (req, res) => {
-  const token = req.headers['authorization']; // Get token from authorization header
-
-  if (!token) {
-      return res.status(401).send('No token provided.');
-  }
+  const token = req.headers['authorization'];
+  if (!token) return res.status(401).send('No token provided.');
 
   try {
-      const userId = await getUserIdFromToken(token); // Get userId from token
-      const dueDate = req.body.due_date; // Get due_date from request body
+      const userId = await getUserIdFromToken(token);
+      const { due_date, upcoming } = req.body;
 
-      const sql = 'SELECT * FROM tasks WHERE user_id = ? AND due_date = ?';
-      const tasks = await query(sql, [userId, dueDate]); // Use the promisified query function
+      let sql;
+      const params = [userId];
+
+      // Query for today's tasks or upcoming tasks based on the request
+      if (upcoming) {
+          sql = 'SELECT * FROM tasks WHERE user_id = ? AND due_date > CURDATE() ORDER BY due_date ASC';
+      } else {
+          sql = 'SELECT * FROM tasks WHERE user_id = ? AND due_date = ?';
+          params.push(due_date);
+      }
+
+      const tasks = await query(sql, params);
       res.json(tasks);
   } catch (error) {
       console.error('Error fetching tasks:', error);
-      res.status(500).send('Error fetching tasks'); // Handle errors
+      res.status(500).send('Error fetching tasks');
   }
 });
 
 app.post('/api/events/today/data/home', async (req, res) => {
-  const token = req.headers['authorization']; // Get token from authorization header
-
-  if (!token) {
-      return res.status(401).send('No token provided.');
-  }
+  const token = req.headers['authorization'];
+  if (!token) return res.status(401).send('No token provided.');
 
   try {
-      const userId = await getUserIdFromToken(token); // Get userId from token
-      const eventDate = req.body.event_date; // Get event_date from request body
+      const userId = await getUserIdFromToken(token);
+      const { event_date, upcoming } = req.body;
 
-      const sql = 'SELECT * FROM events WHERE user_id = ? AND date = ?';
-      const events = await query(sql, [userId, eventDate]); // Use the promisified query function
+      let sql;
+      const params = [userId];
+
+      // Query for today's events or upcoming events based on the request
+      if (upcoming) {
+          sql = 'SELECT * FROM events WHERE user_id = ? AND date > CURDATE() ORDER BY date ASC';
+      } else {
+          sql = 'SELECT * FROM events WHERE user_id = ? AND date = ?';
+          params.push(event_date);
+      }
+
+      const events = await query(sql, params);
       res.json(events);
   } catch (error) {
       console.error('Error fetching events:', error);
-      res.status(500).send('Error fetching events'); // Handle errors
+      res.status(500).send('Error fetching events');
   }
 });
+
 
 app.post('/api/update-avatar', upload.single('avatar'), async (req, res) => {
   try {
