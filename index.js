@@ -4148,7 +4148,37 @@ app.post('/api/tasks/generate', async (req, res) => {
 });
 
 
+// Route to send emails to users
+app.post('/send-emails/all-users/admin', async (req, res) => {
+  const { content, subject } = req.body;
 
+  try {
+      // Fetch all users from the database
+      const users = await query('SELECT email, unique_id FROM users', []);
+
+      // Map over users to create personalized emails
+      const emailsToSend = users.map((user) => {
+          // Replace {{name}} in the email content with the user's unique_id (or name)
+          const personalizedContent = content.replace(/{{name}}/g, user.unique_id);
+
+          return {
+              from: 'edusyfy@gmail.com', // Sender address
+              to: user.email,            // Recipient email
+              subject: subject,          // Subject line
+              html: personalizedContent, // Email content (HTML format)
+          };
+      });
+
+      // Send all emails asynchronously using Promise.all
+      await Promise.all(emailsToSend.map((email) => transporter.sendMail(email)));
+
+      // Send a success response
+      res.status(200).json({ message: 'Emails sent successfully!' });
+  } catch (error) {
+      console.error('Error sending emails:', error);
+      res.status(500).json({ message: 'Error sending emails', error });
+  }
+});
 
 // API to get total users count
 app.get("/api/total-users/admin", (req, res) => {
