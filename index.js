@@ -4148,6 +4148,120 @@ app.post('/api/tasks/generate', async (req, res) => {
 });
 
 
+// Create folder
+app.post('/api/folder/create', (req, res) => {
+  const { userId, folderName } = req.body;
+  const query = `INSERT INTO folders (user_id, folder_name) VALUES (?, ?)`;
+  connection.query(query, [userId, folderName], (err) => {
+    if (err) throw err;
+    res.send({ message: 'Folder created successfully' });
+  });
+});
+
+
+// Upload document
+app.post('/api/document', upload.single('document'), (req, res) => {
+  const { userId, folderId, docName, description, password } = req.body;
+  const file = req.file.filename;
+
+  // Optional password encryption
+  const hashedPassword = password ? bcrypt.hashSync(password, 10) : null;
+  const query = `INSERT INTO documents (user_id, folder_id, doc_name, file_name, description, password) VALUES (?, ?, ?, ?, ?, ?)`;
+
+  connection.query(query, [userId, folderId, docName, file, description, hashedPassword], (err) => {
+    if (err) throw err;
+    res.send({ message: 'Document uploaded successfully' });
+  });
+});
+
+// List documents
+app.get('/api/documents', (req, res) => {
+  const { userId, folderId } = req.query;
+  const query = `SELECT * FROM documents WHERE user_id = ? AND folder_id = ?`;
+
+  connection.query(query, [userId, folderId], (err, results) => {
+    if (err) throw err;
+    res.json(results);
+  });
+});
+
+// Download document
+app.get('/api/download/:id', (req, res) => {
+  const docId = req.params.id;
+  const query = `SELECT file_name FROM documents WHERE id = ?`;
+
+  connection.query(query, [docId], (err, result) => {
+    if (err) throw err;
+    const filePath = path.join(__dirname, 'uploads', result[0].file_name);
+    res.download(filePath);
+  });
+});
+
+// Search documents
+app.get('/api/search', (req, res) => {
+  const { userId, keyword } = req.query;
+  const query = `SELECT * FROM documents WHERE user_id = ? AND (doc_name LIKE ? OR description LIKE ?)`;
+  const likeQuery = `%${keyword}%`;
+
+  connection.query(query, [userId, likeQuery, likeQuery], (err, results) => {
+    if (err) throw err;
+    res.json(results);
+  });
+});
+
+// Share document with link
+app.post('/api/share', (req, res) => {
+  const { docId, userId, password, expireAfterView } = req.body;
+  const token = jwt.sign({ docId, userId, expireAfterView }, password || 'default_key');
+  const link = `http://localhost:3000/view/${token}`;
+
+  res.json({ message: 'Shareable link created', link });
+});
+
+// View shared document
+app.get('/api/view/:token', (req, res) => {
+  const token = req.params.token;
+  const { password } = req.query;
+
+  jwt.verify(token, password || 'default_key', (err, decoded) => {
+    if (err) return res.status(403).send({ message: 'Invalid link or password' });
+    
+    const query = `SELECT * FROM documents WHERE id = ?`;
+    connection.query(query, [decoded.docId], (err, result) => {
+      if (err) throw err;
+      res.json(result);
+      
+      // If view once, delete after access
+      if (decoded.expireAfterView) {
+        const deleteQuery = `DELETE FROM documents WHERE id = ?`;
+        connection.query(deleteQuery, [decoded.docId], (err) => {
+          if (err) throw err;
+        });
+      }
+    });
+  });
+});
+
+// API to fetch all folders for a user
+app.get('/api/folders', (req, res) => {
+  const { userId } = req.query;  // Get userId from query parameters
+
+  if (!userId) {
+    return res.status(400).json({ error: 'UserId is required' });
+  }
+
+  const query = `SELECT * FROM folders WHERE user_id = ?`;
+
+  connection.query(query, [userId], (err, results) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ error: 'Database query error' });
+    }
+
+    res.json(results); // Send folder list as JSON response
+  });
+});
+
 // Route to send emails to users
 app.post('/send-emails/all-users/admin', async (req, res) => {
   const { content, subject } = req.body;
@@ -4191,6 +4305,12 @@ app.get("/api/total-users/admin", (req, res) => {
     }
     res.json({ totalUsers: result[0].totalUsers });
   });
+});
+
+// Endpoint to log download requests
+app.post('/api/log-download', (req, res) => {
+  console.log('Download requested:', req.body);
+  res.status(200).send({ message: 'Download request logged' });
 });
 
 // Start the server
