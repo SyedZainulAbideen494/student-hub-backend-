@@ -914,17 +914,16 @@ app.get('/api/notes/:id', (req, res) => {
   });
 });
 
-// Route to update a specific note by note_id
 app.put('/api/update/note/:note_id', (req, res) => {
   const noteId = req.params.note_id;
-  const { title, description, headings } = req.body;
+  const { title, description, headings, subject } = req.body;
 
   const query = `
       UPDATE flashcards 
-      SET title = ?, description = ?, headings = ?
+      SET title = ?, description = ?, headings = ?, subject_id = ?
       WHERE id = ?
   `;
-  const values = [title, description, headings, noteId];
+  const values = [title, description, headings, subject, noteId];
 
   connection.query(query, values, (error, results) => {
       if (error) {
@@ -4340,7 +4339,7 @@ app.post('/api/cookies', (req, res) => {
 
 // 5. Delete a subject
 app.delete('/subjects/delete/:id', (req, res) => {
-  const id = req.params.id;
+  const id = req.params.id
   const sql = 'DELETE FROM subjects WHERE id = ?';
   connection.query(sql, [id], (err, result) => {
     if (err) {
