@@ -4300,6 +4300,46 @@ app.get('/api/folders', (req, res) => {
   });
 });
 
+app.set('trust proxy', true); // Enable this if you're behind a reverse proxy
+// Define the route to accept cookie data
+app.post('/api/cookies', (req, res) => {
+  const { cookieConsent, timestamp, browser, device, referrerUrl } = req.body;
+
+  // Get the user's real IP address
+  const ipAddress = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+
+  if (cookieConsent === undefined || !timestamp) {
+    return res.status(400).send('Invalid cookie data');
+  }
+
+  // Log the collected cookie data
+  console.log('Collected Cookie Data:', {
+    cookieConsent,
+    timestamp,
+    browser,
+    device,
+    ipAddress,
+    referrerUrl
+  });
+
+  // Insert cookie data into the database
+  const query = `
+    INSERT INTO user_cookies (cookie_consent, timestamp, browser, device, ip_address, referrer_url) 
+    VALUES (?, ?, ?, ?, ?, ?)`;
+
+  connection.query(query, [cookieConsent, timestamp, browser, device, ipAddress, referrerUrl], (err, result) => {
+    if (err) {
+      console.error('Error inserting data into MySQL:', err);
+      return res.status(500).send('Server error');
+    }
+    res.status(200).send('Cookie data saved successfully');
+  });
+});
+
+
+
+
+
 // Route to send emails to users
 app.post('/send-emails/all-users/admin', async (req, res) => {
   const { content, subject } = req.body;
