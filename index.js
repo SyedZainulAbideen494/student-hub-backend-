@@ -620,15 +620,164 @@ app.post('/delete/task', (req, res) => {
 });
 
 
+{/*
+const MILLISECONDS_IN_A_DAY = 86400000;
 
+// Function to calculate the delay to the target hour (7:00 AM, 3:00 PM, 9:00 PM IST)
+const calculateDelayToTime = (targetHour) => {
+    const now = new Date();
+    const istOffset = 5.5 * 60 * 60 * 1000; // IST is UTC +5:30
+    const nowInIST = new Date(now.getTime() + istOffset);
+    const targetTime = new Date();
 
+    // Set the target time (e.g., 7:00 AM, 3:00 PM, 9:00 PM IST)
+    targetTime.setHours(targetHour, 0, 0, 0);
 
-    
-        
-        
-            
-       
+    // If the target time has already passed for today, schedule for tomorrow
+    if (nowInIST > targetTime) {
+        targetTime.setDate(targetTime.getDate() + 1);
+    }
 
+    return targetTime - nowInIST; // Return the delay in milliseconds
+};
+
+// Main function to check tasks and send reminders
+const checkTasksAndSendReminders = () => {
+    const today = new Date();
+    const istOffset = 5.5 * 60 * 60 * 1000; // IST is UTC +5:30
+    const todayInIST = new Date(today.getTime() + istOffset).toISOString().split('T')[0]; // YYYY-MM-DD
+    const tomorrow = new Date(new Date(todayInIST).setDate(new Date(todayInIST).getDate() + 1)).toISOString().split('T')[0];
+    const dayAfter = new Date(new Date(todayInIST).setDate(new Date(todayInIST).getDate() + 2)).toISOString().split('T')[0];
+
+    // Query to get tasks due today, tomorrow, or day after
+    const tasksQuery = `
+        SELECT t.title, t.due_date, u.phone_number, u.email
+        FROM tasks t
+        JOIN users u ON t.user_id = u.id
+        WHERE t.due_date IN (?, ?, ?)
+    `;
+
+    // Query to get events on the calendar for today, tomorrow, or day after
+    const eventsQuery = `
+        SELECT e.title, e.date, u.phone_number, u.email
+        FROM events e
+        JOIN users u ON e.user_id = u.id
+        WHERE e.date IN (?, ?, ?)
+    `;
+
+    // Handle tasks
+    connection.query(tasksQuery, [todayInIST, tomorrow, dayAfter], (err, taskResults) => {
+        if (err) {
+            console.error('Error fetching tasks:', err);
+            return;
+        }
+
+        taskResults.forEach(task => {
+            const { phone_number, email, title, due_date } = task;
+            const formattedDate = new Date(due_date).toLocaleDateString('en-IN', { 
+                day: '2-digit', 
+                month: '2-digit', 
+                year: 'numeric' 
+            });
+
+            let messageBody = `
+            <div style="font-family: Arial, sans-serif; line-height: 1.5; padding: 20px;">
+                <h2 style="color: #333;">Task Reminder</h2>
+                <p style="font-size: 16px;">
+                    Hi there!<br><br>
+                    This is a friendly reminder that your task "<strong>${title}</strong>" is due on <strong>${formattedDate}</strong>.
+                </p>
+                <p style="font-size: 16px;">
+                    Click the button below to go to your planner and manage your tasks.
+                </p>
+                <a href="https://edusify.vercel.app/" style="display: inline-block; background-color: #4CAF50; color: white; padding: 10px 20px; text-align: center; text-decoration: none; border-radius: 5px; margin-top: 10px;">
+                    Go to Planner
+                </a>
+            </div>
+            `;
+
+            // Send email
+            const mailOptions = {
+                from: 'edusyfy@gmail.com',
+                to: email,
+                subject: 'Task Reminder',
+                html: messageBody // Use 'html' for HTML formatted emails
+            };
+
+            transporter.sendMail(mailOptions, (err, info) => {
+                if (err) {
+                    console.log('Error sending email:', err);
+                } else {
+                    console.log('Email sent: ' + info.response);
+                }
+            });
+        });
+    });
+
+    // Handle events
+    connection.query(eventsQuery, [todayInIST, tomorrow, dayAfter], (err, eventResults) => {
+        if (err) {
+            console.error('Error fetching events:', err);
+            return;
+        }
+
+        eventResults.forEach(event => {
+            const { phone_number, email, title, date } = event;
+            const formattedDate = new Date(date).toLocaleDateString('en-IN', { 
+                day: '2-digit', 
+                month: '2-digit', 
+                year: 'numeric' 
+            });
+
+            let messageBody = `
+            <div style="font-family: Arial, sans-serif; line-height: 1.5; padding: 20px;">
+                <h2 style="color: #333;">Event Reminder</h2>
+                <p style="font-size: 16px;">
+                    Hi there!<br><br>
+                    This is a friendly reminder that your event "<strong>${title}</strong>" is scheduled for <strong>${formattedDate}</strong>.
+                </p>
+                <p style="font-size: 16px;">
+                    Click the button below to go to your calendar and view your events.
+                </p>
+                <a href="https://edusify.vercel.app/calendar" style="display: inline-block; background-color: #4CAF50; color: white; padding: 10px 20px; text-align: center; text-decoration: none; border-radius: 5px; margin-top: 10px;">
+                    Go to Calendar
+                </a>
+            </div>
+            `;
+
+            // Send email
+            const mailOptions = {
+                from: 'edusyfy@gmail.com',
+                to: email,
+                subject: 'Event Reminder',
+                html: messageBody // Use 'html' for HTML formatted emails
+            };
+
+            transporter.sendMail(mailOptions, (err, info) => {
+                if (err) {
+                    console.log('Error sending email:', err);
+                } else {
+                    console.log('Email sent: ' + info.response);
+                }
+            });
+        });
+    });
+};
+
+// Function to schedule reminders at specific times
+const scheduleReminder = (targetHour) => {
+    const initialDelay = calculateDelayToTime(targetHour);
+    setTimeout(() => {
+        checkTasksAndSendReminders();
+        setInterval(checkTasksAndSendReminders, MILLISECONDS_IN_A_DAY);
+    }, initialDelay);
+};
+
+// Schedule reminders for 7:00 AM, 3:00 PM, and 9:00 PM IST
+scheduleReminder(7);   // 7:00 AM IST
+scheduleReminder(15);  // 3:00 PM IST
+scheduleReminder(21);  // 9:00 PM IST
+ */}
 
 app.post('/api/add/flashcards', upload.array('images'), (req, res) => {
   const { title, description, isPublic, token, headings, subjectId } = req.body;
@@ -3103,9 +3252,12 @@ app.post('/api/feedback', (req, res) => {
 
 
 app.post('/api/chat/ai', async (req, res) => {
-  const { message, chatHistory } = req.body;
+  const { message, chatHistory, token } = req.body;
 
   try {
+    // Get user ID from token
+    const userId = await getUserIdFromToken(token);
+
     const chat = model.startChat({
       history: chatHistory || [
         {
@@ -3126,6 +3278,9 @@ app.post('/api/chat/ai', async (req, res) => {
     
     // Log that the AI was asked
     console.log('AI was asked for response.');
+
+    // Store user message and AI response in MySQL
+    await query('INSERT INTO ai_history (user_id, user_message, ai_response) VALUES (?, ?, ?)', [userId, message, result.response.text()]);
 
     res.json({ response: result.response.text() });
   } catch (error) {
@@ -3149,7 +3304,39 @@ app.post('/api/chat/ai', async (req, res) => {
   }
 });
 
+// Endpoint to fetch chat history
+app.post('/api/chat/history/ai', async (req, res) => {
+  const { token } = req.body;
 
+  try {
+    // Get user ID from the token
+    const userId = await getUserIdFromToken(token);
+
+    // Fetch chat history from the database
+    const historyQuery = 'SELECT user_message, ai_response, created_at FROM ai_history WHERE user_id = ? ORDER BY created_at DESC';
+    const chatHistory = await query(historyQuery, [userId]);
+
+    // Format chat history for response
+    const formattedHistory = chatHistory.flatMap(entry => ([
+      {
+        role: 'user',
+        parts: [{ text: entry.user_message }],
+        created_at: entry.created_at,
+      },
+      {
+        role: 'model',
+        parts: [{ text: entry.ai_response }],
+        created_at: entry.created_at,
+      },
+    ]));
+
+    // Send the chat history back to the client
+    res.json(formattedHistory);
+  } catch (error) {
+    console.error('Error fetching chat history:', error);
+    res.status(500).json({ error: 'Failed to fetch chat history' });
+  }
+});
 
 
 app.post('/api/getUserData/home/box', async (req, res) => {
