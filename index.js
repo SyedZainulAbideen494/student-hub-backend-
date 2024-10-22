@@ -4338,6 +4338,20 @@ app.post('/api/cookies', (req, res) => {
 
 
 
+// 5. Delete a subject
+app.delete('/subjects/delete/:id', (req, res) => {
+  const id = req.params.id;
+  const sql = 'DELETE FROM subjects WHERE id = ?';
+  connection.query(sql, [id], (err, result) => {
+    if (err) {
+      return res.status(500).send('Error deleting subject');
+    }
+    if (result.affectedRows === 0) {
+      return res.status(404).send('Subject not found');
+    }
+    res.send('Subject deleted successfully');
+  });
+});
 
 
 // Route to send emails to users
