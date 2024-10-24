@@ -2003,7 +2003,7 @@ app.get('/download/android', (req, res) => {
       console.error('Error downloading Android app:', err);
       res.status(500).send('Error downloading file');
     } else {
-      console.log('Android app download successful:', req.ip); // Log successful download
+
     }
   });
 });
