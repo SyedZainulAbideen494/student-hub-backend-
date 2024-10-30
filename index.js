@@ -4461,9 +4461,10 @@ app.get('/api/youtube/search', async (req, res) => {
   }
 });
 
-// Endpoint to fetch all emails
+
+// Endpoint to fetch all emails and unique_ids
 app.get('/api/emails/admin', (req, res) => {
-  const sqlQuery = 'SELECT email FROM users';
+  const sqlQuery = 'SELECT email, unique_id FROM users';
 
   connection.query(sqlQuery, (err, results) => {
       if (err) {
@@ -4472,11 +4473,16 @@ app.get('/api/emails/admin', (req, res) => {
           return;
       }
 
-      // Extract emails into a list
-      const emails = results.map(row => row.email);
-      res.json({ emails });
+      // Extract emails and unique_ids into a list of objects
+      const users = results.map(row => ({
+          email: row.email,
+          unique_id: row.unique_id
+      }));
+
+      res.json({ users });
   });
 });
+
 
 // Route to send emails to users
 app.post('/send-emails/all-users/admin', async (req, res) => {
