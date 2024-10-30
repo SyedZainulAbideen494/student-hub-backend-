@@ -4352,6 +4352,131 @@ app.delete('/subjects/delete/:id', (req, res) => {
   });
 });
 
+// Route to fetch recommended educational video IDs
+app.get('/api/youtube/recommendations', async (req, res) => {
+  try {
+    const keywords = ['education', 'discipline', 'motivation', 'study tips', 'career advice'];
+    const keywordQuery = keywords.join('|'); // Create a regex-like query for multiple keywords
+
+    const searchResponse = await axios.get('https://www.googleapis.com/youtube/v3/search', {
+      params: {
+        part: 'id',
+        q: keywordQuery,
+        key: 'AIzaSyBwuCm6uF1j1BkK_I5xIUuRpZDqyJrhXxw',
+        type: 'video',
+        maxResults: 10, // Increase results to filter later
+        relevanceLanguage: 'en',
+        safeSearch: 'strict'
+      }
+    });
+
+    // Filter out shorts and get video IDs
+    const videoIds = searchResponse.data.items
+      .filter(item => item.id.videoId && !item.id.videoId.includes("shorts"))
+      .map(item => item.id.videoId);
+
+    // Step 2: Fetch Video Details for Each ID
+    const videoDetailsResponse = await axios.get('https://www.googleapis.com/youtube/v3/videos', {
+      params: {
+        part: 'snippet,statistics,contentDetails', // Include contentDetails to access duration
+        id: videoIds.join(','),
+        key: 'AIzaSyBwuCm6uF1j1BkK_I5xIUuRpZDqyJrhXxw'
+      }
+    });
+
+    // Step 3: Filter for high view counts, likes, duration, and exclude specified channels
+    const excludedChannels = [
+      'ExpHub', // Exclude this channel
+      'ExpHub - Prashant Kirad'
+    ];
+
+    const videos = videoDetailsResponse.data.items
+      .filter(video => 
+        video.contentDetails && // Ensure contentDetails exists
+        Number(video.statistics.viewCount) > 100000 && // Adjusted
+        Number(video.statistics.likeCount) > 1000 && // Adjusted
+        video.contentDetails.duration &&
+        convertDurationToSeconds(video.contentDetails.duration) > 60 && // Adjusted
+        !excludedChannels.some(channel => channel.toLowerCase() === video.snippet.channelTitle.toLowerCase()) // Exclude specified channels (case insensitive)
+      )
+      .map(item => ({
+        videoId: item.id,
+        title: item.snippet.title,
+        description: item.snippet.description,
+        thumbnail: item.snippet.thumbnails.default.url,
+        viewCount: item.statistics.viewCount,
+        likeCount: item.statistics.likeCount, // Optionally include like count
+        channelTitle: item.snippet.channelTitle // Include channel title for context
+      }));
+
+    res.json(videos);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to fetch recommended videos' });
+  }
+});
+
+// Helper function to convert ISO 8601 duration to seconds
+const convertDurationToSeconds = (duration) => {
+  const match = duration.match(/PT(\d+H)?(\d+M)?(\d+S)?/);
+  const hours = match[1] ? parseInt(match[1]) * 3600 : 0;
+  const minutes = match[2] ? parseInt(match[2]) * 60 : 0;
+  const seconds = match[3] ? parseInt(match[3]) : 0;
+  return hours + minutes + seconds;
+};
+
+
+
+// Route to search YouTube videos
+app.get('/api/youtube/search', async (req, res) => {
+  const { query } = req.query;
+
+  try {
+    const response = await axios.get(
+      `https://www.googleapis.com/youtube/v3/search`,
+      {
+        params: {
+          part: 'snippet',
+          q: query,
+          key: 'AIzaSyBwuCm6uF1j1BkK_I5xIUuRpZDqyJrhXxw',
+          type: 'video', // Ensures only videos are returned
+          maxResults: 10
+        }
+      }
+    );
+
+    const videos = response.data.items
+      .filter(item => item.id.videoId) // Ensure videoId exists
+      .map(item => ({
+        videoId: item.id.videoId,
+        title: item.snippet.title,
+        description: item.snippet.description,
+        thumbnail: item.snippet.thumbnails.default.url
+      }));
+
+    res.json(videos);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to fetch videos' });
+  }
+});
+
+// Endpoint to fetch all emails
+app.get('/api/emails/admin', (req, res) => {
+  const sqlQuery = 'SELECT email FROM user';
+
+  connection.query(sqlQuery, (err, results) => {
+      if (err) {
+          console.error('Error fetching emails:', err);
+          res.status(500).json({ error: 'Database query error' });
+          return;
+      }
+
+      // Extract emails into a list
+      const emails = results.map(row => row.email);
+      res.json({ emails });
+  });
+});
 
 // Route to send emails to users
 app.post('/send-emails/all-users/admin', async (req, res) => {
