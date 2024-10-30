@@ -4463,7 +4463,7 @@ app.get('/api/youtube/search', async (req, res) => {
 
 // Endpoint to fetch all emails
 app.get('/api/emails/admin', (req, res) => {
-  const sqlQuery = 'SELECT email FROM user';
+  const sqlQuery = 'SELECT email FROM users';
 
   connection.query(sqlQuery, (err, results) => {
       if (err) {
