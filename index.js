@@ -1653,6 +1653,83 @@ app.post('/createQuiz', async (req, res) => {
   }
 });
 
+app.post('/api/quiz/generate', async (req, res) => {
+  const { subject, topic, token } = req.body; // Get subject and topic directly from the request body
+
+  try {
+    // Use helper function to retrieve userId from the token
+    const userId = await getUserIdFromToken(token);
+
+    // Step 1: AI prompt to generate 15 MCQ questions with 4 choices and one correct answer
+    const prompt = `Generate a JSON array of 15 multiple-choice questions for the subject: ${subject} and topic: ${topic}. Each question should have:
+      - a 'question' field (the question text),
+      - an 'options' array with exactly 4 choices,
+      - an 'correct_answer' field with the text of the correct choice.
+      Please avoid including any additional text or Markdown formatting.`;
+
+    const chat = model.startChat({
+      history: [
+        {
+          role: 'user',
+          parts: [{ text: 'Hello' }],
+        },
+        {
+          role: 'model',
+          parts: [{ text: 'I can help generate quizzes for your study!' }],
+        },
+      ],
+    });
+
+    console.log('Generating quiz with prompt:', prompt);
+    const result = await chat.sendMessage(prompt);
+
+    // Step 2: Sanitize the response to remove any unwanted characters
+    const sanitizedResponse = result.response.text().replace(/```json|```|`/g, '').trim();
+
+    // Step 3: Parse the JSON response
+    let quizQuestions;
+    try {
+      quizQuestions = JSON.parse(sanitizedResponse);
+    } catch (parseError) {
+      console.error('Failed to parse JSON:', parseError);
+      return res.status(500).json({ error: 'Invalid JSON response from the AI model' });
+    }
+
+    // Step 4: Insert quiz details into the database
+    const title = `${subject} - ${topic} Quiz`;
+    const description = `Quiz on ${subject} - ${topic}`;
+    const [quizResult] = await connection.promise().query(
+      'INSERT INTO quizzes (title, description, creator_id) VALUES (?, ?, ?)', 
+      [title, description, userId]
+    );
+    const quizId = quizResult.insertId;
+
+    // Step 5: Insert questions and their options into the database
+    for (const question of quizQuestions) {
+      const [questionResult] = await connection.promise().query(
+        'INSERT INTO questions (quiz_id, question_text) VALUES (?, ?)', 
+        [quizId, question.question]
+      );
+      const questionId = questionResult.insertId;
+
+      question.options.forEach(async (option) => {
+        const isCorrect = option === question.correct_answer;
+        await connection.promise().query(
+          'INSERT INTO answers (question_id, answer_text, is_correct) VALUES (?, ?, ?)', 
+          [questionId, option, isCorrect]
+        );
+      });
+    }
+
+    // Step 6: Return the generated quiz details
+    res.json({ message: 'Quiz generated successfully', quizId });
+  } catch (error) {
+    console.error('Error generating quiz:', error);
+    res.status(500).json({ error: 'Error generating quiz' });
+  }
+});
+
+
 // Get all quizzes for a user
 app.post('/getUserQuizzes', async (req, res) => {
   const { token } = req.body;
