@@ -4199,11 +4199,20 @@ app.post('/api/tasks/generate', async (req, res) => {
       return res.status(401).json({ error: 'Invalid token or user not found' });
     }
 
-    const prompt = `Generate a breakdown of tasks in JSON format with title, description, due date, and priority for the following task: "${mainTask}". 
-    The task should be completed in ${days} days. Spread the due dates evenly over the ${days} days, starting from today (${new Date().toISOString().split('T')[0]}). 
-    Each task should be an object with 'title', 'description', 'due_date' (YYYY-MM-DD format), and 'priority' ('Low', 'Normal', or 'High'). 
-    The tasks should be related to completing the main task efficiently within the given time frame.`;
-
+    const prompt = `Create a highly detailed and structured task plan in JSON format, breaking down the main task: "${mainTask}" to be completed within ${days} days. This plan should guide the user through each step in a way that makes completing the task both achievable and straightforward. Each task should have carefully spaced due dates over the ${days} days, starting from today (${new Date().toISOString().split('T')[0]}), and should include the following fields:
+    - A 'title' that concisely summarizes the specific action to be taken.
+    - A 'description' that includes clear, actionable steps, any necessary resources, and helpful suggestions to enhance task completion. Descriptions should be specific enough to allow the user to follow them easily.
+    - A 'due_date' in YYYY-MM-DD format.
+    - A 'priority' level ('Low', 'Normal', 'High') based on the urgency and importance of each task in relation to the main goal.
+    - An 'estimated_time' in hours for task completion, helping the user to plan their daily schedule effectively.
+    
+    Additionally, ensure the following:
+    1. Tasks build upon each other in a logical sequence, creating a structured path from start to finish that leads to efficient completion of the main task.
+    2. Each task description should inspire confidence and encourage focus by providing insightful steps or tips that make it clear why each step is essential.
+    3. The breakdown should aim for balance, with manageable, realistic daily workloads, and a logical distribution of priority to keep the user on track without overwhelming them.
+    
+    Generate tasks that are action-oriented and result-driven, giving the user a clear, effective pathway to achieve the main task in an organized and thorough manner.`;
+    
     const chat = model.startChat({
       history: [
         { role: 'user', parts: [{ text: 'Hello' }] },
