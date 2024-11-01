@@ -1766,6 +1766,8 @@ app.get('/getQuiz/:id', async (req, res) => {
   }
 });
 
+const TWENTY_MINUTES = 20 * 60 * 1000; // 20 minutes in milliseconds
+
 app.post('/submitQuiz', async (req, res) => {
   const { token, quizId, answers } = req.body;
 
@@ -1814,16 +1816,34 @@ app.post('/submitQuiz', async (req, res) => {
       [userId, quizId, score]
     );
 
-    // Step 4: Update Points
-    const pointsQuery = 'SELECT * FROM user_points WHERE user_id = ?';
+    // Step 4: Update Points with 20-minute check
+    const pointsQuery = 'SELECT points, updated_at FROM user_points WHERE user_id = ?';
     const [pointsResults] = await connection.promise().query(pointsQuery, [userId]);
 
+    const now = new Date();
     if (pointsResults.length > 0) {
-      // If user exists, update points
-      await connection.promise().query('UPDATE user_points SET points = points + 15 WHERE user_id = ?', [userId]);
+      const lastUpdated = new Date(pointsResults[0].updated_at);
+      const timeDifference = now - lastUpdated;
+
+      if (timeDifference < TWENTY_MINUTES) {
+        // If updated within the last 20 minutes, reduce points by 5
+        await connection.promise().query(
+          'UPDATE user_points SET points = GREATEST(points - 5, 0), updated_at = ? WHERE user_id = ?',
+          [now, userId]
+        );
+      } else {
+        // If last updated more than 20 minutes ago, add 15 points
+        await connection.promise().query(
+          'UPDATE user_points SET points = points + 15, updated_at = ? WHERE user_id = ?',
+          [now, userId]
+        );
+      }
     } else {
       // If user does not exist, insert new record with 15 points
-      await connection.promise().query('INSERT INTO user_points (user_id, points) VALUES (?, ?)', [userId, 15]);
+      await connection.promise().query(
+        'INSERT INTO user_points (user_id, points, updated_at) VALUES (?, ?, ?)',
+        [userId, 15, now]
+      );
     }
 
     res.json({ score });
