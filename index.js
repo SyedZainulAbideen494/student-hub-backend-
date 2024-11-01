@@ -4617,6 +4617,169 @@ app.get("/api/total-users/admin", (req, res) => {
   });
 });
 
+// Route to get user data
+app.get('/admin/users', (req, res) => {
+  connection.query('SELECT id, user_name, unique_id, email, phone_number, avatar FROM users', (err, results) => {
+    if (err) throw err;
+    res.json(results);
+  });
+});
+
+// Route to get feedback
+app.get('/admin/feedback', (req, res) => {
+  connection.query('SELECT id, message, user_id, created_at FROM feedback', (err, results) => {
+    if (err) throw err;
+    res.json(results);
+  });
+});
+
+// Route to get tasks
+app.get('/admin/tasks', (req, res) => {
+  connection.query('SELECT id, title, description, user_id, due_date FROM tasks', (err, results) => {
+    if (err) throw err;
+    res.json(results);
+  });
+});
+
+// Route to get events
+app.get('/admin/events', (req, res) => {
+  connection.query('SELECT id, title, date, user_id FROM events', (err, results) => {
+    if (err) throw err;
+    res.json(results);
+  });
+});
+
+// Route to get user quizzes
+app.get('/admin/user_quizzes', (req, res) => {
+  connection.query('SELECT id, user_id, quiz_id, score FROM user_quizzes', (err, results) => {
+    if (err) throw err;
+    res.json(results);
+  });
+});
+
+// Route to get AI history
+app.get('/admin/ai_history', (req, res) => {
+  connection.query('SELECT id, user_message, ai_response, user_id FROM ai_history', (err, results) => {
+    if (err) throw err;
+    res.json(results);
+  });
+});
+
+// Route to get quizzes
+app.get('/admin/quizzes', (req, res) => {
+  connection.query('SELECT id, title, user_id FROM quizzes', (err, results) => {
+    if (err) throw err;
+    res.json(results);
+  });
+});
+
+// Route to get flashcard sets
+app.get('/admin/flashcard_sets', (req, res) => {
+  connection.query('SELECT COUNT(*) AS count FROM flashcard_sets', (err, results) => {
+    if (err) throw err;
+    res.json(results);
+  });
+});
+
+// Route to get flashcards
+app.get('/admin/flashcards', (req, res) => {
+  connection.query('SELECT COUNT(*) AS count FROM flashcards', (err, results) => {
+    if (err) throw err;
+    res.json(results);
+  });
+});
+
+// Route for Users Count
+app.get('/admin/users/count', async (req, res) => {
+  try {
+    const rows = await query('SELECT COUNT(*) AS count FROM users');
+    res.json({ count: rows[0].count });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Route for Tasks Count
+app.get('/admin/tasks/count', async (req, res) => {
+  try {
+    const rows = await query('SELECT COUNT(*) AS count FROM tasks');
+    res.json({ count: rows[0].count });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Route for Feedback Count
+app.get('/admin/feedback/count', async (req, res) => {
+  try {
+    const rows = await query('SELECT COUNT(*) AS count FROM feedback');
+    res.json({ count: rows[0].count });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Route for Events Count
+app.get('/admin/events/count', async (req, res) => {
+  try {
+    const rows = await query('SELECT COUNT(*) AS count FROM events');
+    res.json({ count: rows[0].count });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Route for User Quizzes Count
+app.get('/admin/user_quizzes/count', async (req, res) => {
+  try {
+    const rows = await query('SELECT COUNT(*) AS count FROM user_quizzes');
+    res.json({ count: rows[0].count });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Route for AI History Count
+app.get('/admin/ai_history/count', async (req, res) => {
+  try {
+    const rows = await query('SELECT COUNT(*) AS count FROM ai_history');
+    res.json({ count: rows[0].count });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Route for Quizzes Count
+app.get('/admin/quizzes/count', async (req, res) => {
+  try {
+    const rows = await query('SELECT COUNT(*) AS count FROM quizzes');
+    res.json({ count: rows[0].count });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Route for Flashcard Sets Count
+app.get('/admin/flashcard_sets/count', async (req, res) => {
+  try {
+    const rows = await query('SELECT COUNT(*) AS count FROM flashcard_sets');
+    res.json({ count: rows[0].count });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Route for Flashcards Count
+app.get('/admin/flashcards/count', async (req, res) => {
+  try {
+    const rows = await query('SELECT COUNT(*) AS count FROM flashcards');
+    res.json({ count: rows[0].count });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
 // Endpoint to log download requests
 app.post('/api/log-download', (req, res) => {
   console.log('Download requested:', req.body);
