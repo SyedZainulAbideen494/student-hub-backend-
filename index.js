@@ -4201,17 +4201,19 @@ app.post('/api/tasks/generate', async (req, res) => {
 
     const prompt = `Create a highly detailed and structured task plan in JSON format, breaking down the main task: "${mainTask}" to be completed within ${days} days. This plan should guide the user through each step in a way that makes completing the task both achievable and straightforward. Each task should have carefully spaced due dates over the ${days} days, starting from today (${new Date().toISOString().split('T')[0]}), and should include the following fields:
     - A 'title' that concisely summarizes the specific action to be taken.
-    - A 'description' that includes clear, actionable steps, any necessary resources, and helpful suggestions to enhance task completion. Descriptions should be specific enough to allow the user to follow them easily.
+    - A 'description' with clear, actionable steps, any necessary resources, helpful suggestions, and motivational reminders where relevant to enhance task completion. Descriptions should be specific enough for easy follow-through.
     - A 'due_date' in YYYY-MM-DD format.
     - A 'priority' level ('Low', 'Normal', 'High') based on the urgency and importance of each task in relation to the main goal.
     - An 'estimated_time' in hours for task completion, helping the user to plan their daily schedule effectively.
     
     Additionally, ensure the following:
-    1. Tasks build upon each other in a logical sequence, creating a structured path from start to finish that leads to efficient completion of the main task.
-    2. Each task description should inspire confidence and encourage focus by providing insightful steps or tips that make it clear why each step is essential.
-    3. The breakdown should aim for balance, with manageable, realistic daily workloads, and a logical distribution of priority to keep the user on track without overwhelming them.
+    1. Tasks build upon each other in a logical sequence, creating a structured path from start to finish for efficient and thorough completion of the main task.
+    2. Include periodic 'checkpoints' for the user to review progress, make adjustments, and regain focus on the primary goal.
+    3. Incorporate designated 'rest days' to prevent burnout and support sustained productivity, while noting any preparatory or reflective tasks for light engagement.
+    4. Each task description should encourage confidence, focus, and provide insightful steps or tips, making it clear why each step is essential to success.
+    5. Aim for a balanced, manageable workload each day, with realistic task prioritization that helps the user stay on track without feeling overwhelmed.
     
-    Generate tasks that are action-oriented and result-driven, giving the user a clear, effective pathway to achieve the main task in an organized and thorough manner.`;
+    Generate a sequence of action-oriented and result-driven tasks, giving the user a clear, motivating, and sustainable path to achieve the main task in an organized, thorough, and user-friendly manner.`;
     
     const chat = model.startChat({
       history: [
