@@ -1820,7 +1820,7 @@ app.post('/submitQuiz', async (req, res) => {
 
     if (pointsResults.length > 0) {
       // If user exists, update points
-      await connection.promise().query('UPDATE user_points SET points = points + 15 WHERE user_id = ?', [userId]);
+      await connection.promise().query('UPDATE user_points SET points = points + 5 WHERE user_id = ?', [userId]);
     } else {
       // If user does not exist, insert new record with 15 points
       await connection.promise().query('INSERT INTO user_points (user_id, points) VALUES (?, ?)', [userId, 15]);
