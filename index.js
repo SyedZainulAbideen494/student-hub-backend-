@@ -4549,6 +4549,173 @@ app.get('/api/youtube/search', async (req, res) => {
   }
 });
 
+// Route to create a new folder
+app.post('/api/folders/add', async (req, res) => {
+  const { token, folderName } = req.body;
+
+  if (!folderName) {
+    return res.status(400).json({ error: 'Folder name is required' });
+  }
+
+  try {
+    const userId = await getUserIdFromToken(token);
+    const sql = 'INSERT INTO folders (name, user_id) VALUES (?, ?)';
+    await query(sql, [folderName, userId]);
+    res.status(201).json({ message: 'Folder created successfully' });
+  } catch (error) {
+    console.error('Error creating folder:', error);
+    res.status(500).json({ error: 'Failed to create folder' });
+  }
+});
+
+// Route to upload a new document
+app.post('/api/documents/add', upload.array('files', 5), async (req, res) => {
+  // Log the incoming request body for debugging
+  console.log('Incoming request body:', req.body);
+
+  const { token, title, description, password, folderId } = req.body;
+
+  // Check if the token is provided
+  if (!token) {
+    return res.status(401).json({ error: 'Token is required' });
+  }
+
+  // Check if the title is provided
+  if (!title) {
+    return res.status(400).json({ error: 'Document title is required' });
+  }
+
+  // Check if files were uploaded
+  if (!req.files || req.files.length === 0) {
+    return res.status(400).json({ error: 'At least one file is required' });
+  }
+
+  try {
+    // Get user ID from the token
+    const userId = await getUserIdFromToken(token);
+    if (!userId) {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+
+    // Insert the document into the database
+    const sql = 'INSERT INTO documents (title, description, password, user_id, folder_id) VALUES (?, ?, ?, ?, ?)';
+    const result = await query(sql, [title, description, password, userId, folderId || null]);
+
+    const documentId = result.insertId;
+
+    // Insert only the file name, not the full path
+    const filePromises = req.files.map(file => {
+      const fileName = file.filename; // Use the stored filename from Multer
+      const fileSql = 'INSERT INTO document_files (document_id, file_name) VALUES (?, ?)';
+      return query(fileSql, [documentId, fileName]);
+    });
+
+    await Promise.all(filePromises);
+
+    res.status(201).json({ message: 'Document uploaded successfully' });
+  } catch (error) {
+    console.error('Error uploading document:', error);
+    res.status(500).json({ error: 'Failed to upload document' });
+  }
+});
+
+
+// Route to retrieve all folders for a user
+app.post('/api/folders/get', async (req, res) => {
+  const token = req.body.token; // Expecting token in the body
+
+  try {
+    const userId = await getUserIdFromToken(token);
+    const sql = 'SELECT * FROM folders WHERE user_id = ?';
+    const folders = await query(sql, [userId]);
+    res.status(200).json(folders);
+  } catch (error) {
+    console.error('Error fetching folders:', error);
+    res.status(500).json({ error: 'Failed to fetch folders' });
+  }
+});
+
+// Route to retrieve all documents
+app.post('/api/documents/get', async (req, res) => {
+  const token = req.body.token;
+
+  try {
+    const userId = await getUserIdFromToken(token);
+    const sql = 'SELECT * FROM documents WHERE user_id = ?'; // Fetch all documents for the user
+    const documents = await query(sql, [userId]);
+    res.json(documents);
+  } catch (error) {
+    console.error('Error fetching documents:', error);
+    res.status(500).send('Server Error');
+  }
+});
+
+// Route to retrieve documents by folder ID
+app.post('/api/documents/getByFolder', async (req, res) => {
+  const { token, folderId } = req.body;
+
+  try {
+    const userId = await getUserIdFromToken(token); // Ensure you're validating the user's token
+    const sql = 'SELECT * FROM documents WHERE user_id = ? AND folder_id = ?'; // Fetch documents for the specified folder
+    const documents = await query(sql, [userId, folderId]); // Pass user ID and folder ID to the query
+    res.json(documents);
+  } catch (error) {
+    console.error('Error fetching documents by folder:', error);
+    res.status(500).send('Server Error');
+  }
+});
+
+// Route to retrieve folder details by folder ID
+app.post('/api/folders/get/details', async (req, res) => {
+  const { token, folderId } = req.body;
+
+  try {
+    const userId = await getUserIdFromToken(token); // Ensure user is validated
+    const sql = 'SELECT name FROM folders WHERE user_id = ? AND id = ?'; // Fetch folder name
+    const folder = await query(sql, [userId, folderId]);
+    res.json(folder[0]); // Return the first matching folder
+  } catch (error) {
+    console.error('Error fetching folder details:', error);
+    res.status(500).send('Server Error');
+  }
+});
+
+
+
+// Route to retrieve a document by ID
+app.post('/api/documents/view', async (req, res) => {
+  const { token, documentId, password } = req.body;
+
+  try {
+    const userId = await getUserIdFromToken(token);
+    
+    // Query to find the document
+    const sqlDocument = 'SELECT * FROM documents WHERE id = ? AND user_id = ?';
+    const [document] = await query(sqlDocument, [documentId, userId]);
+
+    // Check if the document exists
+    if (!document) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    // Check if the document has a password
+    if (document.password && document.password !== password) {
+      return res.status(401).json({ error: 'Incorrect password' });
+    }
+
+    // Query to find associated files (images)
+    const sqlFiles = 'SELECT * FROM document_files WHERE document_id = ?';
+    const files = await query(sqlFiles, [documentId]);
+
+    // Send document and associated files
+    res.status(200).json({ document, files });
+  } catch (error) {
+    console.error('Error retrieving document:', error);
+    res.status(500).json({ error: 'Failed to retrieve document' });
+  }
+});
+
+
 
 // Endpoint to fetch all emails and unique_ids
 app.get('/api/emails/admin', (req, res) => {
