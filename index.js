@@ -4567,12 +4567,8 @@ app.post('/api/folders/add', async (req, res) => {
     res.status(500).json({ error: 'Failed to create folder' });
   }
 });
-
 // Route to upload a new document
 app.post('/api/documents/add', upload.array('files', 5), async (req, res) => {
-  // Log the incoming request body for debugging
-  console.log('Incoming request body:', req.body);
-
   const { token, title, description, password, folderId } = req.body;
 
   // Check if the token is provided
@@ -4612,13 +4608,15 @@ app.post('/api/documents/add', upload.array('files', 5), async (req, res) => {
 
     await Promise.all(filePromises);
 
+    // Log success message
+    console.log(`Document uploaded successfully with ID: ${documentId}`);
+
     res.status(201).json({ message: 'Document uploaded successfully' });
   } catch (error) {
     console.error('Error uploading document:', error);
     res.status(500).json({ error: 'Failed to upload document' });
   }
 });
-
 
 // Route to retrieve all folders for a user
 app.post('/api/folders/get', async (req, res) => {
@@ -4717,28 +4715,6 @@ app.post('/api/documents/view', async (req, res) => {
 
 
 
-// Endpoint to fetch all emails and unique_ids
-app.get('/api/emails/admin', (req, res) => {
-  const sqlQuery = 'SELECT email, unique_id FROM users';
-
-  connection.query(sqlQuery, (err, results) => {
-      if (err) {
-          console.error('Error fetching emails:', err);
-          res.status(500).json({ error: 'Database query error' });
-          return;
-      }
-
-      // Extract emails and unique_ids into a list of objects
-      const users = results.map(row => ({
-          email: row.email,
-          unique_id: row.unique_id
-      }));
-
-      res.json({ users });
-  });
-});
-
-
 // Route to send emails to users
 app.post('/send-emails/all-users/admin', async (req, res) => {
   const { content, subject } = req.body;
@@ -4771,180 +4747,7 @@ app.post('/send-emails/all-users/admin', async (req, res) => {
   }
 });
 
-// API to get total users count
-app.get("/api/total-users/admin", (req, res) => {
-  const query = "SELECT COUNT(*) AS totalUsers FROM users"; // Replace 'users' with your table name
-  connection.query(query, (err, result) => {
-    if (err) {
-      console.error("Error fetching data:", err);
-      res.status(500).json({ error: "Database query error" });
-      return;
-    }
-    res.json({ totalUsers: result[0].totalUsers });
-  });
-});
 
-// Route to get user data
-app.get('/admin/users', (req, res) => {
-  connection.query('SELECT id, user_name, unique_id, email, phone_number, avatar FROM users', (err, results) => {
-    if (err) throw err;
-    res.json(results);
-  });
-});
-
-// Route to get feedback
-app.get('/admin/feedback', (req, res) => {
-  connection.query('SELECT id, message, user_id, created_at FROM feedback', (err, results) => {
-    if (err) throw err;
-    res.json(results);
-  });
-});
-
-// Route to get tasks
-app.get('/admin/tasks', (req, res) => {
-  connection.query('SELECT id, title, description, user_id, due_date FROM tasks', (err, results) => {
-    if (err) throw err;
-    res.json(results);
-  });
-});
-
-// Route to get events
-app.get('/admin/events', (req, res) => {
-  connection.query('SELECT id, title, date, user_id FROM events', (err, results) => {
-    if (err) throw err;
-    res.json(results);
-  });
-});
-
-// Route to get user quizzes
-app.get('/admin/user_quizzes', (req, res) => {
-  connection.query('SELECT id, user_id, quiz_id, score FROM user_quizzes', (err, results) => {
-    if (err) throw err;
-    res.json(results);
-  });
-});
-
-// Route to get AI history
-app.get('/admin/ai_history', (req, res) => {
-  connection.query('SELECT id, user_message, ai_response, user_id FROM ai_history', (err, results) => {
-    if (err) throw err;
-    res.json(results);
-  });
-});
-
-// Route to get quizzes
-app.get('/admin/quizzes', (req, res) => {
-  connection.query('SELECT id, title, user_id FROM quizzes', (err, results) => {
-    if (err) throw err;
-    res.json(results);
-  });
-});
-
-// Route to get flashcard sets
-app.get('/admin/flashcard_sets', (req, res) => {
-  connection.query('SELECT COUNT(*) AS count FROM flashcard_sets', (err, results) => {
-    if (err) throw err;
-    res.json(results);
-  });
-});
-
-// Route to get flashcards
-app.get('/admin/flashcards', (req, res) => {
-  connection.query('SELECT COUNT(*) AS count FROM flashcards', (err, results) => {
-    if (err) throw err;
-    res.json(results);
-  });
-});
-
-// Route for Users Count
-app.get('/admin/users/count', async (req, res) => {
-  try {
-    const rows = await query('SELECT COUNT(*) AS count FROM users');
-    res.json({ count: rows[0].count });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Route for Tasks Count
-app.get('/admin/tasks/count', async (req, res) => {
-  try {
-    const rows = await query('SELECT COUNT(*) AS count FROM tasks');
-    res.json({ count: rows[0].count });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Route for Feedback Count
-app.get('/admin/feedback/count', async (req, res) => {
-  try {
-    const rows = await query('SELECT COUNT(*) AS count FROM feedback');
-    res.json({ count: rows[0].count });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Route for Events Count
-app.get('/admin/events/count', async (req, res) => {
-  try {
-    const rows = await query('SELECT COUNT(*) AS count FROM events');
-    res.json({ count: rows[0].count });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Route for User Quizzes Count
-app.get('/admin/user_quizzes/count', async (req, res) => {
-  try {
-    const rows = await query('SELECT COUNT(*) AS count FROM user_quizzes');
-    res.json({ count: rows[0].count });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Route for AI History Count
-app.get('/admin/ai_history/count', async (req, res) => {
-  try {
-    const rows = await query('SELECT COUNT(*) AS count FROM ai_history');
-    res.json({ count: rows[0].count });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Route for Quizzes Count
-app.get('/admin/quizzes/count', async (req, res) => {
-  try {
-    const rows = await query('SELECT COUNT(*) AS count FROM quizzes');
-    res.json({ count: rows[0].count });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Route for Flashcard Sets Count
-app.get('/admin/flashcard_sets/count', async (req, res) => {
-  try {
-    const rows = await query('SELECT COUNT(*) AS count FROM flashcard_sets');
-    res.json({ count: rows[0].count });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Route for Flashcards Count
-app.get('/admin/flashcards/count', async (req, res) => {
-  try {
-    const rows = await query('SELECT COUNT(*) AS count FROM flashcards');
-    res.json({ count: rows[0].count });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
 
 
 // Endpoint to log download requests
