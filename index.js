@@ -4189,9 +4189,8 @@ app.post('/addStory', upload.single('file'), async (req, res) => {
 });
 
 
-
 app.post('/api/tasks/generate', async (req, res) => {
-  const { mainTask, days, token } = req.body;
+  const { mainTask, days, token, taskStyle } = req.body;
 
   try {
     const userId = await getUserIdFromToken(token);
@@ -4199,22 +4198,27 @@ app.post('/api/tasks/generate', async (req, res) => {
       return res.status(401).json({ error: 'Invalid token or user not found' });
     }
 
-    const prompt = `Create a highly detailed and structured task plan in JSON format, breaking down the main task: "${mainTask}" to be completed within ${days} days. This plan should guide the user through each step in a way that makes completing the task both achievable and straightforward. Each task should have carefully spaced due dates over the ${days} days, starting from today (${new Date().toISOString().split('T')[0]}), and should include the following fields:
-    - A 'title' that concisely summarizes the specific action to be taken.
-    - A 'description' with clear, actionable steps, any necessary resources, helpful suggestions, and motivational reminders where relevant to enhance task completion. Descriptions should be specific enough for easy follow-through.
-    - A 'due_date' in YYYY-MM-DD format.
-    - A 'priority' level ('Low', 'Normal', 'High') based on the urgency and importance of each task in relation to the main goal.
-    - An 'estimated_time' in hours for task completion, helping the user to plan their daily schedule effectively.
-    
-    Additionally, ensure the following:
-    1. Tasks build upon each other in a logical sequence, creating a structured path from start to finish for efficient and thorough completion of the main task.
-    2. Include periodic 'checkpoints' for the user to review progress, make adjustments, and regain focus on the primary goal.
-    3. Incorporate designated 'rest days' to prevent burnout and support sustained productivity, while noting any preparatory or reflective tasks for light engagement.
-    4. Each task description should encourage confidence, focus, and provide insightful steps or tips, making it clear why each step is essential to success.
-    5. Aim for a balanced, manageable workload each day, with realistic task prioritization that helps the user stay on track without feeling overwhelmed.
-    
-    Generate a sequence of action-oriented and result-driven tasks, giving the user a clear, motivating, and sustainable path to achieve the main task in an organized, thorough, and user-friendly manner.`;
-    
+    const prompt = taskStyle === 'detailed'
+      ? `Create a highly detailed and structured task plan in JSON format, breaking down the main task: "${mainTask}" to be completed within ${days} days. This plan should guide the user through each step in a way that makes completing the task both achievable and straightforward. Each task should have carefully spaced due dates over the ${days} days, starting from today (${new Date().toISOString().split('T')[0]}), and should include the following fields:
+          - A 'title' that concisely summarizes the specific action to be taken.
+          - A 'description' with clear, actionable steps, any necessary resources, helpful suggestions, and motivational reminders where relevant to enhance task completion. Descriptions should be specific enough for easy follow-through.
+          - A 'due_date' in YYYY-MM-DD format.
+          - A 'priority' level ('Low', 'Normal', 'High') based on the urgency and importance of each task in relation to the main goal.
+          - An 'estimated_time' in hours for task completion, helping the user to plan their daily schedule effectively.
+          
+          Additionally, ensure the following:
+          1. Tasks build upon each other in a logical sequence, creating a structured path from start to finish for efficient and thorough completion of the main task.
+          2. Include periodic 'checkpoints' for the user to review progress, make adjustments, and regain focus on the primary goal.
+          3. Incorporate designated 'rest days' to prevent burnout and support sustained productivity, while noting any preparatory or reflective tasks for light engagement.
+          4. Each task description should encourage confidence, focus, and provide insightful steps or tips, making it clear why each step is essential to success.
+          5. Aim for a balanced, manageable workload each day, with realistic task prioritization that helps the user stay on track without feeling overwhelmed.
+          
+          Generate a sequence of action-oriented and result-driven tasks, giving the user a clear, motivating, and sustainable path to achieve the main task in an organized, thorough, and user-friendly manner.`
+      : `Create a concise task plan in JSON format, breaking down the main task: "${mainTask}" into simple steps for completion within ${days} days. The task plan should include:
+          - 'title' summarizing each action
+          - 'due_date' in YYYY-MM-DD format
+          - Minimal 'description' with only essential steps or resources.`;
+
     const chat = model.startChat({
       history: [
         { role: 'user', parts: [{ text: 'Hello' }] },
@@ -4224,7 +4228,6 @@ app.post('/api/tasks/generate', async (req, res) => {
 
     console.log('Generating tasks with prompt:', prompt);
     const result = await chat.sendMessage(prompt);
-
 
     // Extract only the JSON part using a regular expression
     const jsonResponse = result.response.text().match(/```json([\s\S]*?)```/);
@@ -4242,13 +4245,16 @@ app.post('/api/tasks/generate', async (req, res) => {
       return res.status(500).json({ error: 'Invalid JSON response from the AI model.' });
     }
 
-    const tasksData = tasks.map(task => ({
-      userId,
-      title: task.title.trim(),
-      description: task.description.trim(),
-      due_date: task.due_date.trim(),
-      priority: task.priority.trim(),
-    }));
+    const tasksData = tasks.map(task => {
+      // Check if the task has the necessary properties before accessing them
+      return {
+        userId,
+        title: task.title?.trim() || 'Untitled Task', // Default title if undefined
+        description: task.description?.trim() || 'No description provided', // Default description if undefined
+        due_date: task.due_date?.trim() || new Date().toISOString().split('T')[0], // Default to today's date if undefined
+        priority: task.priority?.trim() || 'Normal', // Default priority if undefined
+      };
+    });
 
     if (tasksData.length > 0) {
       const tasksValues = tasksData.map(({ userId, title, description, due_date, priority }) => [userId, title, description, due_date, priority]);
@@ -4273,119 +4279,6 @@ app.post('/api/tasks/generate', async (req, res) => {
 });
 
 
-// Create folder
-app.post('/api/folder/create', (req, res) => {
-  const { userId, folderName } = req.body;
-  const query = `INSERT INTO folders (user_id, folder_name) VALUES (?, ?)`;
-  connection.query(query, [userId, folderName], (err) => {
-    if (err) throw err;
-    res.send({ message: 'Folder created successfully' });
-  });
-});
-
-
-// Upload document
-app.post('/api/document', upload.single('document'), (req, res) => {
-  const { userId, folderId, docName, description, password } = req.body;
-  const file = req.file.filename;
-
-  // Optional password encryption
-  const hashedPassword = password ? bcrypt.hashSync(password, 10) : null;
-  const query = `INSERT INTO documents (user_id, folder_id, doc_name, file_name, description, password) VALUES (?, ?, ?, ?, ?, ?)`;
-
-  connection.query(query, [userId, folderId, docName, file, description, hashedPassword], (err) => {
-    if (err) throw err;
-    res.send({ message: 'Document uploaded successfully' });
-  });
-});
-
-// List documents
-app.get('/api/documents', (req, res) => {
-  const { userId, folderId } = req.query;
-  const query = `SELECT * FROM documents WHERE user_id = ? AND folder_id = ?`;
-
-  connection.query(query, [userId, folderId], (err, results) => {
-    if (err) throw err;
-    res.json(results);
-  });
-});
-
-// Download document
-app.get('/api/download/:id', (req, res) => {
-  const docId = req.params.id;
-  const query = `SELECT file_name FROM documents WHERE id = ?`;
-
-  connection.query(query, [docId], (err, result) => {
-    if (err) throw err;
-    const filePath = path.join(__dirname, 'uploads', result[0].file_name);
-    res.download(filePath);
-  });
-});
-
-// Search documents
-app.get('/api/search', (req, res) => {
-  const { userId, keyword } = req.query;
-  const query = `SELECT * FROM documents WHERE user_id = ? AND (doc_name LIKE ? OR description LIKE ?)`;
-  const likeQuery = `%${keyword}%`;
-
-  connection.query(query, [userId, likeQuery, likeQuery], (err, results) => {
-    if (err) throw err;
-    res.json(results);
-  });
-});
-
-// Share document with link
-app.post('/api/share', (req, res) => {
-  const { docId, userId, password, expireAfterView } = req.body;
-  const token = jwt.sign({ docId, userId, expireAfterView }, password || 'default_key');
-  const link = `http://localhost:3000/view/${token}`;
-
-  res.json({ message: 'Shareable link created', link });
-});
-
-// View shared document
-app.get('/api/view/:token', (req, res) => {
-  const token = req.params.token;
-  const { password } = req.query;
-
-  jwt.verify(token, password || 'default_key', (err, decoded) => {
-    if (err) return res.status(403).send({ message: 'Invalid link or password' });
-    
-    const query = `SELECT * FROM documents WHERE id = ?`;
-    connection.query(query, [decoded.docId], (err, result) => {
-      if (err) throw err;
-      res.json(result);
-      
-      // If view once, delete after access
-      if (decoded.expireAfterView) {
-        const deleteQuery = `DELETE FROM documents WHERE id = ?`;
-        connection.query(deleteQuery, [decoded.docId], (err) => {
-          if (err) throw err;
-        });
-      }
-    });
-  });
-});
-
-// API to fetch all folders for a user
-app.get('/api/folders', (req, res) => {
-  const { userId } = req.query;  // Get userId from query parameters
-
-  if (!userId) {
-    return res.status(400).json({ error: 'UserId is required' });
-  }
-
-  const query = `SELECT * FROM folders WHERE user_id = ?`;
-
-  connection.query(query, [userId], (err, results) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({ error: 'Database query error' });
-    }
-
-    res.json(results); // Send folder list as JSON response
-  });
-});
 
 app.set('trust proxy', true); // Enable this if you're behind a reverse proxy
 // Define the route to accept cookie data
