@@ -4838,6 +4838,27 @@ app.post('/api/log-download', (req, res) => {
   res.status(200).send({ message: 'Download request logged' });
 });
 
+// Get updates
+app.get('/api/updates/get', (req, res) => {
+  connection.query('SELECT * FROM updates ORDER BY created_at DESC', (err, results) => {
+      if (err) {
+          return res.status(500).send(err);
+      }
+      res.json(results);
+  });
+});
+
+// Post a new update
+app.post('/api/updates/add', (req, res) => {
+  const { title, content } = req.body;
+  connection.query('INSERT INTO updates (title, content) VALUES (?, ?)', [title, content], (err, results) => {
+      if (err) {
+          return res.status(500).send(err);
+      }
+      res.status(201).json({ id: results.insertId, title, content });
+  });
+});
+
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
