@@ -4753,6 +4753,32 @@ app.delete('/api/sticky-notes/delete/:noteId', async (req, res) => {
   }
 });
 
+// Endpoint to update the pinned status of a sticky note by ID
+app.put('/api/sticky-notes/pin/:noteId', async (req, res) => {
+  const { noteId } = req.params; // Get noteId from URL parameters
+  const { token, pinned } = req.body; // Get token and pinned status from request body
+
+  try {
+      const userId = await getUserIdFromToken(token); // Retrieve user_id using the token
+
+      // Update the pinned status in the database
+      const sql = 'UPDATE sticky_notes SET pinned = ? WHERE id = ? AND user_id = ?';
+      connection.query(sql, [pinned ? 1 : 0, noteId, userId], (err, results) => {
+          if (err) {
+              console.error(err);
+              return res.status(500).json({ message: 'Failed to update pinned status' });
+          }
+          if (results.affectedRows === 0) {
+              return res.status(404).json({ message: 'Note not found' });
+          }
+          res.status(200).json({ message: 'Pinned status updated successfully' });
+      });
+  } catch (error) {
+      console.error('Error updating pinned status:', error);
+      res.status(401).json({ message: 'Unauthorized' });
+  }
+});
+
 
 
 
