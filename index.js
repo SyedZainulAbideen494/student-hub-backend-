@@ -3494,29 +3494,40 @@ app.post('/api/getUserData/home/box', async (req, res) => {
   const { token } = req.body;
 
   try {
-    const userId = await getUserIdFromToken(token); // Get userId from token
+      const userId = await getUserIdFromToken(token); // Get userId from token
 
-    // Fetch today's tasks and events
-    const todayTasks = await query('SELECT * FROM tasks WHERE user_id = ? AND due_date = CURDATE()', [userId]);
-    const todayEvents = await query('SELECT * FROM events WHERE user_id = ? AND date = CURDATE()', [userId]);
+      // Fetch today's tasks and events where tasks are not completed
+      const todayTasks = await query(
+          'SELECT * FROM tasks WHERE user_id = ? AND due_date = CURDATE() AND completed = 0', 
+          [userId]
+      );
+      const todayEvents = await query(
+          'SELECT * FROM events WHERE user_id = ? AND date = CURDATE()', 
+          [userId]
+      );
 
-    // Fetch upcoming tasks and events
-    const upcomingTasks = await query('SELECT * FROM tasks WHERE user_id = ? AND due_date > CURDATE()', [userId]);
-    const upcomingEvents = await query('SELECT * FROM events WHERE user_id = ? AND date > CURDATE()', [userId]);
+      // Fetch upcoming tasks and events where tasks are not completed
+      const upcomingTasks = await query(
+          'SELECT * FROM tasks WHERE user_id = ? AND due_date > CURDATE() AND completed = 0', 
+          [userId]
+      );
+      const upcomingEvents = await query(
+          'SELECT * FROM events WHERE user_id = ? AND date > CURDATE()', 
+          [userId]
+      );
 
-    // Respond with the data
-    res.json({
-      todayTasks: todayTasks, // Today's tasks
-      todayEvents: todayEvents, // Today's events
-      upcomingTasks: upcomingTasks, // Upcoming tasks
-      upcomingEvents: upcomingEvents, // Upcoming events
-    });
+      // Respond with the data
+      res.json({
+          todayTasks: todayTasks, // Today's tasks
+          todayEvents: todayEvents, // Today's events
+          upcomingTasks: upcomingTasks, // Upcoming tasks
+          upcomingEvents: upcomingEvents, // Upcoming events
+      });
   } catch (error) {
-    console.error('Error fetching user data:', error);
-    res.status(500).json({ error: 'Failed to fetch user data' });
+      console.error('Error fetching user data:', error);
+      res.status(500).json({ error: 'Failed to fetch user data' });
   }
 });
-
 
 
 app.post('/api/tasks/today/data/home', async (req, res) => {
@@ -3532,9 +3543,9 @@ app.post('/api/tasks/today/data/home', async (req, res) => {
 
       // Query for today's tasks or upcoming tasks based on the request
       if (upcoming) {
-          sql = 'SELECT * FROM tasks WHERE user_id = ? AND due_date > CURDATE() ORDER BY due_date ASC';
+          sql = 'SELECT * FROM tasks WHERE user_id = ? AND due_date > CURDATE() AND completed = 0 ORDER BY due_date ASC';
       } else {
-          sql = 'SELECT * FROM tasks WHERE user_id = ? AND due_date = ?';
+          sql = 'SELECT * FROM tasks WHERE user_id = ? AND due_date = ? AND completed = 0';
           params.push(due_date);
       }
 
@@ -3545,6 +3556,7 @@ app.post('/api/tasks/today/data/home', async (req, res) => {
       res.status(500).send('Error fetching tasks');
   }
 });
+
 
 app.post('/api/events/today/data/home', async (req, res) => {
   const token = req.headers['authorization'];
