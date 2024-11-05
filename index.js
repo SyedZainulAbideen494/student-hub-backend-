@@ -517,7 +517,7 @@ app.post('/fetch/tasks', (req, res) => {
       }
 
       const user_id = results[0].user_id;
-      const fetchQuery = 'SELECT * FROM tasks WHERE user_id = ?';
+      const fetchQuery = 'SELECT * FROM tasks WHERE user_id = ? AND completed = 0'; // Only fetch non-completed tasks
       connection.query(fetchQuery, [user_id], (err, results) => {
           if (err) {
               return res.status(500).send(err);
@@ -526,6 +526,7 @@ app.post('/fetch/tasks', (req, res) => {
       });
   });
 });
+
 
 app.post('/edit/task', (req, res) => {
   const { id, title, description, due_date, priority, token } = req.body;
@@ -555,69 +556,71 @@ app.post('/delete/task', (req, res) => {
 
   const getUserQuery = 'SELECT user_id FROM session WHERE jwt = ?';
   connection.query(getUserQuery, [token], (err, results) => {
-    if (err) {
-      return res.status(500).send(err);
-    }
-    if (results.length === 0) {
-      return res.status(404).send({ message: 'User not found' });
-    }
-
-    const user_id = results[0].user_id;
-    const deleteQuery = 'DELETE FROM tasks WHERE id = ? AND user_id = ?';
-    
-    // Step 1: Delete the Task
-    connection.query(deleteQuery, [id, user_id], (err, deleteResults) => {
       if (err) {
-        return res.status(500).send(err);
+          return res.status(500).send(err);
+      }
+      if (results.length === 0) {
+          return res.status(404).send({ message: 'User not found' });
       }
 
-      // Step 2: Update Points
-      const pointsQuery = 'SELECT points, updated_at FROM user_points WHERE user_id = ?';
-      connection.query(pointsQuery, [user_id], (err, pointsResults) => {
-        if (err) {
-          return res.status(500).send(err);
-        }
+      const user_id = results[0].user_id;
+      const updateQuery = 'UPDATE tasks SET completed = 1, completed_at = ? WHERE id = ? AND user_id = ?';
+      const completedAt = new Date();
 
-        const currentTime = new Date();
-        const fiveMinutesAgo = new Date(currentTime.getTime() - 5 * 60000); // Subtract 5 minutes
-        let pointsToAdd = 3; // Default points to add
-
-        if (pointsResults.length > 0) {
-          // If user exists, check updated_at timestamp
-          const lastUpdated = new Date(pointsResults[0].updated_at);
-          if (lastUpdated > fiveMinutesAgo) {
-            // If last update was less than 5 minutes ago, add fewer points
-            pointsToAdd = 1; // Or any number you choose
+      // Step 1: Update the Task to Completed
+      connection.query(updateQuery, [completedAt, id, user_id], (err, updateResults) => {
+          if (err) {
+              return res.status(500).send(err);
           }
 
-          // Update points
-          connection.query(
-            'UPDATE user_points SET points = points + ?, updated_at = ? WHERE user_id = ?',
-            [pointsToAdd, currentTime, user_id],
-            (err) => {
+          // Step 2: Update Points
+          const pointsQuery = 'SELECT points, updated_at FROM user_points WHERE user_id = ?';
+          connection.query(pointsQuery, [user_id], (err, pointsResults) => {
               if (err) {
-                return res.status(500).send(err);
+                  return res.status(500).send(err);
               }
-              res.send({ message: 'Task deleted successfully and points updated.' });
-            }
-          );
-        } else {
-          // If user does not exist, insert new record with the points
-          connection.query(
-            'INSERT INTO user_points (user_id, points, updated_at) VALUES (?, ?, ?)',
-            [user_id, pointsToAdd, currentTime],
-            (err) => {
-              if (err) {
-                return res.status(500).send(err);
+
+              const currentTime = new Date();
+              const fiveMinutesAgo = new Date(currentTime.getTime() - 5 * 60000); // Subtract 5 minutes
+              let pointsToAdd = 3; // Default points to add
+
+              if (pointsResults.length > 0) {
+                  // If user exists, check updated_at timestamp
+                  const lastUpdated = new Date(pointsResults[0].updated_at);
+                  if (lastUpdated > fiveMinutesAgo) {
+                      // If last update was less than 5 minutes ago, add fewer points
+                      pointsToAdd = 1; // Or any number you choose
+                  }
+
+                  // Update points
+                  connection.query(
+                      'UPDATE user_points SET points = points + ?, updated_at = ? WHERE user_id = ?',
+                      [pointsToAdd, currentTime, user_id],
+                      (err) => {
+                          if (err) {
+                              return res.status(500).send(err);
+                          }
+                          res.send({ message: 'Task marked as completed and points updated.' });
+                      }
+                  );
+              } else {
+                  // If user does not exist, insert new record with the points
+                  connection.query(
+                      'INSERT INTO user_points (user_id, points, updated_at) VALUES (?, ?, ?)',
+                      [user_id, pointsToAdd, currentTime],
+                      (err) => {
+                          if (err) {
+                              return res.status(500).send(err);
+                          }
+                          res.send({ message: 'Task marked as completed and points added.' });
+                      }
+                  );
               }
-              res.send({ message: 'Task deleted successfully and points added.' });
-            }
-          );
-        }
+          });
       });
-    });
   });
 });
+
 
 
 {/*
