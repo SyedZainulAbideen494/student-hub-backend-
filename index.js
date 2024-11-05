@@ -1694,7 +1694,7 @@ app.get('/quiz/answers/:quizId', async (req, res) => {
       }
       questions[questionId].answers.push({
         answer_text: row.answer_text,
-        is_correct: row.is_correct === '1', // Convert to a boolean
+        is_correct: row.is_correct === 1, // Convert to a boolean
         explanation: row.explanation // Include explanation
       });
     });
