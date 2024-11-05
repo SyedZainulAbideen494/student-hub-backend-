@@ -1653,18 +1653,76 @@ app.post('/createQuiz', async (req, res) => {
   }
 });
 
-app.post('/api/quiz/generate', async (req, res) => {
-  const { subject, topic, token } = req.body; // Get subject and topic directly from the request body
+// Get quiz details including correct and incorrect answers
+app.get('/quiz/answers/:quizId', async (req, res) => {
+  const { quizId } = req.params;
 
   try {
-    // Use helper function to retrieve userId from the token
+    // Fetch quiz title and description
+    const [quizResults] = await connection.promise().query(
+      'SELECT title, description FROM quizzes WHERE id = ?',
+      [quizId]
+    );
+
+    if (quizResults.length === 0) {
+      return res.status(404).json({ message: 'Quiz not found' });
+    }
+
+    const quiz = quizResults[0];
+
+    // Fetch questions, their answers, and explanations for this quiz
+    const [questionsResults] = await connection.promise().query(
+      `SELECT q.id AS question_id, q.question_text, 
+              a.id AS answer_id, a.answer_text, a.is_correct, 
+              ae.explanation 
+       FROM questions q
+       LEFT JOIN answers a ON q.id = a.question_id
+       LEFT JOIN answer_explanations ae ON q.id = ae.question_id AND a.answer_text = ae.answer_text
+       WHERE q.quiz_id = ?`,
+      [quizId]
+    );
+
+    // Organize data into a structured format
+    const questions = {};
+    questionsResults.forEach((row) => {
+      const questionId = row.question_id;
+      if (!questions[questionId]) {
+        questions[questionId] = {
+          question_text: row.question_text,
+          answers: []
+        };
+      }
+      questions[questionId].answers.push({
+        answer_text: row.answer_text,
+        is_correct: row.is_correct === '1', // Convert to a boolean
+        explanation: row.explanation // Include explanation
+      });
+    });
+
+    // Convert the questions object into an array format
+    quiz.questions = Object.values(questions);
+
+    res.json(quiz);
+  } catch (error) {
+    console.error('Error fetching quiz answers:', error);
+    res.status(500).json({ message: 'Error fetching quiz answers' });
+  }
+});
+
+
+app.post('/api/quiz/generate', async (req, res) => {
+  const { subject, topic, token } = req.body;
+
+  try {
+    // Retrieve userId from the token
     const userId = await getUserIdFromToken(token);
 
-    // Step 1: AI prompt to generate 15 MCQ questions with 4 choices and one correct answer
+    // Step 1: Update AI prompt to request explanations for each answer
     const prompt = `Generate a JSON array of 15 multiple-choice questions for the subject: ${subject} and topic: ${topic}. Each question should have:
       - a 'question' field (the question text),
       - an 'options' array with exactly 4 choices,
-      - an 'correct_answer' field with the text of the correct choice.
+      - a 'correct_answer' field with the text of the correct choice,
+      - an 'explanations' object with keys for each option, providing an explanation for why it is correct or incorrect.
       Please avoid including any additional text or Markdown formatting.`;
 
     const chat = model.startChat({
@@ -1683,7 +1741,7 @@ app.post('/api/quiz/generate', async (req, res) => {
     console.log('Generating quiz with prompt:', prompt);
     const result = await chat.sendMessage(prompt);
 
-    // Step 2: Sanitize the response to remove any unwanted characters
+    // Step 2: Sanitize the response
     const sanitizedResponse = result.response.text().replace(/```json|```|`/g, '').trim();
 
     // Step 3: Parse the JSON response
@@ -1704,7 +1762,7 @@ app.post('/api/quiz/generate', async (req, res) => {
     );
     const quizId = quizResult.insertId;
 
-    // Step 5: Insert questions and their options into the database
+    // Step 5: Insert questions, options, and explanations into the database
     for (const question of quizQuestions) {
       const [questionResult] = await connection.promise().query(
         'INSERT INTO questions (quiz_id, question_text) VALUES (?, ?)', 
@@ -1712,13 +1770,26 @@ app.post('/api/quiz/generate', async (req, res) => {
       );
       const questionId = questionResult.insertId;
 
-      question.options.forEach(async (option) => {
+      // Insert options and explanations
+      for (const option of question.options) {
         const isCorrect = option === question.correct_answer;
-        await connection.promise().query(
+        
+        // Insert each answer option into the answers table
+        const [answerResult] = await connection.promise().query(
           'INSERT INTO answers (question_id, answer_text, is_correct) VALUES (?, ?, ?)', 
           [questionId, option, isCorrect]
         );
-      });
+        const answerId = answerResult.insertId;
+
+        // Insert the explanation for each option
+        const explanation = question.explanations[option];
+        if (explanation) {
+          await connection.promise().query(
+            'INSERT INTO answer_explanations (question_id, answer_text, explanation) VALUES (?, ?, ?)',
+            [questionId, option, explanation]
+          );
+        }
+      }
     }
 
     // Step 6: Return the generated quiz details
@@ -1728,6 +1799,7 @@ app.post('/api/quiz/generate', async (req, res) => {
     res.status(500).json({ error: 'Error generating quiz' });
   }
 });
+
 
 
 // Get all quizzes for a user
@@ -4665,6 +4737,35 @@ app.delete('/api/sticky-notes/delete/:noteId', async (req, res) => {
       res.status(401).json({ message: 'Unauthorized' });
   }
 });
+
+
+
+
+// Endpoint to save the drawing, text, and image notes
+app.post('/api/save/canvas', (req, res) => {
+  const { image, notes } = req.body;
+  const query = 'INSERT INTO notes (image, notes) VALUES (?, ?)';
+  
+  connection.query(query, [image, JSON.stringify(notes)], (err, result) => {
+    if (err) return res.status(500).send(err);
+    res.status(200).send({ id: result.insertId });
+  });
+});
+
+app.get('/api/notes/canvas/get', (req, res) => {
+  console.log('Fetching notes...');
+  connection.query('SELECT * FROM notes ORDER BY created_at DESC', (err, results) => {
+      if (err) {
+          console.error('Error fetching notes:', err);
+          return res.status(500).json({ error: err.message });
+      }
+
+      res.json(results);
+  });
+});
+
+
+
 
 
 // Route to send emails to users
