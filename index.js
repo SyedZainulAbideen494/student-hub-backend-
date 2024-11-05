@@ -1712,19 +1712,19 @@ app.get('/quiz/answers/:quizId', async (req, res) => {
   }
 });
 
-
 app.post('/api/quiz/generate', async (req, res) => {
-  const { subject, topic, token } = req.body; // Get subject and topic from the request body
+  const { subject, topic, token } = req.body;
 
   try {
     // Step 1: Use helper function to retrieve userId from the token
     const userId = await getUserIdFromToken(token);
 
-    // Step 2: AI prompt to generate 15 MCQ questions with 4 choices and one correct answer
+    // Step 2: Modify the AI prompt to include explanations for each answer
     const prompt = `Generate a JSON array of 15 multiple-choice questions for the subject: ${subject} and topic: ${topic}. Each question should have:
     - a "question" field (the question text),
     - an "options" array with exactly 4 choices,
-    - a "correct_answer" field with the text of the correct choice.
+    - a "correct_answer" field with the text of the correct choice,
+    - an "explanations" object with explanations for each option, where each key is an option and each value is the explanation for that option.
     Please avoid including any additional text or Markdown formatting.`;
 
     const chat = model.startChat({
@@ -1759,7 +1759,7 @@ app.post('/api/quiz/generate', async (req, res) => {
     );
     const quizId = quizResult.insertId;
 
-    // Step 6: Insert questions and their options into the database
+    // Step 6: Insert questions, options, and explanations into the database
     for (const question of quizQuestions) {
       const [questionResult] = await connection.promise().query(
         'INSERT INTO questions (quiz_id, question_text) VALUES (?, ?)', 
@@ -1769,9 +1769,18 @@ app.post('/api/quiz/generate', async (req, res) => {
 
       for (const option of question.options) {
         const isCorrect = option === question.correct_answer;
+        const explanation = question.explanations[option]; // Get explanation for the option
+
+        // Insert answer options
         await connection.promise().query(
           'INSERT INTO answers (question_id, answer_text, is_correct) VALUES (?, ?, ?)', 
           [questionId, option, isCorrect]
+        );
+
+        // Insert explanation for each answer option
+        await connection.promise().query(
+          'INSERT INTO answer_explanations (question_id, answer_text, explanation) VALUES (?, ?, ?)', 
+          [questionId, option, explanation]
         );
       }
     }
