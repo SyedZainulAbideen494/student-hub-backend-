@@ -4760,10 +4760,34 @@ app.put('/api/sticky-notes/pin/:noteId', async (req, res) => {
   }
 });
 
+// Route to log daily login
+app.post('/login-track', async (req, res) => {
+  try {
+    const token = req.headers.authorization;
+    const userId = await getUserIdFromToken(token); // Get user ID from token
+    const currentDate = new Date().toISOString().slice(0, 10);
+    const currentTime = new Date().toISOString().slice(11, 19);
+
+    // Use the promisified query function to insert the login record
+    const result = await query(
+      `INSERT IGNORE INTO user_logins (user_id, login_date, login_time) VALUES (?, ?, ?)`,
+      [userId, currentDate, currentTime]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(200).json({ message: 'Already logged today' });
+    }
+
+    res.status(201).json({ message: 'Login recorded' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
 // Monthly stats route
 app.post('/api/stats/monthly', async (req, res) => {
   const { token } = req.body;
-  console.log("Received token:", token);
 
   if (!token) {
     return res.status(401).json({ error: 'Token is required' });
@@ -4771,37 +4795,38 @@ app.post('/api/stats/monthly', async (req, res) => {
 
   try {
     const userId = await getUserIdFromToken(token);
-    console.log("Extracted user ID:", userId); // Debugging log for user ID
 
     const currentTime = Math.floor(Date.now() / 1000); // Get current time in seconds
-    const decoded = jwt.decode(token, 'your_secret_key');
-    if (decoded.exp < currentTime) {
-      return res.status(401).json({ error: 'Token has expired' });
-    }
 
     // Fetch stats from the database for the current month
-    const completedTasks = await db.promise().query(
-      'SELECT COUNT(*) AS total_completed FROM tasks WHERE complete = 1 AND user_id = ? AND MONTH(updated_at) = MONTH(CURDATE()) AND YEAR(updated_at) = YEAR(CURDATE())',
+    const completedTasks = await connection.promise().query(
+      'SELECT COUNT(*) AS total_completed FROM tasks WHERE completed = 1 AND user_id = ? AND MONTH(completed_at) = MONTH(CURDATE()) AND YEAR(completed_at) = YEAR(CURDATE())',
       [userId]
     );
 
-    const pendingTasks = await db.promise().query(
-      'SELECT COUNT(*) AS total_pending FROM tasks WHERE complete = 0 AND user_id = ? AND MONTH(updated_at) = MONTH(CURDATE()) AND YEAR(updated_at) = YEAR(CURDATE())',
+    const pendingTasks = await connection.promise().query(
+      'SELECT COUNT(*) AS total_pending FROM tasks WHERE completed = 0 AND user_id = ? AND MONTH(created_at) = MONTH(CURDATE()) AND YEAR(created_at) = YEAR(CURDATE())',
       [userId]
     );
 
-    const pomodoroSessions = await db.promise().query(
+    const pomodoroSessions = await connection.promise().query(
       'SELECT COUNT(*) AS total_sessions FROM pomodoro_sessions WHERE user_id = ? AND MONTH(start_time) = MONTH(CURDATE()) AND YEAR(start_time) = YEAR(CURDATE())',
       [userId]
     );
 
-    const quizzes = await db.promise().query(
+    const quizzes = await connection.promise().query(
       'SELECT AVG(score) AS average_score, COUNT(*) AS quizzes_attended FROM user_quizzes WHERE user_id = ? AND MONTH(completed_at) = MONTH(CURDATE()) AND YEAR(completed_at) = YEAR(CURDATE())',
       [userId]
     );
 
-    const aiInteractions = await db.promise().query(
+    const aiInteractions = await connection.promise().query(
       'SELECT COUNT(*) AS total_interactions FROM ai_history WHERE user_id = ? AND MONTH(created_at) = MONTH(CURDATE()) AND YEAR(created_at) = YEAR(CURDATE())',
+      [userId]
+    );
+
+    // New query to fetch the number of daily logins for the current month
+    const dailyLogins = await connection.promise().query(
+      'SELECT COUNT(DISTINCT login_date) AS daily_logins FROM user_logins WHERE user_id = ? AND MONTH(login_date) = MONTH(CURDATE()) AND YEAR(login_date) = YEAR(CURDATE())',
       [userId]
     );
 
@@ -4812,10 +4837,10 @@ app.post('/api/stats/monthly', async (req, res) => {
       averageQuizScore: quizzes[0][0].average_score || 0,
       quizzesAttended: quizzes[0][0].quizzes_attended,
       aiInteractions: aiInteractions[0][0].total_interactions,
+      dailyLogins: dailyLogins[0][0].daily_logins,
     };
     
-    console.log(statsData); // Log the data to the console
-    res.json(statsData);    // Send the data in the response
+    res.json(statsData);
     
   } catch (error) {
     console.error("Error fetching stats:", error); // Debugging log
