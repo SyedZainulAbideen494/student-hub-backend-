@@ -1713,18 +1713,17 @@ app.get('/quiz/answers/:quizId', async (req, res) => {
 });
 
 app.post('/api/quiz/generate', async (req, res) => {
-  const { subject, topic, token } = req.body;
+  const { subject, topic, token } = req.body; // Get subject, topic, and token from the request body
 
   try {
     // Step 1: Use helper function to retrieve userId from the token
     const userId = await getUserIdFromToken(token);
 
-    // Step 2: Modify the AI prompt to include explanations for each answer
+    // Step 2: Define the AI prompt to generate 15 MCQ questions with 4 choices each
     const prompt = `Generate a JSON array of 15 multiple-choice questions for the subject: ${subject} and topic: ${topic}. Each question should have:
     - a "question" field (the question text),
     - an "options" array with exactly 4 choices,
-    - a "correct_answer" field with the text of the correct choice,
-    - an "explanations" object with explanations for each option, where each key is an option and each value is the explanation for that option.
+    - a "correct_answer" field with the text of the correct choice.
     Please avoid including any additional text or Markdown formatting.`;
 
     const chat = model.startChat({
@@ -1736,10 +1735,10 @@ app.post('/api/quiz/generate', async (req, res) => {
 
     console.log('Generating quiz with prompt:', prompt);
     const result = await chat.sendMessage(prompt);
-    const rawResponse = result.response.text();
+    const rawResponse = await result.response.text();
 
-    // Step 3: Sanitize the response
-    const sanitizedResponse = rawResponse.replace(/```json|```/g, '').trim();
+    // Step 3: Sanitize the response by removing any unwanted characters
+    const sanitizedResponse = rawResponse.trim();
 
     // Step 4: Parse the JSON response
     let quizQuestions;
@@ -1759,7 +1758,7 @@ app.post('/api/quiz/generate', async (req, res) => {
     );
     const quizId = quizResult.insertId;
 
-    // Step 6: Insert questions, options, and explanations into the database
+    // Step 6: Insert questions and their options into the database
     for (const question of quizQuestions) {
       const [questionResult] = await connection.promise().query(
         'INSERT INTO questions (quiz_id, question_text) VALUES (?, ?)', 
@@ -1769,18 +1768,9 @@ app.post('/api/quiz/generate', async (req, res) => {
 
       for (const option of question.options) {
         const isCorrect = option === question.correct_answer;
-        const explanation = question.explanations[option]; // Get explanation for the option
-
-        // Insert answer options
         await connection.promise().query(
           'INSERT INTO answers (question_id, answer_text, is_correct) VALUES (?, ?, ?)', 
           [questionId, option, isCorrect]
-        );
-
-        // Insert explanation for each answer option
-        await connection.promise().query(
-          'INSERT INTO answer_explanations (question_id, answer_text, explanation) VALUES (?, ?, ?)', 
-          [questionId, option, explanation]
         );
       }
     }
@@ -1792,6 +1782,7 @@ app.post('/api/quiz/generate', async (req, res) => {
     res.status(500).json({ error: 'Error generating quiz' });
   }
 });
+
 
 
 
@@ -3661,10 +3652,8 @@ app.post('/api/start/pomodoro', async (req, res) => {
 
   try {
     const userId = await getUserIdFromToken(token);
-    // Log start for userId
     console.log(`Pomodoro started for user: ${userId}`);
 
-    // Check the `updated_at` column to see when the last session was
     const lastSessionQuery = 'SELECT updated_at FROM user_points WHERE user_id = ?';
     const [lastSessionResults] = await connection.promise().query(lastSessionQuery, [userId]);
 
@@ -3674,25 +3663,26 @@ app.post('/api/start/pomodoro', async (req, res) => {
       const now = new Date();
       const differenceInMinutes = Math.floor((now - lastUpdated) / 1000 / 60);
 
-      // If the last session was less than 25 minutes ago, don't award points
       if (differenceInMinutes < 25) {
         canAwardPoints = false;
       }
     }
 
     if (canAwardPoints) {
-      // Update or insert points
       const pointsQuery = 'SELECT * FROM user_points WHERE user_id = ?';
       const [pointsResults] = await connection.promise().query(pointsQuery, [userId]);
 
       if (pointsResults.length > 0) {
-        // If user exists, update points
         await connection.promise().query('UPDATE user_points SET points = points + 5 WHERE user_id = ?', [userId]);
       } else {
-        // If user does not exist, insert new record with 5 points
         await connection.promise().query('INSERT INTO user_points (user_id, points) VALUES (?, ?)', [userId, 5]);
       }
     }
+
+    // Insert a new Pomodoro session record
+    const insertSessionQuery = 'INSERT INTO pomodoro_sessions (user_id, start_time, duration) VALUES (?, ?, ?)';
+    const duration = 25; // Assuming a standard Pomodoro duration
+    await connection.promise().query(insertSessionQuery, [userId, new Date(), duration]);
 
     res.status(200).json({ message: 'Pomodoro started' });
   } catch (error) {
@@ -3700,6 +3690,7 @@ app.post('/api/start/pomodoro', async (req, res) => {
     res.status(403).json({ message: 'Invalid token' });
   }
 });
+
 
 // Stop Pomodoro
 app.post('/api/stop/pomodoro', async (req, res) => {
@@ -4769,8 +4760,68 @@ app.put('/api/sticky-notes/pin/:noteId', async (req, res) => {
   }
 });
 
+// Monthly stats route
+app.post('/api/stats/monthly', async (req, res) => {
+  const { token } = req.body;
+  console.log("Received token:", token);
 
+  if (!token) {
+    return res.status(401).json({ error: 'Token is required' });
+  }
 
+  try {
+    const userId = await getUserIdFromToken(token);
+    console.log("Extracted user ID:", userId); // Debugging log for user ID
+
+    const currentTime = Math.floor(Date.now() / 1000); // Get current time in seconds
+    const decoded = jwt.decode(token, 'your_secret_key');
+    if (decoded.exp < currentTime) {
+      return res.status(401).json({ error: 'Token has expired' });
+    }
+
+    // Fetch stats from the database for the current month
+    const completedTasks = await db.promise().query(
+      'SELECT COUNT(*) AS total_completed FROM tasks WHERE complete = 1 AND user_id = ? AND MONTH(updated_at) = MONTH(CURDATE()) AND YEAR(updated_at) = YEAR(CURDATE())',
+      [userId]
+    );
+
+    const pendingTasks = await db.promise().query(
+      'SELECT COUNT(*) AS total_pending FROM tasks WHERE complete = 0 AND user_id = ? AND MONTH(updated_at) = MONTH(CURDATE()) AND YEAR(updated_at) = YEAR(CURDATE())',
+      [userId]
+    );
+
+    const pomodoroSessions = await db.promise().query(
+      'SELECT COUNT(*) AS total_sessions FROM pomodoro_sessions WHERE user_id = ? AND MONTH(start_time) = MONTH(CURDATE()) AND YEAR(start_time) = YEAR(CURDATE())',
+      [userId]
+    );
+
+    const quizzes = await db.promise().query(
+      'SELECT AVG(score) AS average_score, COUNT(*) AS quizzes_attended FROM user_quizzes WHERE user_id = ? AND MONTH(completed_at) = MONTH(CURDATE()) AND YEAR(completed_at) = YEAR(CURDATE())',
+      [userId]
+    );
+
+    const aiInteractions = await db.promise().query(
+      'SELECT COUNT(*) AS total_interactions FROM ai_history WHERE user_id = ? AND MONTH(created_at) = MONTH(CURDATE()) AND YEAR(created_at) = YEAR(CURDATE())',
+      [userId]
+    );
+
+    const statsData = {
+      totalCompletedTasks: completedTasks[0][0].total_completed,
+      totalPendingTasks: pendingTasks[0][0].total_pending,
+      pomodoroSessions: pomodoroSessions[0][0].total_sessions,
+      averageQuizScore: quizzes[0][0].average_score || 0,
+      quizzesAttended: quizzes[0][0].quizzes_attended,
+      aiInteractions: aiInteractions[0][0].total_interactions,
+    };
+    
+    console.log(statsData); // Log the data to the console
+    res.json(statsData);    // Send the data in the response
+    
+  } catch (error) {
+    console.error("Error fetching stats:", error); // Debugging log
+    res.status(401).json({ error: 'Unauthorized: ' + error.message });
+  }
+});
 
 // Endpoint to save the drawing, text, and image notes
 app.post('/api/save/canvas', (req, res) => {
