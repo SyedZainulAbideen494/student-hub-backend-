@@ -4256,7 +4256,6 @@ app.post('/addStory', upload.single('file'), async (req, res) => {
   }
 });
 
-
 app.post('/api/tasks/generate', async (req, res) => {
   const { mainTask, days, token, taskStyle } = req.body;
 
@@ -4266,8 +4265,11 @@ app.post('/api/tasks/generate', async (req, res) => {
       return res.status(401).json({ error: 'Invalid token or user not found' });
     }
 
+    // Get today's date in YYYY-MM-DD format
+    const todayDate = new Date().toISOString().split('T')[0];
+
     const prompt = taskStyle === 'detailed'
-      ? `Create a highly detailed and structured task plan in JSON format, breaking down the main task: "${mainTask}" to be completed within ${days} days. This plan should guide the user through each step in a way that makes completing the task both achievable and straightforward. Each task should have carefully spaced due dates over the ${days} days, starting from today (${new Date().toISOString().split('T')[0]}), and should include the following fields:
+      ? `Create a highly detailed and structured task plan in JSON format, breaking down the main task: "${mainTask}" to be completed within ${days} days. This plan should guide the user through each step in a way that makes completing the task both achievable and straightforward. Each task should have carefully spaced due dates over the ${days} days, starting from today (${todayDate}), and should include the following fields:
           - A 'title' that concisely summarizes the specific action to be taken.
           - A 'description' with clear, actionable steps, any necessary resources, helpful suggestions, and motivational reminders where relevant to enhance task completion. Descriptions should be specific enough for easy follow-through.
           - A 'due_date' in YYYY-MM-DD format.
@@ -4282,9 +4284,9 @@ app.post('/api/tasks/generate', async (req, res) => {
           5. Aim for a balanced, manageable workload each day, with realistic task prioritization that helps the user stay on track without feeling overwhelmed.
           
           Generate a sequence of action-oriented and result-driven tasks, giving the user a clear, motivating, and sustainable path to achieve the main task in an organized, thorough, and user-friendly manner.`
-      : `Create a concise task plan in JSON format, breaking down the main task: "${mainTask}" into simple steps for completion within ${days} days. The task plan should include:
+          : `Create a concise task plan in JSON format, breaking down the main task: "${mainTask}" into simple steps for completion within ${days} days. The task plan should include:
           - 'title' summarizing each action
-          - 'due_date' in YYYY-MM-DD format
+          - 'due_date' in YYYY-MM-DD format, starting from today (${todayDate})
           - Minimal 'description' with only essential steps or resources.`;
 
     const chat = model.startChat({
