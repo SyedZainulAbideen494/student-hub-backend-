@@ -4780,7 +4780,6 @@ app.post('/login-track', async (req, res) => {
 
     res.status(201).json({ message: 'Login recorded' });
   } catch (error) {
-    console.error(error);
     res.status(500).json({ message: 'Internal Server Error' });
   }
 });
