@@ -4132,29 +4132,25 @@ app.delete('/api/flashcards/set/delete/:id', async (req, res) => {
 // API endpoint to create a subject
 app.post('/api/create-subject', async (req, res) => {
   const token = req.headers.authorization?.split(' ')[1]; // Extract token from header
-  const { subjectName, iconId, color } = req.body; // Destructure iconId and color from the request body
+  const { subjectName } = req.body;
 
   if (!token) {
-    return res.status(401).json({ message: 'Token is required' });
+      return res.status(401).json({ message: 'Token is required' });
   }
 
   try {
-    // Retrieve userId from the token (assuming you have a function to do this)
-    const userId = await getUserIdFromToken(token);
+      const userId = await getUserIdFromToken(token); // Get userId from token
 
-    // Insert the subject into the database using the query helper function
-    const result = await query(
-      'INSERT INTO subjects (name, icon_id, color, user_id) VALUES (?, ?, ?, ?)',
-      [subjectName, iconId, color, userId]
-    );
+      // Insert subject into the database
+      const result = await query('INSERT INTO subjects (user_id, name) VALUES (?, ?)', [userId, subjectName]);
 
-    res.status(201).json({ message: 'Subject created successfully', subjectId: result.insertId });
+      // Respond with the created subject
+      return res.status(201).json({ subject: { id: result.insertId, userId, name: subjectName } });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Failed to create subject' });
+      console.error(error);
+      return res.status(500).json({ message: 'Internal server error' });
   }
 });
-
 
 
 app.get('/api/get/user/subjects', (req, res) => {
@@ -4878,28 +4874,6 @@ app.post('/api/stats/monthly', async (req, res) => {
   }
 });
 
-// Endpoint to save the drawing, text, and image notes
-app.post('/api/save/canvas', (req, res) => {
-  const { image, notes } = req.body;
-  const query = 'INSERT INTO notes (image, notes) VALUES (?, ?)';
-  
-  connection.query(query, [image, JSON.stringify(notes)], (err, result) => {
-    if (err) return res.status(500).send(err);
-    res.status(200).send({ id: result.insertId });
-  });
-});
-
-app.get('/api/notes/canvas/get', (req, res) => {
-  console.log('Fetching notes...');
-  connection.query('SELECT * FROM notes ORDER BY created_at DESC', (err, results) => {
-      if (err) {
-          console.error('Error fetching notes:', err);
-          return res.status(500).json({ error: err.message });
-      }
-
-      res.json(results);
-  });
-});
 
 app.post('/api/streak', async (req, res) => {
   const { token } = req.body; // Get the token from the body
@@ -4991,6 +4965,35 @@ app.post('/api/streak', async (req, res) => {
     res.status(500).json({ error: 'Error fetching streak data' });
   }
 });
+
+
+
+// Endpoint to save the drawing, text, and image notes
+app.post('/api/save/canvas', (req, res) => {
+  const { image, notes } = req.body;
+  const query = 'INSERT INTO notes (image, notes) VALUES (?, ?)';
+  
+  connection.query(query, [image, JSON.stringify(notes)], (err, result) => {
+    if (err) return res.status(500).send(err);
+    res.status(200).send({ id: result.insertId });
+  });
+});
+
+app.get('/api/notes/canvas/get', (req, res) => {
+  console.log('Fetching notes...');
+  connection.query('SELECT * FROM notes ORDER BY created_at DESC', (err, results) => {
+      if (err) {
+          console.error('Error fetching notes:', err);
+          return res.status(500).json({ error: err.message });
+      }
+
+      res.json(results);
+  });
+});
+
+
+
+
 
 // Route to send emails to users
 app.post('/send-emails/all-users/admin', async (req, res) => {
