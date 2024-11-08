@@ -115,7 +115,7 @@ connection.getConnection((err) => {
   }
 });
 
-const BASE_URL = 'https://dropment.online';
+const BASE_URL = 'https://srv594954.hstgr.cloud';
 const FRONTEND_BASE_URL = 'https://edusify.vercel.app'; // Update this if your frontend runs on a different URL
 
 // Backend success and cancel URLs
@@ -2040,19 +2040,6 @@ app.post('/api/addEvent', async (req, res) => {
 
 
 
-app.post('/api/fetchUserActivities', async (req, res) => {
-  const { token } = req.body;
-  try {
-      const userId = await getUserIdFromToken(token);
-      const sql = 'SELECT * FROM user_quizzes WHERE user_id = ?';
-      connection.query(sql, [userId], (err, result) => {
-          if (err) return res.status(500).send(err);
-          res.send(result);
-      });
-  } catch (error) {
-      res.status(401).send(error.message);
-  }
-});
 
 // Remove Event
 app.post('/api/events/remove', async (req, res) => {
@@ -2098,6 +2085,21 @@ app.post('/api/events/update', (req, res) => {
       if (err) throw err;
       res.json({ success: true });
   });
+});
+
+
+app.post('/api/fetchUserActivities', async (req, res) => {
+  const { token } = req.body;
+  try {
+      const userId = await getUserIdFromToken(token);
+      const sql = 'SELECT * FROM user_quizzes WHERE user_id = ?';
+      connection.query(sql, [userId], (err, result) => {
+          if (err) return res.status(500).send(err);
+          res.send(result);
+      });
+  } catch (error) {
+      res.status(401).send(error.message);
+  }
 });
 
 // Improved API endpoint for validating token session
@@ -3851,7 +3853,7 @@ app.get('/api/flashcards/view/individual/:id', (req, res) => {
 });
 
 
-// API to fetch all flashcard sets for a user
+// API to fetch all flashcard sets and statistics for a user
 app.post('/api/flashcard-sets', async (req, res) => {
   const { token } = req.body; // Extract token from the body
 
@@ -3863,10 +3865,34 @@ app.post('/api/flashcard-sets', async (req, res) => {
     // Ensure that getUserIdFromToken is an async function and return the user ID correctly
     const userId = await getUserIdFromToken(token); // Await the promise here
 
-    const queryText = 'SELECT * FROM flashcard_sets WHERE user_id = ?'; // Ensure this query is correct
-    const results = await query(queryText, [userId]); // Use the query function
+    // Query to get all flashcard sets for the user
+    const querySetsText = 'SELECT * FROM flashcard_sets WHERE user_id = ?';
+    const sets = await query(querySetsText, [userId]); // Fetch all sets
 
-    res.json({ sets: results }); // Return sets for the user
+    // Query to get the counts for flashcards based on status (I Know, I Don't Know)
+    const queryFlashcardsStatsText = `
+      SELECT 
+        COUNT(*) AS totalFlashcards, 
+        SUM(CASE WHEN fc.status = 'I Know' THEN 1 ELSE 0 END) AS flashcardsYouKnow,
+        SUM(CASE WHEN fc.status = 'I Don''t Know' THEN 1 ELSE 0 END) AS flashcardsYouDontKnow
+      FROM flashcard AS fc
+      JOIN flashcard_sets AS fs ON fc.set_id = fs.id
+      WHERE fs.user_id = ?`;
+
+    const flashcardStats = await query(queryFlashcardsStatsText, [userId]); // Get stats for flashcards
+
+    // Query to count the total number of flashcard sets
+    const totalSetsCountText = 'SELECT COUNT(*) AS totalSets FROM flashcard_sets WHERE user_id = ?';
+    const totalSets = await query(totalSetsCountText, [userId]); // Get total number of flashcard sets
+
+    // Return the data including sets and stats
+    res.json({
+      sets: sets, // Return all sets for the user
+      totalFlashcards: flashcardStats[0].totalFlashcards, // Total flashcards count
+      flashcardsYouKnow: flashcardStats[0].flashcardsYouKnow, // "I Know" count
+      flashcardsYouDontKnow: flashcardStats[0].flashcardsYouDontKnow, // "I Don't Know" count
+      totalSets: totalSets[0].totalSets // Total sets count
+    });
   } catch (error) {
     console.error('Error:', error.message); // Log any errors
     res.status(500).json({ error: 'An error occurred while fetching flashcard sets.' });
@@ -4106,25 +4132,29 @@ app.delete('/api/flashcards/set/delete/:id', async (req, res) => {
 // API endpoint to create a subject
 app.post('/api/create-subject', async (req, res) => {
   const token = req.headers.authorization?.split(' ')[1]; // Extract token from header
-  const { subjectName } = req.body;
+  const { subjectName, iconId, color } = req.body; // Destructure iconId and color from the request body
 
   if (!token) {
-      return res.status(401).json({ message: 'Token is required' });
+    return res.status(401).json({ message: 'Token is required' });
   }
 
   try {
-      const userId = await getUserIdFromToken(token); // Get userId from token
+    // Retrieve userId from the token (assuming you have a function to do this)
+    const userId = await getUserIdFromToken(token);
 
-      // Insert subject into the database
-      const result = await query('INSERT INTO subjects (user_id, name) VALUES (?, ?)', [userId, subjectName]);
+    // Insert the subject into the database using the query helper function
+    const result = await query(
+      'INSERT INTO subjects (name, icon_id, color, user_id) VALUES (?, ?, ?, ?)',
+      [subjectName, iconId, color, userId]
+    );
 
-      // Respond with the created subject
-      return res.status(201).json({ subject: { id: result.insertId, userId, name: subjectName } });
+    res.status(201).json({ message: 'Subject created successfully', subjectId: result.insertId });
   } catch (error) {
-      console.error(error);
-      return res.status(500).json({ message: 'Internal server error' });
+    console.error(error);
+    res.status(500).json({ message: 'Failed to create subject' });
   }
 });
+
 
 
 app.get('/api/get/user/subjects', (req, res) => {
