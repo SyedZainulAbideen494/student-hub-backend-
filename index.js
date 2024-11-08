@@ -4797,13 +4797,12 @@ app.post('/login-track', async (req, res) => {
   try {
     const token = req.headers.authorization;
     const userId = await getUserIdFromToken(token); // Get user ID from token
-    const currentDate = new Date().toISOString().slice(0, 10);
-    const currentTime = new Date().toISOString().slice(11, 19);
 
-    // Use the promisified query function to insert the login record
+    // Use the promisified query function to insert the login record, using NOW() to get the current timestamp
     const result = await query(
-      `INSERT IGNORE INTO user_logins (user_id, login_date, login_time) VALUES (?, ?, ?)`,
-      [userId, currentDate, currentTime]
+      `INSERT IGNORE INTO user_logins (user_id, login_date, login_time) 
+       VALUES (?, CURDATE(), CURTIME())`,
+      [userId]
     );
 
     if (result.affectedRows === 0) {
@@ -4902,9 +4901,96 @@ app.get('/api/notes/canvas/get', (req, res) => {
   });
 });
 
+app.post('/api/streak', async (req, res) => {
+  const { token } = req.body; // Get the token from the body
 
+  try {
+    const userId = await getUserIdFromToken(token); // Get user_id from the token
 
+    // Check if the user has completed the task today
+    const taskResults = await new Promise((resolve, reject) => {
+      connection.query(`
+        SELECT COUNT(*) as task_streak
+        FROM tasks
+        WHERE user_id = ? 
+        AND DATE(completed_at) = CURDATE()`, [userId], (err, results) => {
+        if (err) reject(err);
+        resolve(results);
+      });
+    });
 
+    // Check if the user has logged in today
+    const loginResults = await new Promise((resolve, reject) => {
+      connection.query(`
+        SELECT COUNT(*) as login_streak
+        FROM user_logins
+        WHERE user_id = ?
+        AND login_date = CURDATE()`, [userId], (err, results) => {
+        if (err) reject(err);
+        resolve(results);
+      });
+    });
+
+    // Get the last login date to calculate consecutive days
+    const lastLoginResults = await new Promise((resolve, reject) => {
+      connection.query(`
+        SELECT login_date
+        FROM user_logins
+        WHERE user_id = ?
+        ORDER BY login_date DESC LIMIT 1`, [userId], (err, results) => {
+        if (err) reject(err);
+        resolve(results);
+      });
+    });
+
+    const today = new Date();
+    const lastLoginDate = new Date(lastLoginResults[0]?.login_date);
+
+    // Check if the login was on the previous day or if there is a break
+    let consecutiveDays = 0;
+    if (lastLoginDate) {
+      const dayDifference = (today - lastLoginDate) / (1000 * 3600 * 24);
+      if (dayDifference === 1) {
+        consecutiveDays = 1; // Continuation of streak
+      } else if (dayDifference > 1) {
+        consecutiveDays = 0; // Streak broken
+      }
+    }
+
+    // If the user has completed today's task and logged in today, continue the streak
+    const taskStreak = taskResults[0].task_streak > 0 ? 1 : 0;
+    const loginStreak = loginResults[0].login_streak > 0 ? 1 : 0;
+    if (taskStreak > 0 && loginStreak > 0) {
+      consecutiveDays += 1; // Increment consecutive days streak if both conditions are met
+    }
+
+    // Update the streak in the database
+    await new Promise((resolve, reject) => {
+      connection.query(`
+        UPDATE users
+        SET consecutive_streak = ?
+        WHERE user_id = ?`, [consecutiveDays, userId], (err, results) => {
+        if (err) reject(err);
+        resolve(results);
+      });
+    });
+
+    // Streak message
+    let streakMessage = `You have maintained a streak for ${consecutiveDays} day(s)! 🎉`;
+    if (taskStreak > 0) streakMessage += `✨ Task: ✅`;
+    if (loginStreak > 0) streakMessage += `✨ Login: 🏅`;
+
+    // Send the response
+    res.json({
+      streakMessage,
+      streakCount: consecutiveDays,
+      taskStreak,
+      loginStreak,
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Error fetching streak data' });
+  }
+});
 
 // Route to send emails to users
 app.post('/send-emails/all-users/admin', async (req, res) => {
