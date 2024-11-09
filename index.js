@@ -2925,49 +2925,51 @@ async function getFallbackData(query) {
   }
 }
 
-
 const generateToken = () => crypto.randomBytes(20).toString('hex');
 
 // Forgot Password Route
-app.post('/api/auth/forgot-password', (req, res) => {
-  const { emailOrPhone } = req.body;
-  connection.query('SELECT * FROM users WHERE email = ? OR phone_number = ?', [emailOrPhone, emailOrPhone], (err, results) => {
-    if (err) return res.status(500).json({ error: 'Database error' });
-    if (results.length === 0) return res.status(404).json({ error: 'User not found' });
+app.post('/api/auth/forgot-password', async (req, res) => {
+  try {
+    const { emailOrPhone } = req.body;
+    const [userResults] = await connection.promise().query(
+      'SELECT * FROM users WHERE email = ? OR phone_number = ?',
+      [emailOrPhone, emailOrPhone]
+    );
 
-    const user = results[0];
+    if (userResults.length === 0) return res.status(404).json({ error: 'User not found' });
+
+    const user = userResults[0];
     const token = generateToken();
     const resetLink = `https://edusify.vercel.app/reset-password/${token}`;
+    const expirationTime = new Date(Date.now() + 3600000);
 
-    // Store the token in the database
-    connection.query('INSERT INTO password_resets (email, token, expires_at) VALUES (?, ?, ?)', [user.email, token, new Date(Date.now() + 3600000)], (err) => {
-      if (err) return res.status(500).json({ error: 'Database error' });
+    await connection.promise().query(
+      'INSERT INTO password_resets (email, token, expires_at) VALUES (?, ?, ?)',
+      [user.email, token, expirationTime]
+    );
 
-      // Send email
-      const mailOptions = {
-        to: user.email,
-        from: 'support@edusify.com',
-        subject: 'Password Reset Request',
-        html: `
-          <p>Hi ${user.name || 'there'},</p>
-          <p>We received a request to reset your password. Click the button below to reset your password:</p>
-          <a href="${resetLink}" style="display: inline-block; padding: 10px 20px; font-size: 16px; color: #fff; background-color: #4CAF50; text-decoration: none; border-radius: 5px;">Reset Password</a>
-          <p>If you didn't request this, please ignore this email.</p>
-          <p>Best regards,<br>Your Edusify Team</p>
-        `
-      };
+    // Send the email in a non-blocking way
+    const mailOptions = {
+      to: user.email,
+      from: 'support@edusify.com',
+      subject: 'Password Reset Request',
+      text: `Hi ${user.name || 'there'},\n\nWe received a request to reset your password. You can reset it by clicking on the link below:\n\n${resetLink}\n\nIf you did not request this, please ignore this email.\n\nBest regards,\nYour Edusify Team`
+    };
 
-      transporter.sendMail(mailOptions, (err, info) => {
-        if (err) {
-          console.log('Error sending email:', err);
-          return res.status(500).json({ error: 'Error sending email' });
-        }
-        console.log('Email sent:', info.response);
-        res.status(200).json({ message: 'Reset link sent' });
-      });
+    transporter.sendMail(mailOptions, (err, info) => {
+      if (err) {
+        console.log('Error sending email:', err);
+        return res.status(500).json({ error: 'Error sending email' });
+      }
+      console.log('Email sent:', info.response);
+      res.status(200).json({ message: 'Reset link sent' });
     });
-  });
+  } catch (err) {
+    console.error('Error in forgot password route:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
+
 
 // Reset Password Route
 app.post('/api/auth/reset-password', (req, res) => {
