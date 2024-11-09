@@ -4876,98 +4876,45 @@ app.post('/api/stats/monthly', async (req, res) => {
   }
 });
 
-
 app.post('/api/streak', async (req, res) => {
-  const { token } = req.body; // Get the token from the body
+  const { token } = req.body;
 
   try {
-    const userId = await getUserIdFromToken(token); // Get user_id from the token
+    const userId = await getUserIdFromToken(token);
+    if (!userId) {
+      console.error('Invalid token or user ID not found.');
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
 
-    // Check if the user has completed the task today
-    const taskResults = await new Promise((resolve, reject) => {
-      connection.query(`
-        SELECT COUNT(*) as task_streak
-        FROM tasks
-        WHERE user_id = ? 
-        AND DATE(completed_at) = CURDATE()`, [userId], (err, results) => {
-        if (err) reject(err);
-        resolve(results);
-      });
-    });
-
-    // Check if the user has logged in today
-    const loginResults = await new Promise((resolve, reject) => {
-      connection.query(`
-        SELECT COUNT(*) as login_streak
-        FROM user_logins
-        WHERE user_id = ?
-        AND login_date = CURDATE()`, [userId], (err, results) => {
-        if (err) reject(err);
-        resolve(results);
-      });
-    });
-
-    // Get the last login date to calculate consecutive days
-    const lastLoginResults = await new Promise((resolve, reject) => {
-      connection.query(`
-        SELECT login_date
-        FROM user_logins
-        WHERE user_id = ?
-        ORDER BY login_date DESC LIMIT 1`, [userId], (err, results) => {
-        if (err) reject(err);
-        resolve(results);
-      });
-    });
-
+    // Get the current week dates (Monday to Sunday)
     const today = new Date();
-    const lastLoginDate = new Date(lastLoginResults[0]?.login_date);
+    const startOfWeek = new Date(today.setDate(today.getDate() - today.getDay() + 1)); // Monday
+    const weekDays = Array.from({ length: 7 }, (_, i) => new Date(startOfWeek.getTime() + i * 86400000));
 
-    // Check if the login was on the previous day or if there is a break
-    let consecutiveDays = 0;
-    if (lastLoginDate) {
-      const dayDifference = (today - lastLoginDate) / (1000 * 3600 * 24);
-      if (dayDifference === 1) {
-        consecutiveDays = 1; // Continuation of streak
-      } else if (dayDifference > 1) {
-        consecutiveDays = 0; // Streak broken
-      }
-    }
+    // Fetch streak data for the current week
+    const streakWeekData = await Promise.all(weekDays.map(async (date) => {
+      const dateString = date.toISOString().split('T')[0];
+      
+      const [taskResult, loginResult] = await Promise.all([
+        query(`SELECT COUNT(*) as task_streak FROM tasks WHERE user_id = ? AND DATE(completed_at) = ?`, [userId, dateString]),
+        query(`SELECT COUNT(*) as login_streak FROM user_logins WHERE user_id = ? AND login_date = ?`, [userId, dateString]),
+      ]);
 
-    // If the user has completed today's task and logged in today, continue the streak
-    const taskStreak = taskResults[0].task_streak > 0 ? 1 : 0;
-    const loginStreak = loginResults[0].login_streak > 0 ? 1 : 0;
-    if (taskStreak > 0 && loginStreak > 0) {
-      consecutiveDays += 1; // Increment consecutive days streak if both conditions are met
-    }
+      return taskResult[0]?.task_streak > 0 && loginResult[0]?.login_streak > 0;
+    }));
 
-    // Update the streak in the database
-    await new Promise((resolve, reject) => {
-      connection.query(`
-        UPDATE users
-        SET consecutive_streak = ?
-        WHERE user_id = ?`, [consecutiveDays, userId], (err, results) => {
-        if (err) reject(err);
-        resolve(results);
-      });
-    });
+    const streakMessage = `You have maintained a streak for ${streakWeekData.filter(Boolean).length} day(s)! 🎉`;
 
-    // Streak message
-    let streakMessage = `You have maintained a streak for ${consecutiveDays} day(s)! 🎉`;
-    if (taskStreak > 0) streakMessage += `✨ Task: ✅`;
-    if (loginStreak > 0) streakMessage += `✨ Login: 🏅`;
-
-    // Send the response
     res.json({
       streakMessage,
-      streakCount: consecutiveDays,
-      taskStreak,
-      loginStreak,
+      streakCount: streakWeekData.filter(Boolean).length,
+      streakWeekData,
     });
   } catch (err) {
-    res.status(500).json({ error: 'Error fetching streak data' });
+    console.error('Server error:', err.message);
+    res.status(500).json({ error: 'Error fetching streak data', details: err.message });
   }
 });
-
 
 
 // Endpoint to save the drawing, text, and image notes
