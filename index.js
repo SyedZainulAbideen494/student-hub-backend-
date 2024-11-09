@@ -431,7 +431,7 @@ app.post("/verify-otp", (req, res) => {
 });
 
 app.post('/add/tasks', async (req, res) => {
-  const { title, description, due_date, priority, token } = req.body;
+  const { title, description, due_date, priority, email_reminder, token } = req.body;
 
   try {
     // Step 1: Get User ID
@@ -447,16 +447,15 @@ app.post('/add/tasks', async (req, res) => {
     const user_id = userResults[0].user_id;
 
     // Step 2: Handle due_date
-    // If due_date is not provided, set it to the current date and time
     const formattedDueDate = due_date ? due_date : new Date().toISOString().slice(0, 19).replace('T', ' ');
 
-    // Step 3: Insert Task
+    // Step 3: Insert Task with email reminder
     const [insertResults] = await connection.promise().query(
-      'INSERT INTO tasks (title, description, due_date, priority, user_id) VALUES (?, ?, ?, ?, ?)',
-      [title, description, formattedDueDate, priority, user_id]
+      'INSERT INTO tasks (title, description, due_date, priority, email_reminder, user_id) VALUES (?, ?, ?, ?, ?, ?)',
+      [title, description, formattedDueDate, priority, email_reminder, user_id]
     );
 
-    // Step 4: Update Points
+    // Step 4: Handle Points (unchanged)
     const [pointsResults] = await connection.promise().query(
       'SELECT points, updated_at FROM user_points WHERE user_id = ?',
       [user_id]
@@ -467,20 +466,16 @@ app.post('/add/tasks', async (req, res) => {
 
     let pointsToAdd = 5; // Default points to add
     if (pointsResults.length > 0) {
-      // If user exists, check updated_at timestamp
       const lastUpdated = new Date(pointsResults[0].updated_at);
       if (lastUpdated > fiveMinutesAgo) {
-        // If last update was less than 5 minutes ago, add fewer points
         pointsToAdd = 2; // Or any number you choose
       }
 
-      // Update points
       await connection.promise().query(
         'UPDATE user_points SET points = points + ?, updated_at = ? WHERE user_id = ?',
         [pointsToAdd, currentTime, user_id]
       );
     } else {
-      // If user does not exist, insert new record with the points
       await connection.promise().query(
         'INSERT INTO user_points (user_id, points, updated_at) VALUES (?, ?, ?)',
         [user_id, pointsToAdd, currentTime]
@@ -494,6 +489,7 @@ app.post('/add/tasks', async (req, res) => {
       description,
       due_date: formattedDueDate,
       priority,
+      email_reminder,
       message: 'Task added and points updated successfully'
     });
   } catch (err) {
@@ -501,7 +497,6 @@ app.post('/add/tasks', async (req, res) => {
     res.status(500).send({ message: 'Internal server error' });
   }
 });
-
 
 
 app.post('/fetch/tasks', (req, res) => {
@@ -622,8 +617,6 @@ app.post('/delete/task', (req, res) => {
 });
 
 
-
-{/*
 const MILLISECONDS_IN_A_DAY = 86400000;
 
 // Function to calculate the delay to the target hour (7:00 AM, 3:00 PM, 9:00 PM IST)
@@ -652,12 +645,12 @@ const checkTasksAndSendReminders = () => {
     const tomorrow = new Date(new Date(todayInIST).setDate(new Date(todayInIST).getDate() + 1)).toISOString().split('T')[0];
     const dayAfter = new Date(new Date(todayInIST).setDate(new Date(todayInIST).getDate() + 2)).toISOString().split('T')[0];
 
-    // Query to get tasks due today, tomorrow, or day after
+    // Query to get tasks due today, tomorrow, or day after, and where email_reminder = 1
     const tasksQuery = `
         SELECT t.title, t.due_date, u.phone_number, u.email
         FROM tasks t
         JOIN users u ON t.user_id = u.id
-        WHERE t.due_date IN (?, ?, ?)
+        WHERE t.due_date IN (?, ?, ?) AND t.email_reminder = 1
     `;
 
     // Query to get events on the calendar for today, tomorrow, or day after
@@ -737,7 +730,7 @@ const checkTasksAndSendReminders = () => {
                 <h2 style="color: #333;">Event Reminder</h2>
                 <p style="font-size: 16px;">
                     Hi there!<br><br>
-                    This is a friendly reminder that your event "<strong>${title}</strong>" is scheduled for <strong>${formattedDate}</strong>.
+                    This is a friendly reminder that your event "<strong>${title}</strong>" is scheduled for <strong>${formattedDate}</strong>.<br><br>
                 </p>
                 <p style="font-size: 16px;">
                     Click the button below to go to your calendar and view your events.
@@ -780,7 +773,7 @@ const scheduleReminder = (targetHour) => {
 scheduleReminder(7);   // 7:00 AM IST
 scheduleReminder(15);  // 3:00 PM IST
 scheduleReminder(21);  // 9:00 PM IST
- */}
+
 
 app.post('/api/add/flashcards', upload.array('images'), (req, res) => {
   const { title, description, isPublic, token, headings, subjectId } = req.body;
