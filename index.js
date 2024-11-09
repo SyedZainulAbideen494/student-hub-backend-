@@ -616,7 +616,7 @@ app.post('/delete/task', (req, res) => {
   });
 });
 
-
+{/*
 const MILLISECONDS_IN_A_DAY = 86400000;
 
 // Function to calculate the delay to the target hour (7:00 AM, 3:00 PM, 9:00 PM IST)
@@ -653,20 +653,15 @@ const checkTasksAndSendReminders = () => {
         WHERE t.due_date IN (?, ?, ?) AND t.email_reminder = 1
     `;
 
-    // Query to get events on the calendar for today, tomorrow, or day after
-    const eventsQuery = `
-        SELECT e.title, e.date, u.phone_number, u.email
-        FROM events e
-        JOIN users u ON e.user_id = u.id
-        WHERE e.date IN (?, ?, ?)
-    `;
-
     // Handle tasks
     connection.query(tasksQuery, [todayInIST, tomorrow, dayAfter], (err, taskResults) => {
         if (err) {
             console.error('Error fetching tasks:', err);
             return;
         }
+
+        // Group tasks by user email
+        const usersTasks = {};
 
         taskResults.forEach(task => {
             const { phone_number, email, title, due_date } = task;
@@ -676,13 +671,30 @@ const checkTasksAndSendReminders = () => {
                 year: 'numeric' 
             });
 
-            let messageBody = `
+            if (!usersTasks[email]) {
+                usersTasks[email] = [];
+            }
+            usersTasks[email].push({ title, formattedDate });
+        });
+
+        // Send one email per user with all their tasks
+        for (const email in usersTasks) {
+            const tasks = usersTasks[email];
+            let taskListHtml = '';
+            tasks.forEach(task => {
+                taskListHtml += `<li><strong>${task.title}</strong> - Due on ${task.formattedDate}</li>`;
+            });
+
+            const messageBody = `
             <div style="font-family: Arial, sans-serif; line-height: 1.5; padding: 20px;">
-                <h2 style="color: #333;">Task Reminder</h2>
+                <h2 style="color: #333;">Task Reminders</h2>
                 <p style="font-size: 16px;">
                     Hi there!<br><br>
-                    This is a friendly reminder that your task "<strong>${title}</strong>" is due on <strong>${formattedDate}</strong>.
+                    This is a friendly reminder about your upcoming tasks:
                 </p>
+                <ul style="font-size: 16px;">
+                    ${taskListHtml}
+                </ul>
                 <p style="font-size: 16px;">
                     Click the button below to go to your planner and manage your tasks.
                 </p>
@@ -707,56 +719,7 @@ const checkTasksAndSendReminders = () => {
                     console.log('Email sent: ' + info.response);
                 }
             });
-        });
-    });
-
-    // Handle events
-    connection.query(eventsQuery, [todayInIST, tomorrow, dayAfter], (err, eventResults) => {
-        if (err) {
-            console.error('Error fetching events:', err);
-            return;
         }
-
-        eventResults.forEach(event => {
-            const { phone_number, email, title, date } = event;
-            const formattedDate = new Date(date).toLocaleDateString('en-IN', { 
-                day: '2-digit', 
-                month: '2-digit', 
-                year: 'numeric' 
-            });
-
-            let messageBody = `
-            <div style="font-family: Arial, sans-serif; line-height: 1.5; padding: 20px;">
-                <h2 style="color: #333;">Event Reminder</h2>
-                <p style="font-size: 16px;">
-                    Hi there!<br><br>
-                    This is a friendly reminder that your event "<strong>${title}</strong>" is scheduled for <strong>${formattedDate}</strong>.<br><br>
-                </p>
-                <p style="font-size: 16px;">
-                    Click the button below to go to your calendar and view your events.
-                </p>
-                <a href="https://edusify.vercel.app/calendar" style="display: inline-block; background-color: #4CAF50; color: white; padding: 10px 20px; text-align: center; text-decoration: none; border-radius: 5px; margin-top: 10px;">
-                    Go to Calendar
-                </a>
-            </div>
-            `;
-
-            // Send email
-            const mailOptions = {
-                from: 'edusyfy@gmail.com',
-                to: email,
-                subject: 'Event Reminder',
-                html: messageBody // Use 'html' for HTML formatted emails
-            };
-
-            transporter.sendMail(mailOptions, (err, info) => {
-                if (err) {
-                    console.log('Error sending email:', err);
-                } else {
-                    console.log('Email sent: ' + info.response);
-                }
-            });
-        });
     });
 };
 
@@ -773,8 +736,10 @@ const scheduleReminder = (targetHour) => {
 scheduleReminder(7);   // 7:00 AM IST
 scheduleReminder(15);  // 3:00 PM IST
 scheduleReminder(21);  // 9:00 PM IST
+// Schedule reminder for 2:00 PM IST
+scheduleReminder(14);   // 2:00 PM IST
 
-
+*/}
 app.post('/api/add/flashcards', upload.array('images'), (req, res) => {
   const { title, description, isPublic, token, headings, subjectId } = req.body;
 
