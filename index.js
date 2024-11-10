@@ -4833,76 +4833,57 @@ app.post('/api/stats/monthly', async (req, res) => {
   }
 });
 
+// Endpoint to fetch the user's streak
 app.post('/api/streak', async (req, res) => {
   const { token } = req.body;
 
   try {
+    // Get user ID from token
     const userId = await getUserIdFromToken(token);
     if (!userId) {
-      console.error('Invalid token or user ID not found.');
-      return res.status(401).json({ error: 'Unauthorized' });
+      return res.status(401).json({ error: 'Invalid token' });
     }
 
-    // Fetch the user's streak count and last streak date from user_streak table
-    const streakResult = await query(
-      `SELECT streak_count, last_streak_date FROM user_streak WHERE user_id = ?`, 
-      [userId]
-    );
+    // Query to fetch completed tasks in ascending order by date
+    const query = `
+      SELECT DATE(completed_at) as completedDate
+      FROM tasks
+      WHERE user_id = ? AND completed_at IS NOT NULL
+      ORDER BY completed_at ASC
+    `;
 
-    let streakCount = streakResult[0]?.streak_count || 0;
-    const lastStreakDate = streakResult[0]?.last_streak_date;
-
-    const today = new Date();
-    const currentDateString = today.toISOString().split('T')[0]; // Current date as YYYY-MM-DD
-
-    // If the user missed a day, reset streak count to 0
-    if (lastStreakDate && lastStreakDate !== currentDateString) {
-      const lastDate = new Date(lastStreakDate);
-      const daysBetween = Math.floor((today - lastDate) / (1000 * 60 * 60 * 24));
-      
-      if (daysBetween > 1) {  // Reset if the user missed a day
-        streakCount = 0;
+    connection.query(query, [userId], (err, results) => {
+      if (err) {
+        console.error('Database query error:', err);
+        return res.status(500).json({ error: 'Failed to load streak data.' });
       }
-    }
 
-    // Check if tasks and logins are completed today
-    const [taskResult, loginResult] = await Promise.all([
-      query(
-        `SELECT COUNT(*) as task_streak FROM tasks WHERE user_id = ? AND DATE(completed_at) = ?`,
-        [userId, currentDateString]
-      ),
-      query(
-        `SELECT COUNT(*) as login_streak FROM user_logins WHERE user_id = ? AND login_date = ?`,
-        [userId, currentDateString]
-      )
-    ]);
+      // Calculate streaks
+      let streakCount = 0;
+      let currentStreak = 0;
+      let lastDate = null;
 
-    const hasCompletedToday = taskResult[0]?.task_streak > 0 && loginResult[0]?.login_streak > 0;
+      results.forEach((row) => {
+        const completedDate = new Date(row.completedDate);
 
-    if (hasCompletedToday) {
-      streakCount += 1;  // Increment streak count if both tasks and logins are done today
-    } else if (lastStreakDate === currentDateString) {
-      // If no task or login today, streak count should remain 0
-      streakCount = 0;
-    }
+        // If it's the first entry or the day after the last streak date, increment the streak
+        if (!lastDate || completedDate.getTime() === lastDate.getTime() + 86400000) {
+          currentStreak++;
+        } else if (completedDate.getTime() !== lastDate.getTime()) {
+          currentStreak = 1; // Reset streak if there's a gap
+        }
+        streakCount = Math.max(streakCount, currentStreak);
+        lastDate = completedDate;
+      });
 
-    // Update or insert user's streak data in user_streak table
-    await query(
-      `INSERT INTO user_streak (user_id, streak_count, last_streak_date)
-      VALUES (?, ?, ?)
-      ON DUPLICATE KEY UPDATE streak_count = ?, last_streak_date = ?`,
-      [userId, streakCount, currentDateString, streakCount, currentDateString]
-    );
-
-    res.json({
-      streakMessage: `You have maintained a streak of ${streakCount} day(s)! 🎉`,
-      streakCount,
+      res.json({ streakCount });
     });
-  } catch (err) {
-    console.error('Server error:', err.message);
-    res.status(500).json({ error: 'Error fetching streak data', details: err.message });
+  } catch (error) {
+    console.error('Error fetching streak data:', error);
+    res.status(500).json({ error: 'Failed to load streak data.' });
   }
 });
+
 
 
 
