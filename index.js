@@ -616,7 +616,7 @@ app.post('/delete/task', (req, res) => {
   });
 });
 
-{/*
+
 const MILLISECONDS_IN_A_DAY = 86400000;
 
 // Function to calculate the delay to the target hour (7:00 AM, 3:00 PM, 9:00 PM IST)
@@ -736,10 +736,9 @@ const scheduleReminder = (targetHour) => {
 scheduleReminder(7);   // 7:00 AM IST
 scheduleReminder(15);  // 3:00 PM IST
 scheduleReminder(21);  // 9:00 PM IST
-// Schedule reminder for 2:00 PM IST
-scheduleReminder(14);   // 2:00 PM IST
 
-*/}
+
+
 app.post('/api/add/flashcards', upload.array('images'), (req, res) => {
   const { title, description, isPublic, token, headings, subjectId } = req.body;
 
@@ -4844,35 +4843,67 @@ app.post('/api/streak', async (req, res) => {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    // Get the current week dates (Monday to Sunday)
+    // Fetch the user's streak count and last streak date from user_streak table
+    const streakResult = await query(
+      `SELECT streak_count, last_streak_date FROM user_streak WHERE user_id = ?`, 
+      [userId]
+    );
+
+    let streakCount = streakResult[0]?.streak_count || 0;
+    const lastStreakDate = streakResult[0]?.last_streak_date;
+
     const today = new Date();
-    const startOfWeek = new Date(today.setDate(today.getDate() - today.getDay() + 1)); // Monday
-    const weekDays = Array.from({ length: 7 }, (_, i) => new Date(startOfWeek.getTime() + i * 86400000));
+    const currentDateString = today.toISOString().split('T')[0]; // Current date as YYYY-MM-DD
 
-    // Fetch streak data for the current week
-    const streakWeekData = await Promise.all(weekDays.map(async (date) => {
-      const dateString = date.toISOString().split('T')[0];
+    // If the user missed a day, reset streak count to 0
+    if (lastStreakDate && lastStreakDate !== currentDateString) {
+      const lastDate = new Date(lastStreakDate);
+      const daysBetween = Math.floor((today - lastDate) / (1000 * 60 * 60 * 24));
       
-      const [taskResult, loginResult] = await Promise.all([
-        query(`SELECT COUNT(*) as task_streak FROM tasks WHERE user_id = ? AND DATE(completed_at) = ?`, [userId, dateString]),
-        query(`SELECT COUNT(*) as login_streak FROM user_logins WHERE user_id = ? AND login_date = ?`, [userId, dateString]),
-      ]);
+      if (daysBetween > 1) {  // Reset if the user missed a day
+        streakCount = 0;
+      }
+    }
 
-      return taskResult[0]?.task_streak > 0 && loginResult[0]?.login_streak > 0;
-    }));
+    // Check if tasks and logins are completed today
+    const [taskResult, loginResult] = await Promise.all([
+      query(
+        `SELECT COUNT(*) as task_streak FROM tasks WHERE user_id = ? AND DATE(completed_at) = ?`,
+        [userId, currentDateString]
+      ),
+      query(
+        `SELECT COUNT(*) as login_streak FROM user_logins WHERE user_id = ? AND login_date = ?`,
+        [userId, currentDateString]
+      )
+    ]);
 
-    const streakMessage = `You have maintained a streak for ${streakWeekData.filter(Boolean).length} day(s)! 🎉`;
+    const hasCompletedToday = taskResult[0]?.task_streak > 0 && loginResult[0]?.login_streak > 0;
+
+    if (hasCompletedToday) {
+      streakCount += 1;  // Increment streak count if both tasks and logins are done today
+    } else if (lastStreakDate === currentDateString) {
+      // If no task or login today, streak count should remain 0
+      streakCount = 0;
+    }
+
+    // Update or insert user's streak data in user_streak table
+    await query(
+      `INSERT INTO user_streak (user_id, streak_count, last_streak_date)
+      VALUES (?, ?, ?)
+      ON DUPLICATE KEY UPDATE streak_count = ?, last_streak_date = ?`,
+      [userId, streakCount, currentDateString, streakCount, currentDateString]
+    );
 
     res.json({
-      streakMessage,
-      streakCount: streakWeekData.filter(Boolean).length,
-      streakWeekData,
+      streakMessage: `You have maintained a streak of ${streakCount} day(s)! 🎉`,
+      streakCount,
     });
   } catch (err) {
     console.error('Server error:', err.message);
     res.status(500).json({ error: 'Error fetching streak data', details: err.message });
   }
 });
+
 
 
 // Endpoint to save the drawing, text, and image notes
