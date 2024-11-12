@@ -4664,10 +4664,10 @@ app.post('/api/documents/view', async (req, res) => {
 
 // Endpoint to get notes for a specific user
 app.post('/api/sticky-notes/get', async (req, res) => {
-  const { token } = req.body; // Get the token from the request body
+  const { token } = req.body;
   try {
-      const userId = await getUserIdFromToken(token); // Retrieve user_id using the token
-      connection.query('SELECT * FROM sticky_notes WHERE user_id = ?', [userId], (err, results) => {
+      const userId = await getUserIdFromToken(token);
+      connection.query('SELECT * FROM sticky_notes WHERE user_id = ? AND deleted = 0', [userId], (err, results) => {
           if (err) throw err;
           res.json(results);
       });
@@ -4696,16 +4696,16 @@ app.post('/api/sticky-notes/add', async (req, res) => {
 });
 
 
-// Endpoint to delete a sticky note by ID
+// Endpoint to mark a sticky note as deleted by ID
 app.delete('/api/sticky-notes/delete/:noteId', async (req, res) => {
-  const { noteId } = req.params; // Get noteId from URL parameters
-  const { token } = req.body; // Get token from request body
+  const { noteId } = req.params;
+  const { token } = req.body;
 
   try {
-      const userId = await getUserIdFromToken(token); // Retrieve user_id using the token
+      const userId = await getUserIdFromToken(token);
 
-      // Delete the note where user_id matches and note_id matches
-      connection.query('DELETE FROM sticky_notes WHERE id = ? AND user_id = ?', [noteId, userId], (err, results) => {
+      // Update the note's deleted status instead of deleting it
+      connection.query('UPDATE sticky_notes SET deleted = 1 WHERE id = ? AND user_id = ?', [noteId, userId], (err, results) => {
           if (err) {
               console.error(err);
               return res.status(500).json({ message: 'Failed to delete note' });
@@ -4713,10 +4713,10 @@ app.delete('/api/sticky-notes/delete/:noteId', async (req, res) => {
           if (results.affectedRows === 0) {
               return res.status(404).json({ message: 'Note not found' });
           }
-          res.status(200).json({ message: 'Note deleted successfully' });
+          res.status(200).json({ message: 'Note marked as deleted successfully' });
       });
   } catch (error) {
-      console.error('Error deleting note:', error);
+      console.error('Error marking note as deleted:', error);
       res.status(401).json({ message: 'Unauthorized' });
   }
 });
