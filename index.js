@@ -2145,7 +2145,7 @@ app.post('/api/session-check', (req, res) => {
 
 const clientId = '0aac6cb1ec104103a5e2e5d6f9b490e7';
 const clientSecret = '4e2d9a5a3be9406c970cf3f6cb78b7a3';
-const redirectUri = `${baseURL}/callback`; // Ensure this matches your Spotify Dashboard
+const redirectUri = `https://srv594954.hstgr.cloud/callback`; // Ensure this matches your Spotify Dashboard
 
 app.use(cors());
 
