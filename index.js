@@ -1670,19 +1670,37 @@ app.get('/quiz/answers/:quizId', async (req, res) => {
 });
 
 app.post('/api/quiz/generate', async (req, res) => {
-  const { subject, topic, token } = req.body; // Get subject, topic, and token from the request body
+  const { subject, topic, token } = req.body;
 
   try {
-    // Step 1: Use helper function to retrieve userId from the token
+    // Step 1: Retrieve userId from the token
     const userId = await getUserIdFromToken(token);
 
-    // Step 2: Define the AI prompt to generate 15 MCQ questions with 4 choices each
-    const prompt = `Generate a JSON array of 15 multiple-choice questions for the subject: ${subject} and topic: ${topic}. Each question should have:
-    - a "question" field (the question text),
-    - an "options" array with exactly 4 choices,
-    - a "correct_answer" field with the text of the correct choice.
-    Please avoid including any additional text or Markdown formatting.`;
+    // Step 2: Define a refined prompt to ensure proper JSON formatting
+    const prompt = `
+      Generate a valid JSON array of 15 multiple-choice questions for the following:
+      - Subject: ${subject}
+      - Topic: ${topic}
 
+      Each question must strictly follow this format:
+      [
+        {
+          "question": "string", // The question text
+          "options": ["string", "string", "string", "string"], // An array of 4 options
+          "correct_answer": "string" // The correct option text (must match one of the options)
+        }
+      ]
+
+      Rules:
+      1. Return only the JSON array without any explanations, comments, or markdown.
+      2. The "question" field can include alphanumeric characters and basic punctuation.
+      3. Each "options" array must have exactly 4 unique strings.
+      4. Ensure the JSON is properly formatted and parsable without errors.
+    `.trim();
+
+    console.log('Generating quiz with refined prompt:', prompt);
+
+    // Step 3: Send the prompt to the AI model
     const chat = model.startChat({
       history: [
         { role: 'user', parts: [{ text: 'Hello' }] },
@@ -1690,19 +1708,19 @@ app.post('/api/quiz/generate', async (req, res) => {
       ],
     });
 
-    console.log('Generating quiz with prompt:', prompt);
     const result = await chat.sendMessage(prompt);
     const rawResponse = await result.response.text();
 
-    // Step 3: Sanitize the response by removing any unwanted characters
-    const sanitizedResponse = rawResponse.trim();
+    // Step 4: Sanitize the response to ensure it is valid JSON
+    const sanitizedResponse = rawResponse
+      .replace(/```(?:json)?/g, '') // Remove markdown code blocks (e.g., ```json)
+      .trim();
 
-    // Step 4: Parse the JSON response
     let quizQuestions;
     try {
       quizQuestions = JSON.parse(sanitizedResponse);
     } catch (parseError) {
-      console.error('Failed to parse JSON:', parseError);
+      console.error('Failed to parse JSON:', parseError, 'Raw response:', sanitizedResponse);
       return res.status(500).json({ error: 'Invalid JSON response from the AI model' });
     }
 
@@ -1710,7 +1728,7 @@ app.post('/api/quiz/generate', async (req, res) => {
     const title = `${subject} - ${topic} Quiz`;
     const description = `Quiz on ${subject} - ${topic}`;
     const [quizResult] = await connection.promise().query(
-      'INSERT INTO quizzes (title, description, creator_id) VALUES (?, ?, ?)', 
+      'INSERT INTO quizzes (title, description, creator_id) VALUES (?, ?, ?)',
       [title, description, userId]
     );
     const quizId = quizResult.insertId;
@@ -1718,7 +1736,7 @@ app.post('/api/quiz/generate', async (req, res) => {
     // Step 6: Insert questions and their options into the database
     for (const question of quizQuestions) {
       const [questionResult] = await connection.promise().query(
-        'INSERT INTO questions (quiz_id, question_text) VALUES (?, ?)', 
+        'INSERT INTO questions (quiz_id, question_text) VALUES (?, ?)',
         [quizId, question.question]
       );
       const questionId = questionResult.insertId;
@@ -1726,7 +1744,7 @@ app.post('/api/quiz/generate', async (req, res) => {
       for (const option of question.options) {
         const isCorrect = option === question.correct_answer;
         await connection.promise().query(
-          'INSERT INTO answers (question_id, answer_text, is_correct) VALUES (?, ?, ?)', 
+          'INSERT INTO answers (question_id, answer_text, is_correct) VALUES (?, ?, ?)',
           [questionId, option, isCorrect]
         );
       }
@@ -1739,7 +1757,6 @@ app.post('/api/quiz/generate', async (req, res) => {
     res.status(500).json({ error: 'Error generating quiz' });
   }
 });
-
 
 
 
