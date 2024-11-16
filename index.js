@@ -4286,29 +4286,30 @@ app.post('/api/tasks/generate', async (req, res) => {
           5. Aim for a balanced, manageable workload each day, with realistic task prioritization that helps the user stay on track without feeling overwhelmed.
           
           Generate a sequence of action-oriented and result-driven tasks, giving the user a clear, motivating, and sustainable path to achieve the main task in an organized, thorough, and user-friendly manner.`
-          : `Create a concise task plan in JSON format, breaking down the main task: "${mainTask}" into simple steps for completion within ${days} days. The task plan should include:
+      : `Create a concise task plan in JSON format, breaking down the main task: "${mainTask}" into simple steps for completion within ${days} days. The task plan should include:
           - 'title' summarizing each action
           - 'due_date' in YYYY-MM-DD format, starting from today (${todayDate})
           - Minimal 'description' with only essential steps or resources.`;
 
+    console.log('Generating tasks with prompt:', prompt);
+    
+    // Call the AI model with the prompt (replace with appropriate API or library usage)
     const chat = model.startChat({
       history: [
         { role: 'user', parts: [{ text: 'Hello' }] },
         { role: 'model', parts: [{ text: 'I can help generate tasks for your project!' }] },
       ],
     });
-
-    console.log('Generating tasks with prompt:', prompt);
     const result = await chat.sendMessage(prompt);
 
     // Extract only the JSON part using a regular expression
-    const jsonResponse = result.response.text().match(/```json([\s\S]*?)```/);
-
+    const responseText = result.response.text();
+    const jsonResponse = responseText.match(/```json([\s\S]*?)```/);
     if (!jsonResponse || jsonResponse.length < 2) {
       return res.status(500).json({ error: 'Could not extract JSON from AI response' });
     }
 
-    // Clean and parse the JSON
+    // Parse the JSON
     let tasks;
     try {
       tasks = JSON.parse(jsonResponse[1].trim());
@@ -4317,16 +4318,19 @@ app.post('/api/tasks/generate', async (req, res) => {
       return res.status(500).json({ error: 'Invalid JSON response from the AI model.' });
     }
 
-    const tasksData = tasks.map(task => {
-      // Check if the task has the necessary properties before accessing them
-      return {
-        userId,
-        title: task.title?.trim() || 'Untitled Task', // Default title if undefined
-        description: task.description?.trim() || 'No description provided', // Default description if undefined
-        due_date: task.due_date?.trim() || new Date().toISOString().split('T')[0], // Default to today's date if undefined
-        priority: task.priority?.trim() || 'Normal', // Default priority if undefined
-      };
-    });
+    // Ensure tasks is an array
+    if (!Array.isArray(tasks)) {
+      console.error('AI response does not contain an array of tasks.');
+      return res.status(500).json({ error: 'Invalid task structure returned from AI model.' });
+    }
+
+    const tasksData = tasks.map(task => ({
+      userId,
+      title: task.title?.trim() || 'Untitled Task',
+      description: task.description?.trim() || 'No description provided',
+      due_date: task.due_date?.trim() || new Date().toISOString().split('T')[0],
+      priority: task.priority?.trim() || 'Normal',
+    }));
 
     if (tasksData.length > 0) {
       const tasksValues = tasksData.map(({ userId, title, description, due_date, priority }) => [userId, title, description, due_date, priority]);
@@ -4349,7 +4353,6 @@ app.post('/api/tasks/generate', async (req, res) => {
     res.status(500).json({ error: errorMessage });
   }
 });
-
 
 
 app.set('trust proxy', true); // Enable this if you're behind a reverse proxy
