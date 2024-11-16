@@ -24,7 +24,7 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 const { HarmBlockThreshold, HarmCategory } = require("@google/generative-ai");
 
 // Initialize Google Generative AI
-const genAI = new GoogleGenerativeAI('AIzaSyDNx6QYkHkvFYd8-lc-O1HgFgCDaChGkV0');
+const genAI = new GoogleGenerativeAI('AIzaSyDEb3nt1CCmUgQDIsEB1tvsgLzbWHmcYic');
 
 const safetySettings = [
   {
@@ -2908,7 +2908,7 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     // Send the email in a non-blocking way
     const mailOptions = {
       to: user.email,
-      from: 'support@edusify.com',
+      from: 'edusyfy@gmail.com',
       subject: 'Password Reset Request',
       text: `Hi ${user.name || 'there'},\n\nWe received a request to reset your password. You can reset it by clicking on the link below:\n\n${resetLink}\n\nIf you did not request this, please ignore this email.\n\nBest regards,\nYour Edusify Team`
     };
