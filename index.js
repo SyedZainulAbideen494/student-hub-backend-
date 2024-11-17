@@ -22,6 +22,7 @@ const stripe = require('stripe')('sk_test_51LoS3iSGyKMMAZwstPlmLCEi1eBUy7MsjYxiK
 const cron = require('node-cron');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const { HarmBlockThreshold, HarmCategory } = require("@google/generative-ai");
+const schedule = require("node-schedule");
 
 // Initialize Google Generative AI
 const genAI = new GoogleGenerativeAI('AIzaSyDEb3nt1CCmUgQDIsEB1tvsgLzbWHmcYic');
@@ -524,7 +525,7 @@ app.post('/fetch/tasks', (req, res) => {
 
 
 app.post('/edit/task', (req, res) => {
-  const { id, title, description, due_date, priority, token } = req.body;
+  const { id, title, description, due_date, priority, email_reminder, token } = req.body;
 
   const getUserQuery = 'SELECT user_id FROM session WHERE jwt = ?';
   connection.query(getUserQuery, [token], (err, results) => {
@@ -536,8 +537,8 @@ app.post('/edit/task', (req, res) => {
       }
 
       const user_id = results[0].user_id;
-      const updateQuery = 'UPDATE tasks SET title = ?, description = ?, due_date = ?, priority = ? WHERE id = ? AND user_id = ?';
-      connection.query(updateQuery, [title, description, due_date, priority, id, user_id], (err, results) => {
+      const updateQuery = 'UPDATE tasks SET title = ?, description = ?, due_date = ?, email_reminder= ?, priority = ? WHERE id = ? AND user_id = ?';
+      connection.query(updateQuery, [title, description, due_date, email_reminder, priority, id, user_id], (err, results) => {
           if (err) {
               return res.status(500).send(err);
           }
@@ -616,127 +617,126 @@ app.post('/delete/task', (req, res) => {
   });
 });
 
+async function sendTaskReminders() {
+  try {
+    // Step 1: Fetch tasks with email reminders
+    const tasks = await query(`
+      SELECT t.id, t.title, t.description, t.due_date, t.user_id, u.unique_id, u.email
+      FROM tasks t
+      JOIN users u ON t.user_id = u.id
+      WHERE t.completed = 0 AND t.email_reminder = 1
+    `);
 
-const MILLISECONDS_IN_A_DAY = 86400000;
+    // Step 2: Group tasks by user
+    const userTasks = tasks.reduce((acc, task) => {
+      const userKey = task.user_id;
+      if (!acc[userKey]) {
+        acc[userKey] = { unique_id: task.unique_id, email: task.email, tasks: [] };
+      }
+      acc[userKey].tasks.push({
+        title: task.title,
+        description: task.description,
+        due_date: task.due_date,
+      });
+      return acc;
+    }, {});
 
-// Function to calculate the delay to the target hour (7:00 AM, 3:00 PM, 9:00 PM IST)
-const calculateDelayToTime = (targetHour) => {
-    const now = new Date();
-    const istOffset = 5.5 * 60 * 60 * 1000; // IST is UTC +5:30
-    const nowInIST = new Date(now.getTime() + istOffset);
-    const targetTime = new Date();
+    // Step 3: Send emails to each user
+    for (const userId in userTasks) {
+      const { unique_id, email, tasks } = userTasks[userId];
+      const taskList = tasks
+        .map(
+          (task) =>
+            `<li>
+              <strong>${task.title}</strong><br>
+              ${task.description ? `<em>${task.description}</em><br>` : ""}
+              <strong>Due:</strong> ${new Date(task.due_date).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}
+            </li>`
+        )
+        .join("");
 
-    // Set the target time (e.g., 7:00 AM, 3:00 PM, 9:00 PM IST)
-    targetTime.setHours(targetHour, 0, 0, 0);
+        const emailBody = `
+        <div style="
+          font-family: 'Helvetica Neue', Arial, sans-serif; 
+          background-color: #f9f9f9; 
+          padding: 20px; 
+          border-radius: 10px; 
+          max-width: 600px; 
+          margin: auto; 
+          box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1); 
+          color: #333;
+        ">
+          <h2 style="
+            color: #000; 
+            text-align: center; 
+            margin-bottom: 20px; 
+            font-weight: bold;
+          ">
+            Hello ${unique_id},
+          </h2>
+          <p style="font-size: 16px; line-height: 1.5; margin-bottom: 20px; text-align: center;">
+            We hope you're doing great! Here's a summary of your pending tasks:
+          </p>
+          <ul style="
+            background-color: #fff; 
+            padding: 20px; 
+            border-radius: 10px; 
+            list-style: none; 
+            margin: 0 auto 20px; 
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+          ">
+            ${taskList}
+          </ul>
+          <p style="font-size: 16px; line-height: 1.5; text-align: center; margin-bottom: 20px;">
+            Don't forget to stay on top of your tasks and keep making progress. Visit your planner to review and update your tasks:
+          </p>
+          <p style="text-align: center; margin-bottom: 20px;">
+            <a 
+              href="https://edusify.vercel.app/planner" 
+              style="
+                color: #fff; 
+                background-color: #000; 
+                padding: 12px 20px; 
+                text-decoration: none; 
+                border-radius: 25px; 
+                font-weight: bold; 
+                display: inline-block;
+              "
+            >
+              Open Planner
+            </a>
+          </p>
+          <p style="font-size: 14px; color: #555; text-align: center;">
+            Stay productive! 😊
+          </p>
+          <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
+          <p style="font-size: 12px; color: #aaa; text-align: center;">
+            This email was sent by Edusify Task Reminder System. 
+            <br>Visit <a href="https://edusify.vercel.app" style="color: #000; text-decoration: none;">edusify.vercel.app</a> for more.
+          </p>
+        </div>
+      `;
+      
 
-    // If the target time has already passed for today, schedule for tomorrow
-    if (nowInIST > targetTime) {
-        targetTime.setDate(targetTime.getDate() + 1);
+      await transporter.sendMail({
+        from: "edusify@gmail.com",
+        to: email,
+        subject: "Your Pending Tasks Reminder - Edusify",
+        html: emailBody,
+      });
+
+      console.log(`Email sent to ${unique_id} (${email})`);
     }
+  } catch (error) {
+    console.error("Error sending task reminders:", error);
+  }
+}
 
-    return targetTime - nowInIST; // Return the delay in milliseconds
-};
-
-// Main function to check tasks and send reminders
-const checkTasksAndSendReminders = () => {
-    const today = new Date();
-    const istOffset = 5.5 * 60 * 60 * 1000; // IST is UTC +5:30
-    const todayInIST = new Date(today.getTime() + istOffset).toISOString().split('T')[0]; // YYYY-MM-DD
-    const tomorrow = new Date(new Date(todayInIST).setDate(new Date(todayInIST).getDate() + 1)).toISOString().split('T')[0];
-    const dayAfter = new Date(new Date(todayInIST).setDate(new Date(todayInIST).getDate() + 2)).toISOString().split('T')[0];
-
-    // Query to get tasks due today, tomorrow, or day after, and where email_reminder = 1
-    const tasksQuery = `
-        SELECT t.title, t.due_date, u.phone_number, u.email
-        FROM tasks t
-        JOIN users u ON t.user_id = u.id
-        WHERE t.due_date IN (?, ?, ?) AND t.email_reminder = 1
-    `;
-
-    // Handle tasks
-    connection.query(tasksQuery, [todayInIST, tomorrow, dayAfter], (err, taskResults) => {
-        if (err) {
-            console.error('Error fetching tasks:', err);
-            return;
-        }
-
-        // Group tasks by user email
-        const usersTasks = {};
-
-        taskResults.forEach(task => {
-            const { phone_number, email, title, due_date } = task;
-            const formattedDate = new Date(due_date).toLocaleDateString('en-IN', { 
-                day: '2-digit', 
-                month: '2-digit', 
-                year: 'numeric' 
-            });
-
-            if (!usersTasks[email]) {
-                usersTasks[email] = [];
-            }
-            usersTasks[email].push({ title, formattedDate });
-        });
-
-        // Send one email per user with all their tasks
-        for (const email in usersTasks) {
-            const tasks = usersTasks[email];
-            let taskListHtml = '';
-            tasks.forEach(task => {
-                taskListHtml += `<li><strong>${task.title}</strong> - Due on ${task.formattedDate}</li>`;
-            });
-
-            const messageBody = `
-            <div style="font-family: Arial, sans-serif; line-height: 1.5; padding: 20px;">
-                <h2 style="color: #333;">Task Reminders</h2>
-                <p style="font-size: 16px;">
-                    Hi there!<br><br>
-                    This is a friendly reminder about your upcoming tasks:
-                </p>
-                <ul style="font-size: 16px;">
-                    ${taskListHtml}
-                </ul>
-                <p style="font-size: 16px;">
-                    Click the button below to go to your planner and manage your tasks.
-                </p>
-                <a href="https://edusify.vercel.app/" style="display: inline-block; background-color: #4CAF50; color: white; padding: 10px 20px; text-align: center; text-decoration: none; border-radius: 5px; margin-top: 10px;">
-                    Go to Planner
-                </a>
-            </div>
-            `;
-
-            // Send email
-            const mailOptions = {
-                from: 'edusyfy@gmail.com',
-                to: email,
-                subject: 'Task Reminder',
-                html: messageBody // Use 'html' for HTML formatted emails
-            };
-
-            transporter.sendMail(mailOptions, (err, info) => {
-                if (err) {
-                    console.log('Error sending email:', err);
-                } else {
-                    console.log('Email sent: ' + info.response);
-                }
-            });
-        }
-    });
-};
-
-// Function to schedule reminders at specific times
-const scheduleReminder = (targetHour) => {
-    const initialDelay = calculateDelayToTime(targetHour);
-    setTimeout(() => {
-        checkTasksAndSendReminders();
-        setInterval(checkTasksAndSendReminders, MILLISECONDS_IN_A_DAY);
-    }, initialDelay);
-};
-
-// Schedule reminders for 7:00 AM, 3:00 PM, and 9:00 PM IST
-scheduleReminder(7);   // 7:00 AM IST
-scheduleReminder(15);  // 3:00 PM IST
-scheduleReminder(21);  // 9:00 PM IST
-
+// Schedule tasks
+schedule.scheduleJob("0 7,15,20 * * *", async () => {
+  console.log("Running task reminders at", new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }));
+  await sendTaskReminders();
+});
 
 
 app.post('/api/add/flashcards', upload.array('images'), (req, res) => {
