@@ -4945,6 +4945,9 @@ app.post('/start-session/pomodoro', async (req, res) => {
     const insertQuery = 'INSERT INTO pomodoro_date (user_id, start_time, session_date, session_type) VALUES (?, ?, ?, ?)';
     const result = await query(insertQuery, [user_id, start_time, session_date, session_type]);
 
+    // Log when Pomodoro session starts for the user
+    console.log(`Pomodoro session started for userId: ${user_id} at ${start_time}`);
+
     res.json({ session_id: result.insertId, start_time });
   } catch (error) {
     res.status(401).json({ message: 'Invalid or expired token' });
@@ -4964,6 +4967,9 @@ app.post('/end-session/pomodoro', async (req, res) => {
 
     const updateQuery = 'UPDATE pomodoro_date SET end_time = ?, duration = TIMESTAMPDIFF(SECOND, start_time, ?), session_type = ? WHERE id = ?';
     await query(updateQuery, [end_time, end_time, session_type, session_id]);
+
+    // Log when Pomodoro session ends for the user
+    console.log(`Pomodoro session ended for userId: ${user_id} at ${end_time}`);
 
     res.json({ message: 'Session ended successfully', end_time });
   } catch (error) {
