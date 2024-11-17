@@ -4931,6 +4931,63 @@ app.get('/api/notes/canvas/get', (req, res) => {
 });
 
 
+app.post('/start-session/pomodoro', async (req, res) => {
+  const { token, session_type } = req.body;  // Get token and session_type from request body
+  if (!token) {
+    return res.status(403).json({ message: 'No token provided' });
+  }
+
+  try {
+    const user_id = await getUserIdFromToken(token);
+    const start_time = new Date();
+    const session_date = start_time.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+
+    const insertQuery = 'INSERT INTO pomodoro_date (user_id, start_time, session_date, session_type) VALUES (?, ?, ?, ?)';
+    const result = await query(insertQuery, [user_id, start_time, session_date, session_type]);
+
+    res.json({ session_id: result.insertId, start_time });
+  } catch (error) {
+    res.status(401).json({ message: 'Invalid or expired token' });
+  }
+});
+
+
+app.post('/end-session/pomodoro', async (req, res) => {
+  const { session_id, token, session_type } = req.body;  // Get session_id, token, and session_type from request body
+  if (!token) {
+    return res.status(403).json({ message: 'No token provided' });
+  }
+
+  try {
+    const user_id = await getUserIdFromToken(token);
+    const end_time = new Date();
+
+    const updateQuery = 'UPDATE pomodoro_date SET end_time = ?, duration = TIMESTAMPDIFF(SECOND, start_time, ?), session_type = ? WHERE id = ?';
+    await query(updateQuery, [end_time, end_time, session_type, session_id]);
+
+    res.json({ message: 'Session ended successfully', end_time });
+  } catch (error) {
+    res.status(401).json({ message: 'Invalid or expired token' });
+  }
+});
+
+
+app.get('/session-stats/pomodoro', async (req, res) => {
+  const token = req.headers['authorization']; // Get token from the Authorization header
+  if (!token || !token.startsWith('Bearer ')) {
+    return res.status(403).json({ message: 'No token provided' });
+  }
+
+  try {
+    const user_id = await getUserIdFromToken(token.split(' ')[1]); // Extract token value after 'Bearer '
+    const selectQuery = 'SELECT * FROM pomodoro_date WHERE user_id = ? ORDER BY session_date DESC, start_time DESC';
+    const result = await query(selectQuery, [user_id]);
+
+    res.json(result);
+  } catch (error) {
+    res.status(401).json({ message: 'Invalid or expired token' });
+  }
+});
 
 
 
