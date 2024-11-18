@@ -4813,9 +4813,9 @@ app.post('/api/stats/monthly', async (req, res) => {
       'SELECT COUNT(*) AS total_pending FROM tasks WHERE completed = 0 AND user_id = ? AND MONTH(created_at) = MONTH(CURDATE()) AND YEAR(created_at) = YEAR(CURDATE())',
       [userId]
     );
-    
+
     const pomodoroSessions = await connection.promise().query(
-      'SELECT COUNT(*) AS total_sessions FROM pomodoro_sessions WHERE user_id = ? AND MONTH(end_time) = MONTH(CURDATE()) AND YEAR(end_time) = YEAR(CURDATE())',
+      'SELECT COUNT(*) AS total_sessions FROM pomodoro_date WHERE user_id = ? AND MONTH(end_time) = MONTH(CURDATE()) AND YEAR(end_time) = YEAR(CURDATE())',
       [userId]
     );
     
