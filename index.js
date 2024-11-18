@@ -4271,21 +4271,29 @@ app.post('/api/tasks/generate', async (req, res) => {
     const todayDate = new Date().toISOString().split('T')[0];
 
     const prompt = taskStyle === 'detailed'
-      ? `Create a highly detailed and structured task plan in JSON format, breaking down the main task: "${mainTask}" to be completed within ${days} days. This plan should guide the user through each step in a way that makes completing the task both achievable and straightforward. Each task should have carefully spaced due dates over the ${days} days, starting from today (${todayDate}), and should include the following fields:
-          - A 'title' that concisely summarizes the specific action to be taken.
-          - A 'description' with clear, actionable steps, any necessary resources, helpful suggestions, and motivational reminders where relevant to enhance task completion. Descriptions should be specific enough for easy follow-through.
-          - A 'due_date' in YYYY-MM-DD format.
-          - A 'priority' level ('Low', 'Normal', 'High') based on the urgency and importance of each task in relation to the main goal.
-          - An 'estimated_time' in hours for task completion, helping the user to plan their daily schedule effectively.
-          
-          Additionally, ensure the following:
-          1. Tasks build upon each other in a logical sequence, creating a structured path from start to finish for efficient and thorough completion of the main task.
-          2. Include periodic 'checkpoints' for the user to review progress, make adjustments, and regain focus on the primary goal.
-          3. Incorporate designated 'rest days' to prevent burnout and support sustained productivity, while noting any preparatory or reflective tasks for light engagement.
-          4. Each task description should encourage confidence, focus, and provide insightful steps or tips, making it clear why each step is essential to success.
-          5. Aim for a balanced, manageable workload each day, with realistic task prioritization that helps the user stay on track without feeling overwhelmed.
-          
-          Generate a sequence of action-oriented and result-driven tasks, giving the user a clear, motivating, and sustainable path to achieve the main task in an organized, thorough, and user-friendly manner.`
+      ? `You are an AI designed to generate structured task plans. Your output should only contain valid JSON without any additional text. Please generate a highly detailed and structured task plan in JSON format, breaking down the main task: "${mainTask}" into smaller tasks to be completed within ${days} days. The JSON structure should follow this exact format:
+
+      [
+        {
+          "title": "Task title summarizing the specific action",
+          "description": "Detailed description with clear, actionable steps, necessary resources, helpful suggestions, and motivational reminders.",
+          "due_date": "YYYY-MM-DD",
+          "priority": "Low | Normal | High",
+          "estimated_time": "Number of hours for task completion"
+        },
+        ...
+      ]
+      
+      The task plan should meet the following requirements:
+      1. Tasks should be logically sequenced, with each step building on the previous ones, creating a clear path from start to finish.
+      2. Distribute the tasks evenly over ${days} days, starting from today (${todayDate}).
+      3. Include periodic checkpoints to review progress and rest days to prevent burnout.
+      4. Descriptions should be motivational, actionable, and specific.
+      5. Ensure the workload is balanced and realistic for each day.
+      
+      Return **only the JSON** as the response without any explanations, comments, or code blocks. If the input is invalid or insufficient to generate a task plan, return an empty JSON array: [].
+      `
+
       : `Create a concise task plan in JSON format, breaking down the main task: "${mainTask}" into simple steps for completion within ${days} days. The task plan should include:
           - 'title' summarizing each action
           - 'due_date' in YYYY-MM-DD format, starting from today (${todayDate})
