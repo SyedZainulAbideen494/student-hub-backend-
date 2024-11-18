@@ -4815,10 +4815,9 @@ app.post('/api/stats/monthly', async (req, res) => {
     );
 
     const pomodoroSessions = await connection.promise().query(
-      'SELECT COUNT(*) AS total_sessions FROM pomodoro_date WHERE user_id = ? AND MONTH(end_time) = MONTH(CURDATE()) AND YEAR(end_time) = YEAR(CURDATE())',
+      'SELECT COUNT(*) AS total_sessions FROM pomodoro_sessions WHERE user_id = ? AND MONTH(start_time) = MONTH(CURDATE()) AND YEAR(start_time) = YEAR(CURDATE())',
       [userId]
     );
-    
 
     const quizzes = await connection.promise().query(
       'SELECT AVG(score) AS average_score, COUNT(*) AS quizzes_attended FROM user_quizzes WHERE user_id = ? AND MONTH(completed_at) = MONTH(CURDATE()) AND YEAR(completed_at) = YEAR(CURDATE())',
