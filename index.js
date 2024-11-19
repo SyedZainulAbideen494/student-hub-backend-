@@ -3409,7 +3409,7 @@ app.post('/api/chat/ai', async (req, res) => {
           }
 
           // Delay before retrying
-          await delay(2000); // Delay for 2 seconds before the next attempt
+          await delay(4000); // Delay for 2 seconds before the next attempt
         }
       }
     };
