@@ -3362,6 +3362,9 @@ app.post('/api/feedback', (req, res) => {
 
 const MAX_RETRIES = 5;
 
+// Helper function to introduce a delay (in milliseconds)
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 app.post('/api/chat/ai', async (req, res) => {
   const { message, chatHistory, token } = req.body;
 
@@ -3399,10 +3402,13 @@ app.post('/api/chat/ai', async (req, res) => {
           attempts++;
           console.log(`Attempt ${attempts} failed, retrying...`);
 
+          // If we have failed all retry attempts, throw an error
           if (attempts === MAX_RETRIES) {
-            // If max retries are reached, throw error
             throw new Error('Failed to communicate with the AI after multiple attempts');
           }
+
+          // Delay before retrying
+          await delay(2000); // Delay for 2 seconds before the next attempt
         }
       }
     };
@@ -5031,39 +5037,6 @@ app.get('/session-stats/pomodoro', async (req, res) => {
     res.json(result);
   } catch (error) {
     res.status(401).json({ message: 'Invalid or expired token' });
-  }
-});
-
-
-app.put('/api/birthday', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1]; // Extract token from "Bearer <token>"
-  const { birthday } = req.body;
-
-  if (!token) {
-    return res.status(401).json({ error: 'Authorization token is required' });
-  }
-
-  if (!birthday) {
-    return res.status(400).json({ error: 'Birthday is required' });
-  }
-
-  try {
-    const user_id = await getUserIdFromToken(token); // Extract user_id from token
-
-    const query = 'UPDATE users SET birthday = ? WHERE id = ?';
-    connection.query(query, [birthday, user_id], (err, result) => {
-      if (err) {
-        console.error('Error updating birthday:', err);
-        return res.status(500).json({ error: 'Database error' });
-      }
-      if (result.affectedRows === 0) {
-        return res.status(404).json({ error: 'User not found' });
-      }
-      res.status(200).json({ message: 'Birthday updated successfully' });
-    });
-  } catch (error) {
-    console.error('Error processing token:', error);
-    return res.status(401).json({ error: 'Invalid or expired token' });
   }
 });
 
