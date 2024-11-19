@@ -3386,7 +3386,8 @@ app.post('/api/chat/ai', async (req, res) => {
     });
 
     // Log the user's question
-    console.log('User asked:', message);
+    console.log(`User Inquiry: "${message}" | User ID: ${userId}`);
+
 
     // Function to attempt sending message and retry on failure
     const sendMessageWithRetry = async (message) => {
