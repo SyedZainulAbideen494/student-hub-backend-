@@ -3360,7 +3360,7 @@ app.post('/api/feedback', (req, res) => {
 });
 
 
-const MAX_RETRIES = 5;
+const MAX_RETRIES = 15;
 
 // Helper function to introduce a delay (in milliseconds)
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
