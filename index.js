@@ -5053,7 +5053,7 @@ app.put('/api/birthday', async (req, res) => {
   }
 
   try {
-    const user_id = await getUserIdFromToken(token); // Extract user_id from token
+    const user_id = await getUserIdFromToken(token); 
 
     const query = 'UPDATE users SET birthday = ? WHERE id = ?';
     connection.query(query, [birthday, user_id], (err, result) => {
