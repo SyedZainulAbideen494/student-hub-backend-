@@ -1700,31 +1700,56 @@ app.post('/api/quiz/generate', async (req, res) => {
 
     console.log('Generating quiz with refined prompt:', prompt);
 
-    // Step 3: Send the prompt to the AI model
-    const chat = model.startChat({
-      history: [
-        { role: 'user', parts: [{ text: 'Hello' }] },
-        { role: 'model', parts: [{ text: 'I can help generate quizzes for your study!' }] },
-      ],
-    });
+    // Step 3: Function to handle quiz generation with retry logic
+    const generateQuizWithRetry = async () => {
+      let attempts = 0;
 
-    const result = await chat.sendMessage(prompt);
-    const rawResponse = await result.response.text();
+      while (attempts < MAX_RETRIES) {
+        try {
+          // Send the prompt to the AI model
+          const chat = model.startChat({
+            history: [
+              { role: 'user', parts: [{ text: 'Hello' }] },
+              { role: 'model', parts: [{ text: 'I can help generate quizzes for your study!' }] },
+            ],
+          });
 
-    // Step 4: Sanitize the response to ensure it is valid JSON
-    const sanitizedResponse = rawResponse
-      .replace(/```(?:json)?/g, '') // Remove markdown code blocks (e.g., ```json)
-      .trim();
+          const result = await chat.sendMessage(prompt);
+          const rawResponse = await result.response.text();
 
-    let quizQuestions;
-    try {
-      quizQuestions = JSON.parse(sanitizedResponse);
-    } catch (parseError) {
-      console.error('Failed to parse JSON:', parseError, 'Raw response:', sanitizedResponse);
-      return res.status(500).json({ error: 'Invalid JSON response from the AI model' });
-    }
+          // Step 4: Sanitize the response to ensure it is valid JSON
+          const sanitizedResponse = rawResponse
+            .replace(/```(?:json)?/g, '') // Remove markdown code blocks (e.g., ```json)
+            .trim();
 
-    // Step 5: Insert quiz details into the database
+          let quizQuestions;
+          try {
+            quizQuestions = JSON.parse(sanitizedResponse);
+          } catch (parseError) {
+            console.error('Failed to parse JSON:', parseError, 'Raw response:', sanitizedResponse);
+            throw new Error('Invalid JSON response from the AI model');
+          }
+
+          // If we successfully parsed the JSON, return the quiz questions
+          return quizQuestions;
+        } catch (error) {
+          attempts++;
+          console.log(`Attempt ${attempts} failed, retrying...`);
+
+          if (attempts === MAX_RETRIES) {
+            throw new Error('Failed to generate quiz after multiple attempts');
+          }
+
+          // Delay before retrying
+          await delay(2000); // Delay for 2 seconds before the next attempt
+        }
+      }
+    };
+
+    // Step 5: Try generating the quiz with retries
+    const quizQuestions = await generateQuizWithRetry();
+
+    // Step 6: Insert quiz details into the database
     const title = `${subject} - ${topic} Quiz`;
     const description = `Quiz on ${subject} - ${topic}`;
     const [quizResult] = await connection.promise().query(
@@ -1733,7 +1758,7 @@ app.post('/api/quiz/generate', async (req, res) => {
     );
     const quizId = quizResult.insertId;
 
-    // Step 6: Insert questions and their options into the database
+    // Step 7: Insert questions and their options into the database
     for (const question of quizQuestions) {
       const [questionResult] = await connection.promise().query(
         'INSERT INTO questions (quiz_id, question_text) VALUES (?, ?)',
@@ -1750,14 +1775,13 @@ app.post('/api/quiz/generate', async (req, res) => {
       }
     }
 
-    // Step 7: Return the generated quiz details
+    // Step 8: Return the generated quiz details
     res.json({ message: 'Quiz generated successfully', quizId });
   } catch (error) {
     console.error('Error generating quiz:', error);
     res.status(500).json({ error: 'Error generating quiz' });
   }
 });
-
 
 
 // Get all quizzes for a user
@@ -4290,6 +4314,7 @@ app.post('/addStory', upload.single('file'), async (req, res) => {
   }
 });
 
+
 app.post('/api/tasks/generate', async (req, res) => {
   const { mainTask, days, token, taskStyle } = req.body;
 
@@ -4323,46 +4348,69 @@ app.post('/api/tasks/generate', async (req, res) => {
       4. Descriptions should be motivational, actionable, and specific.
       5. Ensure the workload is balanced and realistic for each day.
       
-      Return **only the JSON** as the response without any explanations, comments, or code blocks. If the input is invalid or insufficient to generate a task plan, return an empty JSON array: [].
-      `
-
+      Return **only the JSON** as the response without any explanations, comments, or code blocks. If the input is invalid or insufficient to generate a task plan, return an empty JSON array: [].`
       : `Create a concise task plan in JSON format, breaking down the main task: "${mainTask}" into simple steps for completion within ${days} days. The task plan should include:
           - 'title' summarizing each action
           - 'due_date' in YYYY-MM-DD format, starting from today (${todayDate})
           - Minimal 'description' with only essential steps or resources.`;
 
     console.log('Generating tasks with prompt:', prompt);
-    
-    // Call the AI model with the prompt (replace with appropriate API or library usage)
-    const chat = model.startChat({
-      history: [
-        { role: 'user', parts: [{ text: 'Hello' }] },
-        { role: 'model', parts: [{ text: 'I can help generate tasks for your project!' }] },
-      ],
-    });
-    const result = await chat.sendMessage(prompt);
 
-    // Extract only the JSON part using a regular expression
-    const responseText = result.response.text();
-    const jsonResponse = responseText.match(/```json([\s\S]*?)```/);
-    if (!jsonResponse || jsonResponse.length < 2) {
-      return res.status(500).json({ error: 'Could not extract JSON from AI response' });
-    }
+    // Function to attempt generating tasks and retry on failure
+    const generateTasksWithRetry = async () => {
+      let attempts = 0;
 
-    // Parse the JSON
-    let tasks;
-    try {
-      tasks = JSON.parse(jsonResponse[1].trim());
-    } catch (parseError) {
-      console.error('Failed to parse JSON:', parseError);
-      return res.status(500).json({ error: 'Invalid JSON response from the AI model.' });
-    }
+      while (attempts < MAX_RETRIES) {
+        try {
+          // Call the AI model with the prompt
+          const chat = model.startChat({
+            history: [
+              { role: 'user', parts: [{ text: 'Hello' }] },
+              { role: 'model', parts: [{ text: 'I can help generate tasks for your project!' }] },
+            ],
+          });
 
-    // Ensure tasks is an array
-    if (!Array.isArray(tasks)) {
-      console.error('AI response does not contain an array of tasks.');
-      return res.status(500).json({ error: 'Invalid task structure returned from AI model.' });
-    }
+          const result = await chat.sendMessage(prompt);
+
+          // Extract only the JSON part using a regular expression
+          const responseText = result.response.text();
+          const jsonResponse = responseText.match(/```json([\s\S]*?)```/);
+          if (!jsonResponse || jsonResponse.length < 2) {
+            throw new Error('Could not extract JSON from AI response');
+          }
+
+          // Parse the JSON
+          let tasks;
+          try {
+            tasks = JSON.parse(jsonResponse[1].trim());
+          } catch (parseError) {
+            console.error('Failed to parse JSON:', parseError);
+            throw new Error('Invalid JSON response from the AI model.');
+          }
+
+          // Ensure tasks is an array
+          if (!Array.isArray(tasks)) {
+            console.error('AI response does not contain an array of tasks.');
+            throw new Error('Invalid task structure returned from AI model.');
+          }
+
+          return tasks;  // Return the successfully generated tasks
+        } catch (error) {
+          attempts++;
+          console.log(`Attempt ${attempts} failed, retrying...`);
+
+          if (attempts === MAX_RETRIES) {
+            throw new Error('Failed to generate tasks after multiple attempts');
+          }
+
+          // Delay before retrying
+          await delay(2000); // Delay for 2 seconds before the next attempt
+        }
+      }
+    };
+
+    // Try to generate tasks with retries
+    const tasks = await generateTasksWithRetry();
 
     const tasksData = tasks.map(task => ({
       userId,
@@ -4384,12 +4432,15 @@ app.post('/api/tasks/generate', async (req, res) => {
     }
   } catch (error) {
     console.error('Error generating tasks:', error);
+
+    // Provide a default error message
     let errorMessage = 'Failed to generate tasks';
     if (error.response) {
       errorMessage = `Error: ${error.response.status} - ${error.response.data?.message || error.response.statusText}`;
     } else if (error.message) {
       errorMessage = `Error: ${error.message}`;
     }
+
     res.status(500).json({ error: errorMessage });
   }
 });
