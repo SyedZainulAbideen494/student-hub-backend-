@@ -2162,7 +2162,7 @@ app.post('/api/session-check', (req, res) => {
 
 const clientId = '0aac6cb1ec104103a5e2e5d6f9b490e7';
 const clientSecret = '4e2d9a5a3be9406c970cf3f6cb78b7a3';
-const redirectUri = `https://srv594954.hstgr.cloud/callback`; // Ensure this matches your Spotify Dashboard
+const redirectUri = `http://localhost:8080/callback`; // Ensure this matches your Spotify Dashboard
 
 app.use(cors());
 
@@ -2197,7 +2197,7 @@ app.get('/callback', (req, res) => {
       const access_token = body.access_token;
       const refresh_token = body.refresh_token;
 
-      const uri = 'https://edusify.vercel.app/music';
+      const uri = 'http://localhost:3000/music';
       res.redirect(uri + '?access_token=' + access_token + '&refresh_token=' + refresh_token);
     } else {
       res.redirect('/#' +
@@ -3360,6 +3360,7 @@ app.post('/api/feedback', (req, res) => {
 });
 
 
+const MAX_RETRIES = 5;
 
 app.post('/api/chat/ai', async (req, res) => {
   const { message, chatHistory, token } = req.body;
@@ -3384,15 +3385,38 @@ app.post('/api/chat/ai', async (req, res) => {
     // Log the user's question
     console.log('User asked:', message);
 
-    const result = await chat.sendMessage(message);
-    
+    // Function to attempt sending message and retry on failure
+    const sendMessageWithRetry = async (message) => {
+      let attempts = 0;
+
+      while (attempts < MAX_RETRIES) {
+        try {
+          // Attempt to send the message
+          const result = await chat.sendMessage(message);
+          // If successful, return the response text
+          return result.response.text();
+        } catch (error) {
+          attempts++;
+          console.log(`Attempt ${attempts} failed, retrying...`);
+
+          if (attempts === MAX_RETRIES) {
+            // If max retries are reached, throw error
+            throw new Error('Failed to communicate with the AI after multiple attempts');
+          }
+        }
+      }
+    };
+
+    // Try to get a response from the AI
+    const responseText = await sendMessageWithRetry(message);
+
     // Log that the AI was asked
     console.log('AI was asked for response.');
 
     // Store user message and AI response in MySQL
-    await query('INSERT INTO ai_history (user_id, user_message, ai_response) VALUES (?, ?, ?)', [userId, message, result.response.text()]);
+    await query('INSERT INTO ai_history (user_id, user_message, ai_response) VALUES (?, ?, ?)', [userId, message, responseText]);
 
-    res.json({ response: result.response.text() });
+    res.json({ response: responseText });
   } catch (error) {
     console.error('Error communicating with Gemini API:', error);
 
@@ -3413,6 +3437,7 @@ app.post('/api/chat/ai', async (req, res) => {
     res.status(500).json({ error: errorMessage });
   }
 });
+
 
 // Endpoint to fetch chat history
 app.post('/api/chat/history/ai', async (req, res) => {
@@ -5006,6 +5031,39 @@ app.get('/session-stats/pomodoro', async (req, res) => {
     res.json(result);
   } catch (error) {
     res.status(401).json({ message: 'Invalid or expired token' });
+  }
+});
+
+
+app.put('/api/birthday', async (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1]; // Extract token from "Bearer <token>"
+  const { birthday } = req.body;
+
+  if (!token) {
+    return res.status(401).json({ error: 'Authorization token is required' });
+  }
+
+  if (!birthday) {
+    return res.status(400).json({ error: 'Birthday is required' });
+  }
+
+  try {
+    const user_id = await getUserIdFromToken(token); // Extract user_id from token
+
+    const query = 'UPDATE users SET birthday = ? WHERE id = ?';
+    connection.query(query, [birthday, user_id], (err, result) => {
+      if (err) {
+        console.error('Error updating birthday:', err);
+        return res.status(500).json({ error: 'Database error' });
+      }
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      res.status(200).json({ message: 'Birthday updated successfully' });
+    });
+  } catch (error) {
+    console.error('Error processing token:', error);
+    return res.status(401).json({ error: 'Invalid or expired token' });
   }
 });
 
