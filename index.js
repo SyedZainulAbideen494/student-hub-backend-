@@ -5040,6 +5040,43 @@ app.get('/session-stats/pomodoro', async (req, res) => {
   }
 });
 
+app.put('/api/birthday', async (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1]; // Extract token from "Bearer <token>"
+  const { birthday } = req.body;
+
+  if (!token) {
+    return res.status(401).json({ error: 'Authorization token is required' });
+  }
+
+  if (!birthday) {
+    return res.status(400).json({ error: 'Birthday is required' });
+  }
+
+  try {
+    const user_id = await getUserIdFromToken(token); // Extract user_id from token
+
+    const query = 'UPDATE users SET birthday = ? WHERE id = ?';
+    connection.query(query, [birthday, user_id], (err, result) => {
+      if (err) {
+        console.error('Error updating birthday:', err);
+        return res.status(500).json({ error: 'Database error' });
+      }
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      // Log the user and the date they entered the birthday
+      const logDate = new Date().toISOString(); // Get the current date and time in ISO format
+      console.log(`User with ID ${user_id} updated their birthday to ${birthday}`);
+
+      res.status(200).json({ message: 'Birthday updated successfully' });
+    });
+  } catch (error) {
+    console.error('Error processing token:', error);
+    return res.status(401).json({ error: 'Invalid or expired token' });
+  }
+});
+
 
 
 // Route to send emails to users
