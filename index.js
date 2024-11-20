@@ -5083,7 +5083,7 @@ app.get('/session-stats/pomodoro', async (req, res) => {
 });
 
 app.put('/api/birthday', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1]; // Extract token from "Bearer <token>"
+  const token = req.headers.authorization?.split(' ')[1]; 
   const { birthday } = req.body;
 
   if (!token) {
@@ -5122,7 +5122,7 @@ app.put('/api/birthday', async (req, res) => {
 
 
 
-// Function to send birthday email
+
 const sendBirthdayEmail = async (user) => {
   const { email, unique_id, birthday } = user;
 
