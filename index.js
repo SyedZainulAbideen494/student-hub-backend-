@@ -3388,75 +3388,64 @@ const MAX_RETRIES = 15;
 
 // Helper function to introduce a delay (in milliseconds)
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
 app.post('/api/chat/ai', async (req, res) => {
   const { message, chatHistory, token } = req.body;
 
   try {
+    // Validate required inputs
+    if (!message || !token) {
+      return res.status(400).json({ error: 'Message and token are required.' });
+    }
+
     // Get user ID from token
     const userId = await getUserIdFromToken(token);
+    if (!userId) {
+      return res.status(401).json({ error: 'Invalid token or user not authenticated.' });
+    }
+
+    // Initialize chat history if not provided
+    const initialChatHistory = [
+      {
+        role: 'user',
+        parts: [{ text: 'Hello' }],
+      },
+      {
+        role: 'model',
+        parts: [{ text: 'Great to meet you. What would you like to know?' }],
+      },
+    ];
 
     const chat = model.startChat({
-      history: chatHistory || [
-        {
-          role: 'user',
-          parts: [{ text: 'Hello' }],
-        },
-        {
-          role: 'model',
-          parts: [{ text: 'Great to meet you. What would you like to know?' }],
-        },
-      ],
+      history: chatHistory || initialChatHistory,
     });
 
     // Log the user's question
-    console.log(`User Inquiry: "${message}" | User ID: ${userId}`);
+    console.log('User asked:', message);
 
+    // Send message to the AI model and get the response
+    const result = await chat.sendMessage(message);
+    const aiResponse = result.response.text();
 
-    // Function to attempt sending message and retry on failure
-    const sendMessageWithRetry = async (message) => {
-      let attempts = 0;
+    // Log the AI's response
+    console.log('AI responded');
 
-      while (attempts < MAX_RETRIES) {
-        try {
-          // Attempt to send the message
-          const result = await chat.sendMessage(message);
-          // If successful, return the response text
-          return result.response.text();
-        } catch (error) {
-          attempts++;
-          console.log(`Attempt ${attempts} failed, retrying...`);
+    // Store user message and AI response in the database
+    await query(
+      'INSERT INTO ai_history (user_id, user_message, ai_response) VALUES (?, ?, ?)',
+      [userId, message, aiResponse]
+    );
 
-          // If we have failed all retry attempts, throw an error
-          if (attempts === MAX_RETRIES) {
-            throw new Error('Failed to communicate with the AI after multiple attempts');
-          }
-
-          // Delay before retrying
-          await delay(4000); // Delay for 2 seconds before the next attempt
-        }
-      }
-    };
-
-    // Try to get a response from the AI
-    const responseText = await sendMessageWithRetry(message);
-
-    // Log that the AI was asked
-    console.log('AI was asked for response.');
-
-    // Store user message and AI response in MySQL
-    await query('INSERT INTO ai_history (user_id, user_message, ai_response) VALUES (?, ?, ?)', [userId, message, responseText]);
-
-    res.json({ response: responseText });
+    // Send the response back to the client
+    res.json({ response: aiResponse });
   } catch (error) {
-    console.error('Error communicating with Gemini API:', error);
+    // Handle errors
+    console.error('Error in /api/chat/ai endpoint:', error);
 
-    // Provide a default error message
-    let errorMessage = 'Failed to communicate with the API';
-
-    // Safely access error response properties
+    let errorMessage = 'An error occurred while processing your request. Please try again later.';
     if (error.response) {
-      errorMessage = `Error: ${error.response.status} - ${error.response.data?.message || error.response.statusText}`;
+      errorMessage = `Error: ${error.response.status} - ${
+        error.response.data?.message || error.response.statusText
+      }`;
     } else if (error.message) {
       errorMessage = `Error: ${error.message}`;
     }
@@ -3468,7 +3457,6 @@ app.post('/api/chat/ai', async (req, res) => {
     res.status(500).json({ error: errorMessage });
   }
 });
-
 
 // Endpoint to fetch chat history
 app.post('/api/chat/history/ai', async (req, res) => {
