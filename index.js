@@ -3388,6 +3388,8 @@ const MAX_RETRIES = 15;
 
 // Helper function to introduce a delay (in milliseconds)
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+
 app.post('/api/chat/ai', async (req, res) => {
   const { message, chatHistory, token } = req.body;
 
@@ -3403,7 +3405,7 @@ app.post('/api/chat/ai', async (req, res) => {
       return res.status(401).json({ error: 'Invalid token or user not authenticated.' });
     }
 
-    // Initialize chat history if not provided
+
     const initialChatHistory = [
       {
         role: 'user',
