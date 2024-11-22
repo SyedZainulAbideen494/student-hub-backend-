@@ -3747,7 +3747,6 @@ app.get('/api/leaderboard', (req, res) => {
       FROM users u
       JOIN user_points p ON u.id = p.user_id
       ORDER BY p.points DESC
-      LIMIT 10
   `;
 
   connection.query(sql, (err, results) => {
