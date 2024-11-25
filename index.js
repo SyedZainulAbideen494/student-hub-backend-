@@ -5187,6 +5187,31 @@ app.post('/api/reports/generate', async (req, res) => {
   try {
     const userId = await getUserIdFromToken(token); // Extract user ID from token
 
+    // Check if a report was generated in the past week
+    const lastReportQuery = `
+      SELECT created_at 
+      FROM reports 
+      WHERE user_id = ? 
+      ORDER BY created_at DESC LIMIT 1
+    `;
+    const lastReport = await new Promise((resolve, reject) => {
+      connection.query(lastReportQuery, [userId], (err, results) => {
+        if (err) return reject(err);
+        resolve(results[0]);
+      });
+    });
+
+    if (lastReport) {
+      const lastReportDate = new Date(lastReport.created_at);
+      const currentDate = new Date();
+      const diffTime = currentDate - lastReportDate;
+      const diffDays = diffTime / (1000 * 60 * 60 * 24); // Convert to days
+
+      if (diffDays < 7) {
+        return res.status(400).json({ error: 'You have already generated a report this week.' });
+      }
+    }
+
     // Fetch tasks for the user
     const tasksQuery = `
       SELECT created_at, due_date, completed_at 
@@ -5226,6 +5251,13 @@ app.post('/api/reports/generate', async (req, res) => {
         resolve(results);
       });
     });
+
+    // Check if there is enough data for the report (e.g., 3 tasks and 2 Pomodoro sessions)
+    if (tasks.length < 3 || pomodoroSessions.length < 2) {
+      return res.status(400).json({
+        error: 'Not enough data to generate a report. You need at least 3 tasks and 2 Pomodoro sessions.',
+      });
+    }
 
     // Prepare the AI prompt
     const prompt = `
@@ -5291,6 +5323,8 @@ app.post('/api/reports/generate', async (req, res) => {
     res.status(500).json({ error: errorMessage });
   }
 });
+
+
 
 app.get('/api/reports', async (req, res) => {
   const token = req.headers.authorization; // Expecting `Bearer <token>` in the Authorization header
