@@ -5258,12 +5258,15 @@ app.post('/api/reports/generate', async (req, res) => {
     });
 
 
-// Check if there is enough data for the report (e.g., 3 tasks and 2 Pomodoro sessions, 2 quizzes)
-if (tasks.length < 3 || pomodoroSessions.length < 2 || quizzes.length < 2) {
+// Check if there is enough data for the report (at least one condition should be met)
+if (tasks.length >= 3 || pomodoroSessions.length >= 2 || quizzes.length >= 2) {
+  // Proceed with generating the report
+} else {
   return res.status(400).json({
-    error: 'Not enough data to generate a report. You need at least 3 tasks, 2 Pomodoro sessions, and 2 quizzes.',
+    error: 'Not enough data to generate a report. You need at least 3 tasks, 2 Pomodoro sessions, or 2 quizzes.',
   });
 }
+
 
     
 
