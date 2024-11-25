@@ -5217,7 +5217,7 @@ app.post('/api/reports/generate', async (req, res) => {
     SELECT created_at, due_date, completed_at 
     FROM tasks 
     WHERE user_id = ? 
-    AND created_at >= CURDATE() - INTERVAL 7 DAY
+    AND created_at >= CURDATE() - INTERVAL 15 DAY
   `;
     const tasks = await new Promise((resolve, reject) => {
       connection.query(tasksQuery, [userId], (err, results) => {
@@ -5232,7 +5232,7 @@ app.post('/api/reports/generate', async (req, res) => {
     FROM user_quizzes uq
     INNER JOIN quizzes q ON uq.quiz_id = q.id
     WHERE uq.user_id = ? 
-    AND uq.completed_at >= CURDATE() - INTERVAL 7 DAY
+    AND uq.completed_at >= CURDATE() - INTERVAL 15 DAY
   `;
   
     const quizzes = await new Promise((resolve, reject) => {
@@ -5247,7 +5247,7 @@ app.post('/api/reports/generate', async (req, res) => {
     SELECT start_time, end_time, duration, session_date, session_type, created_at 
     FROM pomodoro_date 
     WHERE user_id = ? 
-    AND created_at >= CURDATE() - INTERVAL 7 DAY
+    AND created_at >= CURDATE() - INTERVAL 15 DAY
   `;
   
     const pomodoroSessions = await new Promise((resolve, reject) => {
