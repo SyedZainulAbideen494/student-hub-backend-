@@ -48,7 +48,7 @@ const safetySettings = [
 
 
 
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash", safetySettings: safetySettings });
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro", safetySettings: safetySettings });
 
 
 app.use(express.urlencoded({ extended: true }));
@@ -5180,7 +5180,6 @@ const checkAndSendBirthdayEmails = async () => {
 };
 
 cron.schedule('0 0 * * *', checkAndSendBirthdayEmails); // '0 0 * * *' means 12:00 AM every day
-
 
 
 
