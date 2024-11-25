@@ -5214,10 +5214,11 @@ app.post('/api/reports/generate', async (req, res) => {
 
     // Fetch tasks for the user
     const tasksQuery = `
-      SELECT created_at, due_date, completed_at 
-      FROM tasks 
-      WHERE user_id = ?
-    `;
+    SELECT created_at, due_date, completed_at 
+    FROM tasks 
+    WHERE user_id = ? 
+    AND created_at >= CURDATE() - INTERVAL 7 DAY
+  `;
     const tasks = await new Promise((resolve, reject) => {
       connection.query(tasksQuery, [userId], (err, results) => {
         if (err) return reject(err);
@@ -5227,11 +5228,13 @@ app.post('/api/reports/generate', async (req, res) => {
 
     // Fetch quizzes for the user
     const quizzesQuery = `
-      SELECT uq.score, uq.completed_at, q.title 
-      FROM user_quizzes uq
-      INNER JOIN quizzes q ON uq.quiz_id = q.id
-      WHERE uq.user_id = ?
-    `;
+    SELECT uq.score, uq.completed_at, q.title 
+    FROM user_quizzes uq
+    INNER JOIN quizzes q ON uq.quiz_id = q.id
+    WHERE uq.user_id = ? 
+    AND uq.completed_at >= CURDATE() - INTERVAL 7 DAY
+  `;
+  
     const quizzes = await new Promise((resolve, reject) => {
       connection.query(quizzesQuery, [userId], (err, results) => {
         if (err) return reject(err);
@@ -5241,10 +5244,12 @@ app.post('/api/reports/generate', async (req, res) => {
 
     // Fetch Pomodoro sessions for the user
     const pomodoroQuery = `
-      SELECT start_time, end_time, duration, session_date, session_type, created_at 
-      FROM pomodoro_date 
-      WHERE user_id = ?
-    `;
+    SELECT start_time, end_time, duration, session_date, session_type, created_at 
+    FROM pomodoro_date 
+    WHERE user_id = ? 
+    AND created_at >= CURDATE() - INTERVAL 7 DAY
+  `;
+  
     const pomodoroSessions = await new Promise((resolve, reject) => {
       connection.query(pomodoroQuery, [userId], (err, results) => {
         if (err) return reject(err);
@@ -5252,12 +5257,14 @@ app.post('/api/reports/generate', async (req, res) => {
       });
     });
 
-    // Check if there is enough data for the report (e.g., 3 tasks and 2 Pomodoro sessions)
-    if (tasks.length < 3 || pomodoroSessions.length < 2) {
-      return res.status(400).json({
-        error: 'Not enough data to generate a report. You need at least 3 tasks or 2 Pomodoro sessions.',
-      });
-    }
+
+// Check if there is enough data for the report (e.g., 3 tasks and 2 Pomodoro sessions, 2 quizzes)
+if (tasks.length < 3 || pomodoroSessions.length < 2 || quizzes.length < 2) {
+  return res.status(400).json({
+    error: 'Not enough data to generate a report. You need at least 3 tasks, 2 Pomodoro sessions, and 2 quizzes.',
+  });
+}
+
     
 
     // Prepare the AI prompt
