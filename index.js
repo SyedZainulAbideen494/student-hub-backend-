@@ -5181,7 +5181,170 @@ const checkAndSendBirthdayEmails = async () => {
 
 cron.schedule('0 0 * * *', checkAndSendBirthdayEmails); // '0 0 * * *' means 12:00 AM every day
 
+app.post('/api/reports/generate', async (req, res) => {
+  const { token } = req.body; // Token from the frontend
 
+  try {
+    const userId = await getUserIdFromToken(token); // Extract user ID from token
+
+    // Fetch tasks for the user
+    const tasksQuery = `
+      SELECT created_at, due_date, completed_at 
+      FROM tasks 
+      WHERE user_id = ?
+    `;
+    const tasks = await new Promise((resolve, reject) => {
+      connection.query(tasksQuery, [userId], (err, results) => {
+        if (err) return reject(err);
+        resolve(results);
+      });
+    });
+
+    // Fetch quizzes for the user
+    const quizzesQuery = `
+      SELECT uq.score, uq.completed_at, q.title 
+      FROM user_quizzes uq
+      INNER JOIN quizzes q ON uq.quiz_id = q.id
+      WHERE uq.user_id = ?
+    `;
+    const quizzes = await new Promise((resolve, reject) => {
+      connection.query(quizzesQuery, [userId], (err, results) => {
+        if (err) return reject(err);
+        resolve(results);
+      });
+    });
+
+    // Fetch Pomodoro sessions for the user
+    const pomodoroQuery = `
+      SELECT start_time, end_time, duration, session_date, session_type, created_at 
+      FROM pomodoro_date 
+      WHERE user_id = ?
+    `;
+    const pomodoroSessions = await new Promise((resolve, reject) => {
+      connection.query(pomodoroQuery, [userId], (err, results) => {
+        if (err) return reject(err);
+        resolve(results);
+      });
+    });
+
+    // Prepare the AI prompt
+    const prompt = `
+      Analyze the following user data and generate a detailed report including user type, improvement areas, and strengths. 
+      Format the report in JSON. The fields should include: "userType", "strengths", "improvementAreas", and a "summary".
+
+      Tasks:
+      ${JSON.stringify(tasks, null, 2)}
+
+      Quizzes:
+      ${JSON.stringify(quizzes, null, 2)}
+
+      Pomodoro Sessions:
+      ${JSON.stringify(pomodoroSessions, null, 2)}
+    `;
+
+    console.log('Generating report with prompt for userId:', userId);  // Log userId
+
+    const chat = model.startChat({
+      history: [
+        { role: 'user', parts: [{ text: 'Hello' }] },
+        { role: 'model', parts: [{ text: 'I can help generate a detailed user report!' }] },
+      ],
+    });
+
+    const result = await chat.sendMessage(prompt);
+
+    // Sanitize and parse the AI response
+    const sanitizedResponse = result.response.text().replace(/```json|```|`/g, '').trim();
+
+    let report;
+    try {
+      report = JSON.parse(sanitizedResponse);
+    } catch (parseError) {
+      console.error('Failed to parse JSON:', parseError);
+      return res.status(500).json({ error: 'Invalid JSON response from the AI model' });
+    }
+
+    // Store the report in the database
+    const insertReportQuery = `
+      INSERT INTO reports (user_id, report) 
+      VALUES (?, ?)
+    `;
+    await new Promise((resolve, reject) => {
+      connection.query(insertReportQuery, [userId, JSON.stringify(report)], (err, results) => {
+        if (err) return reject(err);
+        resolve(results);
+      });
+    });
+
+    console.log('User report stored for userId:', userId);
+
+    // Return the generated report
+    res.json({ report });
+  } catch (error) {
+    console.error('Error generating report for userId:', req.body.token, error);  // Log error with userId
+    let errorMessage = 'Failed to generate report';
+    if (error.response) {
+      errorMessage = `Error: ${error.response.status} - ${error.response.data?.message || error.response.statusText}`;
+    } else if (error.message) {
+      errorMessage = `Error: ${error.message}`;
+    }
+    res.status(500).json({ error: errorMessage });
+  }
+});
+
+app.get('/api/reports', async (req, res) => {
+  const token = req.headers.authorization; // Expecting `Bearer <token>` in the Authorization header
+
+  if (!token) {
+      return res.status(401).json({ error: 'Token is required' });
+  }
+
+  try {
+      const userId = await getUserIdFromToken(token.split(' ')[1]); // Extract token after 'Bearer '
+      const query = 'SELECT id, created_at FROM reports WHERE user_id = ? ORDER BY created_at DESC';
+      connection.query(query, [userId], (err, results) => {
+          if (err) {
+              console.error('Error fetching reports:', err);
+              return res.status(500).json({ error: 'Database error' });
+          }
+          const formattedResults = results.map((report) => ({
+              id: report.id,
+              created_at: new Date(report.created_at).toLocaleDateString('en-US', {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+              }),
+          }));
+          res.json({ reports: formattedResults });
+      });
+  } catch (err) {
+      console.error('Error processing token:', err.message);
+      res.status(401).json({ error: 'Invalid or expired token' });
+  }
+});
+
+app.get('/api/reports/:id', (req, res) => {
+  const { id } = req.params;
+  const query = 'SELECT * FROM reports WHERE id = ?';
+  connection.query(query, [id], (err, results) => {
+      if (err) {
+          console.error('Error fetching report:', err);
+          return res.status(500).json({ error: 'Database error' });
+      }
+
+      if (results.length === 0) {
+          return res.status(404).json({ error: 'Report not found' });
+      }
+
+      const report = results[0];
+      
+      // Ensure strengths and improvementAreas are arrays
+      report.strengths = JSON.parse(report.strengths || '[]');
+      report.improvementAreas = JSON.parse(report.improvementAreas || '[]');
+
+      res.json(report);
+  });
+});
 
 
 // Route to send emails to users
