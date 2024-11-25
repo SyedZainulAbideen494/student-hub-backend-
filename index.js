@@ -5255,9 +5255,10 @@ app.post('/api/reports/generate', async (req, res) => {
     // Check if there is enough data for the report (e.g., 3 tasks and 2 Pomodoro sessions)
     if (tasks.length < 3 || pomodoroSessions.length < 2) {
       return res.status(400).json({
-        error: 'Not enough data to generate a report. You need at least 3 tasks and 2 Pomodoro sessions.',
+        error: 'Not enough data to generate a report. You need at least 3 tasks or 2 Pomodoro sessions.',
       });
     }
+    
 
     // Prepare the AI prompt
     const prompt = `
