@@ -25,7 +25,7 @@ const { HarmBlockThreshold, HarmCategory } = require("@google/generative-ai");
 const schedule = require("node-schedule");
 
 // Initialize Google Generative AI
-const genAI = new GoogleGenerativeAI('AIzaSyDEb3nt1CCmUgQDIsEB1tvsgLzbWHmcYic');
+const genAI = new GoogleGenerativeAI('AIzaSyDNx6QYkHkvFYd8-lc-O1HgFgCDaChGkV0');
 
 const safetySettings = [
   {
