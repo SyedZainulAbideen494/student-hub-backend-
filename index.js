@@ -5272,7 +5272,8 @@ if (tasks.length >= 3 || pomodoroSessions.length >= 2 || quizzes.length >= 2) {
 
     // Prepare the AI prompt
     const prompt = `
-      Analyze the following user data and generate a detailed report including user type, improvement areas, and strengths. 
+      Today's Date: ${new Date().toISOString().split('T')[0]}
+      Analyze the following user data and generate a detailed report including user type, improvement areas, and strengths, and provide constructive feedback in an encouraging and empowering tone. 
       Format the report in JSON. The fields should include: "userType", "strengths", "improvementAreas", and a "summary".
 
       Tasks:
@@ -5390,7 +5391,6 @@ app.get('/api/reports/:id', (req, res) => {
       res.json(report);
   });
 });
-
 
 // Route to send emails to users
 app.post('/send-emails/all-users/admin', async (req, res) => {
