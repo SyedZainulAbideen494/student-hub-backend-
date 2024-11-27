@@ -4338,10 +4338,12 @@ app.post('/api/tasks/generate', async (req, res) => {
       5. Ensure the workload is balanced and realistic for each day.
       
       Return **only the JSON** as the response without any explanations, comments, or code blocks. If the input is invalid or insufficient to generate a task plan, return an empty JSON array: [].`
-      : `Create a concise task plan in JSON format, breaking down the main task: "${mainTask}" into simple steps for completion within ${days} days. The task plan should include:
-          - 'title' summarizing each action
-          - 'due_date' in YYYY-MM-DD format, starting from today (${todayDate})
-          - Minimal 'description' with only essential steps or resources.`;
+      : `Create a task plan in JSON format for the main task: '${mainTask}', breaking it down into simple, actionable steps to complete within ${days} days. The task plan should include the following for each step:
+- 'title': A short summary of the action.
+- 'due_date': Deadline for the step in YYYY-MM-DD format, starting from today (${todayDate}).
+- 'description': Briefly describe the essential actions or resources required.
+
+Ensure the output is valid JSON.`;
 
     console.log('Generating tasks with prompt:', prompt);
 
@@ -5391,6 +5393,7 @@ app.get('/api/reports/:id', (req, res) => {
       res.json(report);
   });
 });
+
 
 // Route to send emails to users
 app.post('/send-emails/all-users/admin', async (req, res) => {
