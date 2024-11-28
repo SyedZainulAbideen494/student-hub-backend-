@@ -5394,36 +5394,49 @@ app.get('/api/reports/:id', (req, res) => {
   });
 });
 
-
 // Route to send emails to users
-app.post('/send-emails/all-users/admin', async (req, res) => {
-  const { content, subject } = req.body;
+app.post('/send-emails/selected-users/admin', async (req, res) => {
+  const { content, subject, selectedUsers } = req.body;
 
   try {
-      // Fetch all users from the database
-      const users = await query('SELECT email, unique_id FROM users', []);
+      let users;
 
-      // Map over users to create personalized emails
+      if (selectedUsers && selectedUsers.length > 0) {
+          // Fetch only the selected users
+          const placeholders = selectedUsers.map(() => '?').join(',');
+          users = await query(`SELECT email, unique_id FROM users WHERE unique_id IN (${placeholders})`, selectedUsers);
+      } else {
+          // Fetch all users if no specific users are selected
+          users = await query('SELECT email, unique_id FROM users', []);
+      }
+
       const emailsToSend = users.map((user) => {
-          // Replace {{name}} in the email content with the user's unique_id (or name)
           const personalizedContent = content.replace(/{{name}}/g, user.unique_id);
 
           return {
-              from: 'edusyfy@gmail.com', // Sender address
-              to: user.email,            // Recipient email
-              subject: subject,          // Subject line
-              html: personalizedContent, // Email content (HTML format)
+              from: 'edusyfy@gmail.com',
+              to: user.email,
+              subject: subject,
+              html: personalizedContent,
           };
       });
 
-      // Send all emails asynchronously using Promise.all
       await Promise.all(emailsToSend.map((email) => transporter.sendMail(email)));
 
-      // Send a success response
       res.status(200).json({ message: 'Emails sent successfully!' });
   } catch (error) {
       console.error('Error sending emails:', error);
       res.status(500).json({ message: 'Error sending emails', error });
+  }
+});
+
+app.get('/get-users/all/admin', async (req, res) => {
+  try {
+      const users = await query('SELECT email, unique_id FROM users', []);
+      res.status(200).json({ users });
+  } catch (error) {
+      console.error('Error fetching users:', error);
+      res.status(500).json({ message: 'Error fetching users', error });
   }
 });
 
