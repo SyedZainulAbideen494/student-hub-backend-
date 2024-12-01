@@ -5394,7 +5394,7 @@ app.get('/api/reports/:id', (req, res) => {
   });
 });
 
-// Create Room
+
 app.post("/create-room", async (req, res) => {
   const { token, roomName, invitePermission } = req.body;
 
@@ -5412,6 +5412,9 @@ app.post("/create-room", async (req, res) => {
       connection.query(insertMemberSql, [roomId, userId], (err, result) => {
         if (err) return res.status(500).send("Error adding admin to room.");
 
+        // Log the room creation event
+        console.log(`Room created successfully: Room ID = ${roomId}, Created By = ${userId}`);
+
         // Send response with success message and invite link
         res.send({
           message: "Room created successfully",
@@ -5420,10 +5423,11 @@ app.post("/create-room", async (req, res) => {
       });
     });
   } catch (err) {
-    console.error(err);
+    console.error("Error creating room:", err);
     res.status(500).send("Invalid token.");
   }
 });
+
 
 app.post("/join-room", async (req, res) => {
   const { token, roomId } = req.body;
@@ -5767,6 +5771,34 @@ app.post('/api/roomResources', async (req, res) => {
   } catch (error) {
       console.error('Error fetching room resources:', error);
       res.status(500).send('Internal Server Error');
+  }
+});
+
+
+app.post("/check-room", async (req, res) => {
+  const { token } = req.body;
+
+  try {
+    const userId = await getUserIdFromToken(token);
+
+
+    const sql = `SELECT room_id FROM room_members WHERE user_id = ? LIMIT 1`;
+    connection.query(sql, [userId], (err, result) => {
+      if (err) {
+        console.error("Error executing SQL query:", err); // Log SQL error
+        return res.status(500).send("Error checking room.");
+      }
+
+
+      if (result.length > 0) {
+        res.send({ roomId: result[0].room_id });
+      } else {
+        res.send({ roomId: null });
+      }
+    });
+  } catch (err) {
+    console.error("Error decoding token:", err); // Log token decoding error
+    res.status(500).send("Invalid token.");
   }
 });
 
