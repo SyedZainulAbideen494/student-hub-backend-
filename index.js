@@ -5689,7 +5689,7 @@ app.get('/fetchRooms/user', async (req, res) => {
     }
     
     const userId = await getUserIdFromToken(token);  // Get userId from token
-    console.log('Decoded userId:', userId);  // Log userId for debugging
+
     
     const roomsQuery = `
         SELECT rm.room_id, r.name 
@@ -5743,6 +5743,7 @@ app.post('/shareNote-note', async (req, res) => {
       res.status(500).send('Internal Server Error');
   }
 });
+
 app.post('/api/roomResources', async (req, res) => {
   try {
       const { roomId, type } = req.body; // Get roomId and type (all, notes, quizzes) from the body
@@ -5802,6 +5803,31 @@ app.post("/check-room", async (req, res) => {
   }
 });
 
+// API route for leaving the room
+app.post('/leaveRoom', async (req, res) => {
+  const { token, room_id } = req.body;
+
+  try {
+    // Get userId from the token
+    const userId = await getUserIdFromToken(token);
+
+    // Use the promisified query to delete the user from the room
+    const result = await query(
+      'DELETE FROM room_members WHERE user_id = ? AND room_id = ?',
+      [userId, room_id]
+    );
+
+    // If the deletion was successful, return a success message
+    if (result.affectedRows > 0) {
+      res.status(200).json({ success: true, message: 'User removed from the room' });
+    } else {
+      res.status(404).json({ success: false, message: 'User not found in this room' });
+    }
+  } catch (err) {
+    console.error('Error removing user from room:', err);
+    res.status(500).json({ success: false, message: 'Error leaving the room' });
+  }
+});
 
 // Route to send emails to users
 app.post('/send-emails/selected-users/admin', async (req, res) => {
