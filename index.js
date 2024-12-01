@@ -5394,6 +5394,418 @@ app.get('/api/reports/:id', (req, res) => {
   });
 });
 
+// Create Room
+app.post("/create-room", async (req, res) => {
+  const { token, roomName, invitePermission } = req.body;
+
+  try {
+    const userId = await getUserIdFromToken(token);
+    const roomId = `${roomName}-${Math.random().toString(36).substring(7)}`; // Generate unique room ID
+
+    // Insert room into the rooms table
+    const sql = `INSERT INTO rooms (name, created_by, invite_permission, room_id) VALUES (?, ?, ?, ?)`;
+    connection.query(sql, [roomName, userId, invitePermission, roomId], (err, result) => {
+      if (err) return res.status(500).send("Error creating room.");
+
+      // Insert the creator (admin) into the room_members table
+      const insertMemberSql = `INSERT INTO room_members (room_id, user_id) VALUES (?, ?)`;
+      connection.query(insertMemberSql, [roomId, userId], (err, result) => {
+        if (err) return res.status(500).send("Error adding admin to room.");
+
+        // Send response with success message and invite link
+        res.send({
+          message: "Room created successfully",
+          inviteLink: `http://localhost:3000/room/invite/${roomId}`,
+        });
+      });
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Invalid token.");
+  }
+});
+
+
+app.post("/join-room", async (req, res) => {
+  const { token, roomId } = req.body;
+
+  try {
+    const userId = await getUserIdFromToken(token);
+
+    // Check if the user is already a member of any room
+    const checkMembershipQuery = `SELECT * FROM room_members WHERE user_id = ?`;
+    connection.query(checkMembershipQuery, [userId], (err, result) => {
+      if (err) return res.status(500).send("Error checking room membership.");
+
+      // If the user is already in a room, don't allow them to join another room
+      if (result.length > 0) {
+        return res.status(400).send("You are already in a room.");
+      }
+
+      // Otherwise, add the user to the new room
+      const sql = `INSERT INTO room_members (room_id, user_id) VALUES (?, ?)`;
+      connection.query(sql, [roomId, userId], (err, result) => {
+        if (err) return res.status(500).send("Error joining room.");
+        res.send({ message: "Successfully joined the room!" });
+      });
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Invalid token.");
+  }
+});
+
+app.post("/check-user-in-room", async (req, res) => {
+  const { token } = req.body;
+
+  try {
+    const userId = await getUserIdFromToken(token);
+
+    // Check if the user is already in any room
+    const checkMembershipQuery = `SELECT * FROM room_members WHERE user_id = ?`;
+    connection.query(checkMembershipQuery, [userId], (err, result) => {
+      if (err) return res.status(500).send("Error checking room membership.");
+
+      // If the user is in a room
+      if (result.length > 0) {
+        return res.json({ isInRoom: true });
+      }
+
+      res.json({ isInRoom: false });
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Invalid token.");
+  }
+});
+
+
+
+app.post("/check-room", async (req, res) => {
+  const { token } = req.body;
+
+  try {
+    const userId = await getUserIdFromToken(token);
+    console.log("User ID from token:", userId); // Add logging to verify userId
+
+    const sql = `SELECT room_id FROM room_members WHERE user_id = ? LIMIT 1`;
+    connection.query(sql, [userId], (err, result) => {
+      if (err) {
+        console.error("Error executing SQL query:", err); // Log SQL error
+        return res.status(500).send("Error checking room.");
+      }
+
+
+      if (result.length > 0) {
+        res.send({ roomId: result[0].room_id });
+      } else {
+        res.send({ roomId: null });
+      }
+    });
+  } catch (err) {
+    console.error("Error decoding token:", err); // Log token decoding error
+    res.status(500).send("Invalid token.");
+  }
+});
+
+
+// Fetch room details for the user
+app.post("/get-room-details", async (req, res) => {
+  const { token } = req.body;
+
+  try {
+    const userId = await getUserIdFromToken(token);
+
+    // Query to get the room details the user is part of
+    const sql = `
+      SELECT r.room_id, r.name, r.invite_permission
+      FROM rooms r
+      JOIN room_members rm ON r.room_id = rm.room_id
+      WHERE rm.user_id = ?
+      LIMIT 1;
+    `;
+
+    connection.query(sql, [userId], (err, result) => {
+      if (err) return res.status(500).send("Error fetching room details.");
+      if (result.length > 0) {
+        res.send({ room: result[0] });
+      } else {
+        res.send({ room: null });
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Invalid token.");
+  }
+});
+
+
+app.post("/room-members-fetch", async (req, res) => {
+  const { token, room_id } = req.body;
+
+  try {
+    const userId = await getUserIdFromToken(token);
+
+    // Fetch room details
+    const roomQuery = `SELECT id, name, invite_permission FROM rooms WHERE room_id = ?`;
+    connection.query(roomQuery, [room_id], (roomErr, roomResult) => {
+      if (roomErr) {
+        console.error("Error fetching room details:", roomErr);
+        return res.status(500).send("Error fetching room details.");
+      }
+
+      if (roomResult.length === 0) {
+        return res.status(404).send("Room not found.");
+      }
+
+      const roomDetails = roomResult[0];
+
+      // Fetch members
+      const membersQuery = `SELECT users.id AS user_id, users.unique_id, users.avatar FROM room_members 
+                            JOIN users ON room_members.user_id = users.id WHERE room_members.room_id = ?`;
+      connection.query(membersQuery, [room_id], (membersErr, membersResult) => {
+        if (membersErr) {
+          console.error("Error fetching room members:", membersErr);
+          return res.status(500).send("Error fetching members.");
+        }
+
+        // Fetch stories
+        const storiesQuery = `SELECT user_id, image FROM room_stories WHERE room_id = ? ORDER BY created_at DESC`;
+        connection.query(storiesQuery, [room_id], (storiesErr, storiesResult) => {
+          if (storiesErr) {
+            console.error("Error fetching room stories:", storiesErr);
+            return res.status(500).send("Error fetching stories.");
+          }
+
+          // Send the final response
+          res.send({
+            room: {
+              ...roomDetails,
+              members: membersResult,
+              stories: storiesResult,
+            },
+          });
+        });
+      });
+    });
+  } catch (err) {
+    console.error("Error decoding token:", err);
+    res.status(500).send("Invalid token.");
+  }
+});
+
+app.post("/api/get-activities", async (req, res) => {
+  const { roomId, filter } = req.body;
+  try {
+    // Step 1: Fetch user IDs for the given room
+    const roomMembers = await query(
+      "SELECT user_id FROM room_members WHERE room_id = ?",
+      [roomId]
+    );
+
+    // Step 2: Build the user ID list
+    const userIds = roomMembers.map((member) => member.user_id);
+
+    // Step 3: Fetch activities based on the filter (today, week, lifetime)
+    let activities = [];
+
+    // Fetch tasks (added and completed)
+    const tasks = await query(
+      `SELECT user_id, created_at, completed_at FROM tasks WHERE user_id IN (?)`,
+      [userIds]
+    );
+    tasks.forEach(async (task) => {
+      const user = await query("SELECT unique_id FROM users WHERE id = ?", [task.user_id]);
+      const userName = user[0].unique_id;
+      
+      if (task.created_at) {
+        activities.push({
+          description: `${userName} added a task`,
+          time: task.created_at,
+          type: "task_added",
+        });
+      }
+      if (task.completed_at) {
+        activities.push({
+          description: `${userName} completed a task`,
+          time: task.completed_at,
+          type: "task_completed",
+        });
+      }
+    });
+
+    // Fetch Pomodoro sessions (started and ended)
+    const pomodoroSessions = await query(
+      `SELECT user_id, start_time, end_time FROM pomodoro_date WHERE user_id IN (?)`,
+      [userIds]
+    );
+    pomodoroSessions.forEach(async (session) => {
+      const user = await query("SELECT unique_id FROM users WHERE id = ?", [session.user_id]);
+      const userName = user[0].unique_id;
+      
+      if (session.start_time) {
+        activities.push({
+          description: `${userName} started a Pomodoro session`,
+          time: session.start_time,
+          type: "pomodoro_started",
+        });
+      }
+      if (session.end_time) {
+        activities.push({
+          description: `${userName} ended a Pomodoro session`,
+          time: session.end_time,
+          type: "pomodoro_ended",
+        });
+      }
+    });
+
+    // Fetch quiz scores
+    const quizzes = await query(
+      `SELECT user_id, quiz_id, score, completed_at FROM user_quizzes WHERE user_id IN (?)`,
+      [userIds]
+    );
+    for (let quiz of quizzes) {
+      const user = await query("SELECT unique_id FROM users WHERE id = ?", [quiz.user_id]);
+      const userName = user[0]?.unique_id || "Unknown User";
+      
+      const quizTitle = await query("SELECT title FROM quizzes WHERE id = ?", [quiz.quiz_id]);
+      
+      // Check if quizTitle exists and has at least one row
+      if (quizTitle.length > 0) {
+        activities.push({
+          description: `${userName} got a score of ${quiz.score} on quiz ${quizTitle[0].title}`,
+          time: quiz.completed_at,
+          type: "quiz_score",
+        });
+      } else {
+        console.warn(`No quiz found for quiz_id: ${quiz.quiz_id}`);
+      }
+    }
+    
+
+    // Sort activities by time (most recent first)
+    activities.sort((a, b) => new Date(b.time) - new Date(a.time));
+
+    // Filter based on the chosen filter (today, week, lifetime)
+    let filteredActivities = activities;
+    if (filter === "today") {
+      filteredActivities = filteredActivities.filter((activity) => {
+        return (
+          new Date(activity.time).toDateString() === new Date().toDateString()
+        );
+      });
+    } else if (filter === "week") {
+      const oneWeekAgo = new Date();
+      oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+      filteredActivities = filteredActivities.filter((activity) => {
+        return new Date(activity.time) > oneWeekAgo;
+      });
+    }
+
+    res.json({ activities: filteredActivities });
+  } catch (error) {
+    console.error("Error fetching activities:", error);
+    res.status(500).send("Error fetching activities");
+  }
+});
+
+// Assuming you have Express and the 'query' helper function set up
+app.get('/fetchRooms/user', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];  // Extract token
+    if (!token) {
+      console.error('No token provided');
+      return res.status(400).send('Token is missing');
+    }
+    
+    const userId = await getUserIdFromToken(token);  // Get userId from token
+    console.log('Decoded userId:', userId);  // Log userId for debugging
+    
+    const roomsQuery = `
+        SELECT rm.room_id, r.name 
+        FROM room_members rm
+        JOIN rooms r ON rm.room_id = r.room_id
+        WHERE rm.user_id = ?;
+    `;
+    const rooms = await query(roomsQuery, [userId]);
+    console.log('Rooms:', rooms);  // Log rooms for debugging
+    res.json(rooms);
+  } catch (error) {
+    console.error('Error fetching rooms:', error);
+    res.status(500).send('Internal Server Error');
+  }
+});
+
+// Share quiz to a room
+app.post('/shareQuiz/room', async (req, res) => {
+  try {
+    const { quizId, roomId } = req.body;
+    const token = req.headers.authorization.split(' ')[1];  // Extract token from headers
+    const userId = await getUserIdFromToken(token);  // Get userId from token
+
+    const queryStr = `
+        INSERT INTO room_resources (type, resource_id, user_id, room_id)
+        VALUES ('quiz', ?, ?, ?);
+    `;
+    await query(queryStr, [quizId, userId, roomId]);  // Using the 'query' helper function
+    res.status(200).send('Quiz shared successfully');
+  } catch (error) {
+    console.error('Error sharing quiz:', error);
+    res.status(500).send('Internal Server Error');
+  }
+});
+
+
+// Share note to a room (similar to quiz)
+app.post('/shareNote-note', async (req, res) => {
+  try {
+      const { noteId, roomId } = req.body;
+      const token = req.headers.authorization.split(' ')[1];  // Extract token from headers
+      const userId = await getUserIdFromToken(token);  // Get userId from token
+
+      const queryStr = `
+          INSERT INTO room_resources (type, resource_id, user_id, room_id)
+          VALUES ('note', ?, ?, ?);
+      `;
+      await query(queryStr, [noteId, userId, roomId]);  // Using the 'query' helper function
+      res.status(200).send('Note shared successfully');
+  } catch (error) {
+      console.error('Error sharing note:', error);
+      res.status(500).send('Internal Server Error');
+  }
+});
+app.post('/api/roomResources', async (req, res) => {
+  try {
+      const { roomId, type } = req.body; // Get roomId and type (all, notes, quizzes) from the body
+      const queryStr = `
+          SELECT rr.id, rr.type, rr.resource_id, rr.created_at, u.unique_id as user_name
+          FROM room_resources rr
+          JOIN users u ON rr.user_id = u.id
+          WHERE rr.room_id = ? ${type !== 'all' ? 'AND rr.type = ?' : ''}
+      `;
+      const queryParams = type !== 'all' ? [roomId, type] : [roomId];
+      const resources = await query(queryStr, queryParams); // Run query to fetch resources
+
+      for (let resource of resources) {
+          if (resource.type === 'quiz') {
+              const quizQuery = 'SELECT title FROM quizzes WHERE id = ?';
+              const quiz = await query(quizQuery, [resource.resource_id]);
+              resource.title = quiz.length > 0 ? quiz[0].title : 'Untitled Quiz';
+          } else if (resource.type === 'note') {
+              const noteQuery = 'SELECT title FROM flashcards WHERE id = ?';
+              const note = await query(noteQuery, [resource.resource_id]);
+              resource.title = note.length > 0 ? note[0].title : 'Untitled Note';
+          }
+      }
+
+      res.status(200).json(resources);
+  } catch (error) {
+      console.error('Error fetching room resources:', error);
+      res.status(500).send('Internal Server Error');
+  }
+});
+
+
 // Route to send emails to users
 app.post('/send-emails/selected-users/admin', async (req, res) => {
   const { content, subject, selectedUsers } = req.body;
