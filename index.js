@@ -5484,41 +5484,6 @@ app.post("/check-user-in-room", async (req, res) => {
 
 
 
-app.post("/create-room", async (req, res) => {
-  const { token, roomName } = req.body;
-
-  try {
-    const userId = await getUserIdFromToken(token);
-
-    // Insert new room into the database
-    const insertRoomQuery = `INSERT INTO rooms (name) VALUES (?)`;
-    connection.query(insertRoomQuery, [roomName], (err, result) => {
-      if (err) {
-        console.error("Error creating room:", err);
-        return res.status(500).send("Error creating room.");
-      }
-
-      const roomId = result.insertId; // Get the room ID from the insert result
-
-      // Log room creation
-      console.log(`Room created: ID = ${roomId}, Name = ${roomName}, Created by User ID = ${userId}`);
-
-      // Add the user as a member of the room
-      const addMemberQuery = `INSERT INTO room_members (room_id, user_id) VALUES (?, ?)`;
-      connection.query(addMemberQuery, [roomId, userId], (memberErr, memberResult) => {
-        if (memberErr) {
-          console.error("Error adding member to room:", memberErr);
-          return res.status(500).send("Error adding member.");
-        }
-
-        res.status(200).send({ roomId });
-      });
-    });
-  } catch (err) {
-    console.error("Error decoding token:", err);
-    res.status(500).send("Invalid token.");
-  }
-});
 
 
 // Fetch room details for the user
