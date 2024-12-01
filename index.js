@@ -5487,6 +5487,32 @@ app.post("/check-user-in-room", async (req, res) => {
 });
 
 
+// API route to get the leaderboard for a specific room
+app.post('/api/roomLeaderboard', async (req, res) => {
+  const { roomId } = req.body;
+
+  try {
+    // Step 1: Fetch user IDs from room_members where room_id = roomId
+    const membersQuery = 'SELECT user_id FROM room_members WHERE room_id = ?';
+    const members = await query(membersQuery, [roomId]);
+
+    // Step 2: Fetch unique_id and points for each user
+    const userIds = members.map(member => member.user_id);
+    const userQuery = `
+      SELECT u.id, u.unique_id, u.avatar, up.points
+      FROM users u
+      JOIN user_points up ON u.id = up.user_id
+      WHERE u.id IN (?)`;
+    const users = await query(userQuery, [userIds]);
+
+    // Return the result as JSON
+    res.json(users);
+  } catch (err) {
+    // Handle errors
+    console.error('Error fetching leaderboard data:', err);
+    res.status(500).json({ error: 'Failed to fetch leaderboard data' });
+  }
+});
 
 
 
