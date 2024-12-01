@@ -5425,7 +5425,6 @@ app.post("/create-room", async (req, res) => {
   }
 });
 
-
 app.post("/join-room", async (req, res) => {
   const { token, roomId } = req.body;
 
@@ -5446,11 +5445,15 @@ app.post("/join-room", async (req, res) => {
       const sql = `INSERT INTO room_members (room_id, user_id) VALUES (?, ?)`;
       connection.query(sql, [roomId, userId], (err, result) => {
         if (err) return res.status(500).send("Error joining room.");
+
+        // Log the user joining the room
+        console.log(`User ID = ${userId} successfully joined Room ID = ${roomId}`);
+
         res.send({ message: "Successfully joined the room!" });
       });
     });
   } catch (err) {
-    console.error(err);
+    console.error("Error processing the request:", err);
     res.status(500).send("Invalid token.");
   }
 });
@@ -5481,29 +5484,38 @@ app.post("/check-user-in-room", async (req, res) => {
 
 
 
-app.post("/check-room", async (req, res) => {
-  const { token } = req.body;
+app.post("/create-room", async (req, res) => {
+  const { token, roomName } = req.body;
 
   try {
     const userId = await getUserIdFromToken(token);
-    console.log("User ID from token:", userId); // Add logging to verify userId
 
-    const sql = `SELECT room_id FROM room_members WHERE user_id = ? LIMIT 1`;
-    connection.query(sql, [userId], (err, result) => {
+    // Insert new room into the database
+    const insertRoomQuery = `INSERT INTO rooms (name) VALUES (?)`;
+    connection.query(insertRoomQuery, [roomName], (err, result) => {
       if (err) {
-        console.error("Error executing SQL query:", err); // Log SQL error
-        return res.status(500).send("Error checking room.");
+        console.error("Error creating room:", err);
+        return res.status(500).send("Error creating room.");
       }
 
+      const roomId = result.insertId; // Get the room ID from the insert result
 
-      if (result.length > 0) {
-        res.send({ roomId: result[0].room_id });
-      } else {
-        res.send({ roomId: null });
-      }
+      // Log room creation
+      console.log(`Room created: ID = ${roomId}, Name = ${roomName}, Created by User ID = ${userId}`);
+
+      // Add the user as a member of the room
+      const addMemberQuery = `INSERT INTO room_members (room_id, user_id) VALUES (?, ?)`;
+      connection.query(addMemberQuery, [roomId, userId], (memberErr, memberResult) => {
+        if (memberErr) {
+          console.error("Error adding member to room:", memberErr);
+          return res.status(500).send("Error adding member.");
+        }
+
+        res.status(200).send({ roomId });
+      });
     });
   } catch (err) {
-    console.error("Error decoding token:", err); // Log token decoding error
+    console.error("Error decoding token:", err);
     res.status(500).send("Invalid token.");
   }
 });
@@ -5539,7 +5551,6 @@ app.post("/get-room-details", async (req, res) => {
   }
 });
 
-
 app.post("/room-members-fetch", async (req, res) => {
   const { token, room_id } = req.body;
 
@@ -5569,22 +5580,12 @@ app.post("/room-members-fetch", async (req, res) => {
           return res.status(500).send("Error fetching members.");
         }
 
-        // Fetch stories
-        const storiesQuery = `SELECT user_id, image FROM room_stories WHERE room_id = ? ORDER BY created_at DESC`;
-        connection.query(storiesQuery, [room_id], (storiesErr, storiesResult) => {
-          if (storiesErr) {
-            console.error("Error fetching room stories:", storiesErr);
-            return res.status(500).send("Error fetching stories.");
-          }
-
-          // Send the final response
-          res.send({
-            room: {
-              ...roomDetails,
-              members: membersResult,
-              stories: storiesResult,
-            },
-          });
+        // Send the final response without stories
+        res.send({
+          room: {
+            ...roomDetails,
+            members: membersResult, // Only members data
+          },
         });
       });
     });
@@ -5593,6 +5594,7 @@ app.post("/room-members-fetch", async (req, res) => {
     res.status(500).send("Invalid token.");
   }
 });
+
 
 app.post("/api/get-activities", async (req, res) => {
   const { roomId, filter } = req.body;
@@ -5714,7 +5716,6 @@ app.get('/fetchRooms/user', async (req, res) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];  // Extract token
     if (!token) {
-      console.error('No token provided');
       return res.status(400).send('Token is missing');
     }
     
@@ -5728,7 +5729,6 @@ app.get('/fetchRooms/user', async (req, res) => {
         WHERE rm.user_id = ?;
     `;
     const rooms = await query(roomsQuery, [userId]);
-    console.log('Rooms:', rooms);  // Log rooms for debugging
     res.json(rooms);
   } catch (error) {
     console.error('Error fetching rooms:', error);
