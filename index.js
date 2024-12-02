@@ -5912,7 +5912,7 @@ app.post('/api/flashcards/upload', uploadPDF.single('pdf'), async (req, res) => 
       }
 
       // Generate flashcards using AI logic
-      const prompt = `Generate 15 flashcards in JSON format based on the following text extracted from a PDF. Each flashcard should have a 'question' and 'answer' field. No additional formatting or Markdown:\n\n${pdfText}`;
+      const prompt = `Generate flashcards in JSON format based on the following text extracted from a PDF. Each flashcard should have a 'question' and 'answer' field. No additional formatting or Markdown:\n\n${pdfText}`;
 
       const chat = model.startChat({
         history: [
