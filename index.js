@@ -23,7 +23,8 @@ const cron = require('node-cron');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const { HarmBlockThreshold, HarmCategory } = require("@google/generative-ai");
 const schedule = require("node-schedule");
-
+const pdfParse = require('pdf-parse');
+const fs = require('fs');
 // Initialize Google Generative AI
 const genAI = new GoogleGenerativeAI('AIzaSyDNx6QYkHkvFYd8-lc-O1HgFgCDaChGkV0');
 
@@ -5854,6 +5855,119 @@ app.post('/leaveRoom', async (req, res) => {
     res.status(500).json({ success: false, message: 'Error leaving the room' });
   }
 });
+
+// Define storage for PDF uploads
+const pdfStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, '/root/student-hub-backend-/public/'); // Save PDFs in a dedicated folder
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, `${Date.now()}${ext}`); // Timestamp to ensure unique file names
+  },
+});
+
+// File filter for PDFs
+const pdfFileFilter = (req, file, cb) => {
+  if (file.mimetype === 'application/pdf') {
+    cb(null, true);
+  } else {
+    cb(new Error('Invalid file type. Only PDFs are allowed.'), false);
+  }
+};
+
+// Multer instance for PDF uploads
+const uploadPDF = multer({
+  storage: pdfStorage,
+  fileFilter: pdfFileFilter,
+  limits: { fileSize: 10 * 1024 * 1024 }, // Limit file size to 10 MB
+});
+
+// API endpoint to upload PDF and generate flashcards
+app.post('/api/flashcards/upload', uploadPDF.single('pdf'), async (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+
+  try {
+    const userId = await getUserIdFromToken(token); // Implement getUserIdFromToken to get user ID from token
+    const { name, subject, topic } = req.body;
+
+    // Create a new flashcard set in the database
+    const setQuery = 'INSERT INTO flashcard_sets (name, subject, topic, user_id) VALUES (?, ?, ?, ?)';
+    connection.query(setQuery, [name, subject, topic, userId], async (err, results) => {
+      if (err) {
+        console.error('Database error:', err);
+        return res.status(500).json({ error: err.message });
+      }
+
+      const setId = results.insertId;
+
+      // Extract text from the uploaded PDF file
+      const pdfPath = req.file.path; // File path from multer
+      const pdfText = await pdfParse(fs.readFileSync(pdfPath)).then((data) => data.text);
+      if (!pdfText) {
+        return res.status(400).json({ error: 'Failed to extract text from PDF' });
+      }
+
+      // Generate flashcards using AI logic
+      const prompt = `Generate 15 flashcards in JSON format based on the following text extracted from a PDF. Each flashcard should have a 'question' and 'answer' field. No additional formatting or Markdown:\n\n${pdfText}`;
+
+      const chat = model.startChat({
+        history: [
+          {
+            role: 'user',
+            parts: [{ text: 'Hello' }],
+          },
+          {
+            role: 'model',
+            parts: [{ text: 'I can help generate flashcards for your study!' }],
+          },
+        ],
+      });
+
+      console.log('Generating flashcards From PDF');
+      const result = await chat.sendMessage(prompt);
+
+      // Sanitize and parse the AI response
+      const sanitizedResponse = result.response.text().replace(/```json|```|`/g, '').trim();
+      let flashcards;
+      try {
+        flashcards = JSON.parse(sanitizedResponse);
+      } catch (parseError) {
+        console.error('Failed to parse JSON:', parseError);
+        return res.status(500).json({ error: 'Invalid JSON response from the AI model' });
+      }
+
+      // Prepare flashcards data to insert into the database
+      const flashcardsData = flashcards.map(({ question, answer }) => [setId, question.trim(), answer.trim()]);
+      connection.query(
+        'INSERT INTO flashcard (set_id, question, answer) VALUES ?',
+        [flashcardsData],
+        (err) => {
+          if (err) {
+            console.error('Error inserting flashcards:', err);
+            return res.status(500).json({ error: 'Database error' });
+          }
+
+          // Optionally delete the file after processing
+          fs.unlink(pdfPath, (unlinkErr) => {
+            if (unlinkErr) {
+              console.error('Error deleting file:', unlinkErr);
+            }
+          });
+
+          res.json({ flashcardSetId: setId, flashcards });
+        }
+      );
+    });
+  } catch (error) {
+    console.error('Error processing PDF upload:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 
 // Route to send emails to users
 app.post('/send-emails/selected-users/admin', async (req, res) => {
