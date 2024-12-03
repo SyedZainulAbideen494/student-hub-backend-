@@ -1670,6 +1670,7 @@ app.get('/quiz/answers/:quizId', async (req, res) => {
   }
 });
 
+
 app.post('/api/quiz/generate', async (req, res) => {
   const { subject, topic, token } = req.body;
 
@@ -4339,12 +4340,7 @@ app.post('/api/tasks/generate', async (req, res) => {
       5. Ensure the workload is balanced and realistic for each day.
       
       Return **only the JSON** as the response without any explanations, comments, or code blocks. If the input is invalid or insufficient to generate a task plan, return an empty JSON array: [].`
-      : `Create a task plan in JSON format for the main task: '${mainTask}', breaking it down into simple, actionable steps to complete within ${days} days. The task plan should include the following for each step:
-- 'title': A short summary of the action.
-- 'due_date': Deadline for the step in YYYY-MM-DD format, starting from today (${todayDate}).
-- 'description': Briefly describe the essential actions or resources required.
-
-Ensure the output is valid JSON.`;
+      : `You are an advanced AI assistant specializing in creating structured task plans. Your task is to generate a highly detailed and well-organized task plan in valid JSON format, breaking down the main task: "${mainTask}" into smaller, actionable steps that can be completed within ${days} days, starting from today (${todayDate})..`;
 
     console.log('Generating tasks with prompt:', prompt);
 
@@ -5859,7 +5855,7 @@ app.post('/leaveRoom', async (req, res) => {
 // Define storage for PDF uploads
 const pdfStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, '/root/student-hub-backend-/public/'); // Save PDFs in a dedicated folder
+    cb(null, './public/'); // Save PDFs in a dedicated folder
   },
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname);
@@ -5965,6 +5961,106 @@ app.post('/api/flashcards/upload', uploadPDF.single('pdf'), async (req, res) => 
   } catch (error) {
     console.error('Error processing PDF upload:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+
+app.post('/api/quiz/generate-from-pdf', uploadPDF.single('pdf'), async (req, res) => {
+  const { subject, topic, token } = req.body;
+
+  try {
+    // Step 1: Retrieve userId from the token
+    const userId = await getUserIdFromToken(token);
+
+    // Step 2: Extract text from the PDF
+    const pdfPath = req.file.path;
+    const pdfText = await pdfParse(fs.readFileSync(pdfPath)).then((data) => data.text);
+
+    if (!pdfText) {
+      return res.status(400).json({ error: 'Failed to extract text from PDF' });
+    }
+
+    // Step 3: Define AI prompt
+    const prompt = `
+      Generate a valid JSON array of 15 multiple-choice questions from the following text:
+      - Text: "${pdfText}"
+
+      Each question must strictly follow this format:
+      [
+        {
+          "question": "string",
+          "options": ["string", "string", "string", "string"],
+          "correct_answer": "string"
+        }
+      ]
+
+      Rules:
+      1. Return only the JSON array without any explanations or comments.
+      2. Ensure each question and options are meaningful and unique.
+      3. Format the JSON properly.
+    `.trim();
+
+    // Step 4: AI Integration and retry logic
+    const generateQuizWithRetry = async () => {
+      let attempts = 0;
+
+      while (attempts < MAX_RETRIES) {
+        try {
+          const chat = model.startChat({ history: [] });
+          const result = await chat.sendMessage(prompt);
+          const rawResponse = await result.response.text();
+
+          const sanitizedResponse = rawResponse.replace(/```(?:json)?/g, '').trim();
+          let quizQuestions;
+
+          try {
+            quizQuestions = JSON.parse(sanitizedResponse);
+          } catch (parseError) {
+            throw new Error('Invalid JSON response from the AI model');
+          }
+
+          return quizQuestions;
+        } catch (error) {
+          attempts++;
+          if (attempts === MAX_RETRIES) {
+            throw new Error('Failed to generate quiz after multiple attempts');
+          }
+          await new Promise((resolve) => setTimeout(resolve, 2000)); // Retry delay
+        }
+      }
+    };
+
+    const quizQuestions = await generateQuizWithRetry();
+
+    // Step 5: Insert into the database
+    const title = `${subject} - ${topic} Quiz (PDF)`;
+    const description = `Quiz on ${subject} - ${topic} (Generated from PDF)`;
+    const [quizResult] = await connection.promise().query(
+      'INSERT INTO quizzes (title, description, creator_id) VALUES (?, ?, ?)',
+      [title, description, userId]
+    );
+    const quizId = quizResult.insertId;
+
+    for (const question of quizQuestions) {
+      const [questionResult] = await connection.promise().query(
+        'INSERT INTO questions (quiz_id, question_text) VALUES (?, ?)',
+        [quizId, question.question]
+      );
+      const questionId = questionResult.insertId;
+
+      for (const option of question.options) {
+        const isCorrect = option === question.correct_answer;
+        await connection.promise().query(
+          'INSERT INTO answers (question_id, answer_text, is_correct) VALUES (?, ?, ?)',
+          [questionId, option, isCorrect]
+        );
+      }
+    }
+    console.log('Quiz generated from PDF and saved successfully');
+    res.json({ message: 'Quiz generated successfully from PDF', quizId });
+  } catch (error) {
+    console.error('Error generating quiz from PDF:', error);
+    res.status(500).json({ error: 'Error generating quiz from PDF' });
   }
 });
 
