@@ -6143,6 +6143,26 @@ app.post('/api/quiz/generate/from-notes', upload.none(), async (req, res) => {
   }
 });
 
+// Endpoint to complete a flashcard quiz
+app.post('/complete-flashcard-quiz', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ message: 'Token missing' });
+    }
+
+    const userId = getUserIdFromToken(token);
+
+    // Update points for the user
+    await query('UPDATE user_points SET points = points + 5 WHERE user_id = ?', [userId]);
+
+    res.status(200).json({ message: 'User points updated successfully' });
+  } catch (error) {
+    console.error('Error completing flashcard quiz:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 // Route to send emails to users
 app.post('/send-emails/selected-users/admin', async (req, res) => {
   const { content, subject, selectedUsers } = req.body;
