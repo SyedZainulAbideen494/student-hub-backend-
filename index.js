@@ -6064,53 +6064,54 @@ app.post('/api/quiz/generate-from-pdf', uploadPDF.single('pdf'), async (req, res
   }
 });
 
-
 app.post('/api/quiz/generate/from-notes', upload.none(), async (req, res) => {
-  const { subject, topic, notes, token } = req.body;
+  const { subject, notes, token } = req.body;
 
   try {
     // Step 1: Retrieve userId from the token
     const userId = await getUserIdFromToken(token);
 
-    // Step 2: Define a refined prompt to ensure proper quiz generation based on headings
-    const prompt = `Generate a valid JSON array of 15 multiple-choice questions From Notes`;
-    console.log('Generating quiz with refined prompt:', prompt);
+    // Step 2: Define a refined prompt to ensure proper quiz generation based on the notes
+    const prompt = `Generate a valid JSON array of 15 multiple-choice questions based on the following notes:
+      - Notes: ${notes}`;
 
- // Step 4: AI Integration and retry logic
- const generateQuizWithRetry = async () => {
-  let attempts = 0;
+    console.log('Generating quiz with Notes');
 
-  while (attempts < MAX_RETRIES) {
-    try {
-      const chat = model.startChat({ history: [] });
-      const result = await chat.sendMessage(prompt);
-      const rawResponse = await result.response.text();
+    // Step 4: AI Integration and retry logic
+    const generateQuizWithRetry = async () => {
+      let attempts = 0;
 
-      const sanitizedResponse = rawResponse.replace(/```(?:json)?/g, '').trim();
-      let quizQuestions;
+      while (attempts < MAX_RETRIES) {
+        try {
+          const chat = model.startChat({ history: [] });
+          const result = await chat.sendMessage(prompt);
+          const rawResponse = await result.response.text();
 
-      try {
-        quizQuestions = JSON.parse(sanitizedResponse);
-      } catch (parseError) {
-        throw new Error('Invalid JSON response from the AI model');
+          const sanitizedResponse = rawResponse.replace(/```(?:json)?/g, '').trim();
+          let quizQuestions;
+
+          try {
+            quizQuestions = JSON.parse(sanitizedResponse);
+          } catch (parseError) {
+            throw new Error('Invalid JSON response from the AI model');
+          }
+
+          return quizQuestions;
+        } catch (error) {
+          attempts++;
+          if (attempts === MAX_RETRIES) {
+            throw new Error('Failed to generate quiz after multiple attempts');
+          }
+          await new Promise((resolve) => setTimeout(resolve, 2000)); // Retry delay
+        }
       }
+    };
 
-      return quizQuestions;
-    } catch (error) {
-      attempts++;
-      if (attempts === MAX_RETRIES) {
-        throw new Error('Failed to generate quiz after multiple attempts');
-      }
-      await new Promise((resolve) => setTimeout(resolve, 2000)); // Retry delay
-    }
-  }
-};
-
-const quizQuestions = await generateQuizWithRetry();
+    const quizQuestions = await generateQuizWithRetry();
 
     // Step 6: Insert quiz details into the database
-    const title = `${subject} - ${topic} Quiz`;
-    const description = `Quiz on ${subject} - ${topic}`;
+    const title = `${subject} Quiz`; // Use the subject from the frontend
+    const description = `Quiz on ${subject}`; // Use subject for description as well
     const [quizResult] = await connection.promise().query(
       'INSERT INTO quizzes (title, description, creator_id) VALUES (?, ?, ?)',
       [title, description, userId]
@@ -6141,7 +6142,6 @@ const quizQuestions = await generateQuizWithRetry();
     res.status(500).json({ error: 'Error generating quiz' });
   }
 });
-
 
 // Route to send emails to users
 app.post('/send-emails/selected-users/admin', async (req, res) => {
