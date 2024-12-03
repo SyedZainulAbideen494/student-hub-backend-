@@ -6065,6 +6065,84 @@ app.post('/api/quiz/generate-from-pdf', uploadPDF.single('pdf'), async (req, res
 });
 
 
+app.post('/api/quiz/generate/from-notes', upload.none(), async (req, res) => {
+  const { subject, topic, notes, token } = req.body;
+
+  try {
+    // Step 1: Retrieve userId from the token
+    const userId = await getUserIdFromToken(token);
+
+    // Step 2: Define a refined prompt to ensure proper quiz generation based on headings
+    const prompt = `Generate a valid JSON array of 15 multiple-choice questions From Notes`;
+    console.log('Generating quiz with refined prompt:', prompt);
+
+ // Step 4: AI Integration and retry logic
+ const generateQuizWithRetry = async () => {
+  let attempts = 0;
+
+  while (attempts < MAX_RETRIES) {
+    try {
+      const chat = model.startChat({ history: [] });
+      const result = await chat.sendMessage(prompt);
+      const rawResponse = await result.response.text();
+
+      const sanitizedResponse = rawResponse.replace(/```(?:json)?/g, '').trim();
+      let quizQuestions;
+
+      try {
+        quizQuestions = JSON.parse(sanitizedResponse);
+      } catch (parseError) {
+        throw new Error('Invalid JSON response from the AI model');
+      }
+
+      return quizQuestions;
+    } catch (error) {
+      attempts++;
+      if (attempts === MAX_RETRIES) {
+        throw new Error('Failed to generate quiz after multiple attempts');
+      }
+      await new Promise((resolve) => setTimeout(resolve, 2000)); // Retry delay
+    }
+  }
+};
+
+const quizQuestions = await generateQuizWithRetry();
+
+    // Step 6: Insert quiz details into the database
+    const title = `${subject} - ${topic} Quiz`;
+    const description = `Quiz on ${subject} - ${topic}`;
+    const [quizResult] = await connection.promise().query(
+      'INSERT INTO quizzes (title, description, creator_id) VALUES (?, ?, ?)',
+      [title, description, userId]
+    );
+    const quizId = quizResult.insertId;
+
+    // Step 7: Insert questions and their options into the database
+    for (const question of quizQuestions) {
+      const [questionResult] = await connection.promise().query(
+        'INSERT INTO questions (quiz_id, question_text) VALUES (?, ?)',
+        [quizId, question.question]
+      );
+      const questionId = questionResult.insertId;
+
+      for (const option of question.options) {
+        const isCorrect = option === question.correct_answer;
+        await connection.promise().query(
+          'INSERT INTO answers (question_id, answer_text, is_correct) VALUES (?, ?, ?)',
+          [questionId, option, isCorrect]
+        );
+      }
+    }
+
+    // Step 8: Return the generated quiz details
+    res.json({ message: 'Quiz generated successfully', quizId });
+  } catch (error) {
+    console.error('Error generating quiz:', error);
+    res.status(500).json({ error: 'Error generating quiz' });
+  }
+});
+
+
 // Route to send emails to users
 app.post('/send-emails/selected-users/admin', async (req, res) => {
   const { content, subject, selectedUsers } = req.body;
