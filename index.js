@@ -6142,16 +6142,11 @@ app.post('/api/quiz/generate/from-notes', upload.none(), async (req, res) => {
     res.status(500).json({ error: 'Error generating quiz' });
   }
 });
-
-// Endpoint to complete a flashcard quiz
 app.post('/complete-flashcard-quiz', async (req, res) => {
+  const { token } = req.body;
   try {
-    const token = req.headers.authorization?.split(' ')[1];
-    if (!token) {
-      return res.status(401).json({ message: 'Token missing' });
-    }
-
-    const userId = getUserIdFromToken(token);
+    // Step 1: Retrieve userId from the token
+    const userId = await getUserIdFromToken(token);
 
     // Update points for the user
     await query('UPDATE user_points SET points = points + 5 WHERE user_id = ?', [userId]);
