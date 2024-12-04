@@ -470,7 +470,7 @@ app.post('/add/tasks', async (req, res) => {
     if (pointsResults.length > 0) {
       const lastUpdated = new Date(pointsResults[0].updated_at);
       if (lastUpdated > fiveMinutesAgo) {
-        pointsToAdd = 2; // Or any number you choose
+        pointsToAdd = 5; // Or any number you choose
       }
 
       await connection.promise().query(
@@ -586,7 +586,7 @@ app.post('/delete/task', (req, res) => {
                   const lastUpdated = new Date(pointsResults[0].updated_at);
                   if (lastUpdated > fiveMinutesAgo) {
                       // If last update was less than 5 minutes ago, add fewer points
-                      pointsToAdd = 1; // Or any number you choose
+                      pointsToAdd = 3; // Or any number you choose
                   }
 
                   // Update points
@@ -792,7 +792,7 @@ app.post('/api/add/flashcards', upload.array('images'), (req, res) => {
           const lastUpdated = new Date(pointsResults[0].updated_at);
           if (lastUpdated > fiveMinutesAgo) {
             // If last update was less than 5 minutes ago, add fewer points
-            pointsToAdd = 2; // Or any number you choose
+            pointsToAdd = 10; // Or any number you choose
           }
 
           // Update points and set the updated_at timestamp
@@ -1584,14 +1584,14 @@ app.post('/createQuiz', async (req, res) => {
 
     const currentTime = new Date();
     const fiveMinutesAgo = new Date(currentTime.getTime() - 5 * 60000); // Subtract 5 minutes
-    let pointsToAdd = 8; // Default points to add
+    let pointsToAdd = 10; // Default points to add
 
     if (pointsResults.length > 0) {
       // If user exists, check updated_at timestamp
       const lastUpdated = new Date(pointsResults[0].updated_at);
       if (lastUpdated > fiveMinutesAgo) {
         // If last update was less than 5 minutes ago, add fewer points
-        pointsToAdd = 2; // Or any number you choose
+        pointsToAdd = 10; // Or any number you choose
       }
 
       // Update points and set the updated_at timestamp
@@ -1876,7 +1876,7 @@ app.post('/submitQuiz', async (req, res) => {
 
     if (pointsResults.length > 0) {
       // If user exists, update points
-      await connection.promise().query('UPDATE user_points SET points = points + 5 WHERE user_id = ?', [userId]);
+      await connection.promise().query('UPDATE user_points SET points = points + 15 WHERE user_id = ?', [userId]);
     } else {
       // If user does not exist, insert new record with 15 points
       await connection.promise().query('INSERT INTO user_points (user_id, points) VALUES (?, ?)', [userId, 15]);
@@ -2014,7 +2014,7 @@ app.post('/api/addEvent', async (req, res) => {
       const lastUpdated = new Date(pointsResults[0].updated_at);
       if (lastUpdated > fiveMinutesAgo) {
         // If last update was less than 5 minutes ago, add fewer points
-        pointsToAdd = 1; // Or any number you choose
+        pointsToAdd = 3; // Or any number you choose
       }
 
       // Update points and set the updated_at timestamp
@@ -5009,34 +5009,44 @@ app.get('/api/notes/canvas/get', (req, res) => {
   });
 });
 
+app.post('/start-session/pomodoro', async (req, res) => {   
+  const { token, session_type } = req.body;  // Get token and session_type from request body   
+  
+  if (!token) {     
+      return res.status(403).json({ message: 'No token provided' });   
+  }    
+  
+  try {     
+      const user_id = await getUserIdFromToken(token);     
+      const start_time = new Date();     
+      const session_date = start_time.toISOString().split('T')[0]; // Format as YYYY-MM-DD  
 
-app.post('/start-session/pomodoro', async (req, res) => {
-  const { token, session_type } = req.body;  // Get token and session_type from request body
-  if (!token) {
-    return res.status(403).json({ message: 'No token provided' });
-  }
+      // Start Pomodoro session     
+      const insertQuery = 'INSERT INTO pomodoro_date (user_id, start_time, session_date, session_type) VALUES (?, ?, ?, ?)';     
+      const result = await query(insertQuery, [user_id, start_time, session_date, session_type]);      
 
-  try {
-    const user_id = await getUserIdFromToken(token);
-    const start_time = new Date();
-    const session_date = start_time.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+      // Log when Pomodoro session starts for the user     
+      console.log(`Pomodoro session started for userId: ${user_id}`);      
 
-    // Start Pomodoro session
-    const insertQuery = 'INSERT INTO pomodoro_date (user_id, start_time, session_date, session_type) VALUES (?, ?, ?, ?)';
-    const result = await query(insertQuery, [user_id, start_time, session_date, session_type]);
+      // Check if user_points row exists for the user
+      const checkPointsQuery = 'SELECT * FROM user_points WHERE user_id = ?';  
+      const pointsResult = await query(checkPointsQuery, [user_id]);  
 
-    // Log when Pomodoro session starts for the user
-    console.log(`Pomodoro session started for userId: ${user_id}`);
+      if (pointsResult.length === 0) { 
+          // If no row exists, insert a new one with initial points
+          const insertPointsQuery = 'INSERT INTO user_points (user_id, points) VALUES (?, ?)';
+          await query(insertPointsQuery, [user_id, 5]);  // Assuming initial points are 5
+      } else { 
+          // If row exists, update the points
+          const updatePointsQuery = 'UPDATE user_points SET points = points + 5 WHERE user_id = ?';
+          await query(updatePointsQuery, [user_id]);  
+      }
 
-    // Update user points
-    const updatePointsQuery = 'UPDATE user_points SET points = points + 5 WHERE user_id = ?';
-    await query(updatePointsQuery, [user_id]);
-
-    // Return the session ID and start time
-    res.json({ session_id: result.insertId, start_time });
-  } catch (error) {
-    res.status(401).json({ message: 'Invalid or expired token' });
-  }
+      // Return the session ID and start time     
+      res.json({ session_id: result.insertId, start_time });   
+  } catch (error) {     
+      res.status(401).json({ message: 'Invalid or expired token' });   
+  } 
 });
 
 
