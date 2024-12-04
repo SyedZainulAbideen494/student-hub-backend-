@@ -153,6 +153,40 @@ app.get('/', (req, res) => {
 
 });
 
+
+// Generate VAPID keys once and keep them secure
+const publicVapidKey = 'BLDWVHPzXRA9ZOFhSyCet2trdRuvErMUBKuUPNzDsffj-b3-yvd7z58UEhpQAu-MA3DREuu4LwQhspUKBD1yngs';
+const privateVapidKey = 'm5wPuyP581Ndto1uRBwGufADT7shUIbfUyV6YQcv88Q';
+
+webPush.setVapidDetails('mailto:zainkaleem27@gmail.com', publicVapidKey, privateVapidKey);
+
+let subscriptions = [];
+
+// Route to handle subscription
+app.post('/subscribe/noti', (req, res) => {
+  const subscription = req.body;
+  subscriptions.push(subscription);
+  res.status(201).json({});
+});
+
+// Route to send notifications
+app.post('/send-notification', (req, res) => {
+  const { title, message, icon } = req.body;
+  const payload = JSON.stringify({ title, message, icon });
+
+  subscriptions.forEach((subscription, index) => {
+    webPush
+      .sendNotification(subscription, payload)
+      .catch((err) => {
+        console.error('Push Error:', err);
+        subscriptions.splice(index, 1); // Remove invalid subscriptions
+      });
+  });
+
+  res.status(200).send('Notifications sent.');
+});
+
+
 // Promisify query function
 const query = (sql, params) => {
   return new Promise((resolve, reject) => {
