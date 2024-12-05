@@ -346,8 +346,8 @@ function generateOTP() {
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
-      user: 'edusiyfy@gmail.com',
-      pass: 'dyqf nxnn rsyb elwi',
+      user: 'edusyfy@gmail.com',
+      pass: 'xqfw mmov xlrg gukf',
   },
 });
 
@@ -383,7 +383,7 @@ app.post("/login", (req, res) => {
 
               // Send OTP via Email
               const mailOptions = {
-                from: 'edusiyfy@gmail.com',
+                from: 'edusyfy@gmail.com',
                 to: result[0].email,
                 subject: 'Your OTP for Secure Login',
                 html: `
