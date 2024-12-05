@@ -6118,7 +6118,23 @@ app.post('/api/quiz/generate/from-notes', upload.none(), async (req, res) => {
 
     // Step 2: Define a refined prompt to ensure proper quiz generation based on the notes
     const prompt = `Generate a valid JSON array of 15 multiple-choice questions based on the following notes:
-      - Notes: ${notes}`;
+      - Notes: ${notes}
+      
+      
+      Each question must strictly follow this format:
+      [
+        {
+          "question": "string",
+          "options": ["string", "string", "string", "string"],
+          "correct_answer": "string"
+        }
+      ]
+
+      Rules:
+      1. Return only the JSON array without any explanations or comments.
+      2. Ensure each question and options are meaningful and unique.
+      3. Format the JSON properly.
+  `;
 
     console.log('Generating quiz with Notes');
 
