@@ -6263,7 +6263,7 @@ app.post('/api/flashcards/generate-from-notes', async (req, res) => {
       2. Return only the JSON array without any explanations or comments.
       3. Format the JSON properly.`;
 
-      console.log('Generating flashcards with Notes:', prompt);
+      console.log('Generating flashcards with Notes');
 
       // Step 4: AI Integration and retry logic for flashcard generation
       const generateFlashcardsWithRetry = async () => {
