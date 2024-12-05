@@ -6220,6 +6220,116 @@ app.post('/complete-flashcard-quiz', async (req, res) => {
   }
 });
 
+app.post('/api/flashcards/generate-from-notes', async (req, res) => {
+  const { headings, subject } = req.body; // Accept headings and subject
+  const token = req.headers.authorization?.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+
+  try {
+    const userId = await getUserIdFromToken(token); // Fetch user ID from token
+
+    // Validate input
+    if (!headings || !subject) {
+      return res.status(400).json({ error: 'Headings and subject are required' });
+    }
+
+    // Create a new flashcard set in the database
+    const setQuery = 'INSERT INTO flashcard_sets (name, subject, user_id, topic) VALUES (?, ?, ?, ?)';
+    connection.query(setQuery, [subject, subject, userId, subject], async (err, results) => {
+      if (err) {
+        console.error('Database error (flashcard_sets):', err);
+        return res.status(500).json({ error: 'Failed to create flashcard set' });
+      }
+
+      const setId = results.insertId; // Get the inserted flashcard set ID
+
+      // Define the AI prompt for generating flashcards based on the notes
+      const prompt = `Generate a valid JSON array of flashcards based on the following notes:
+      - Notes: ${headings}
+
+      Each flashcard should follow this format:
+      [
+        {
+          "question": "string",
+          "answer": "string"
+        }
+      ]
+
+      Rules:
+      1. Ensure the flashcards are accurate, concise, and relevant to the subject: ${subject}.
+      2. Return only the JSON array without any explanations or comments.
+      3. Format the JSON properly.`;
+
+      console.log('Generating flashcards with Notes:', prompt);
+
+      // Step 4: AI Integration and retry logic for flashcard generation
+      const generateFlashcardsWithRetry = async () => {
+        let attempts = 0;
+        const MAX_RETRIES = 3;
+
+        while (attempts < MAX_RETRIES) {
+          try {
+            const chat = model.startChat({ history: [] });
+            const result = await chat.sendMessage(prompt);
+            const rawResponse = await result.response.text();
+
+            const sanitizedResponse = rawResponse.replace(/```(?:json)?/g, '').trim();
+            let flashcards;
+
+            try {
+              flashcards = JSON.parse(sanitizedResponse);
+            } catch (parseError) {
+              throw new Error('Invalid JSON response from the AI model');
+            }
+
+            return flashcards;
+          } catch (error) {
+            attempts++;
+            if (attempts === MAX_RETRIES) {
+              throw new Error('Failed to generate flashcards after multiple attempts');
+            }
+            await new Promise((resolve) => setTimeout(resolve, 2000)); // Retry delay
+          }
+        }
+      };
+
+      // Get the flashcards by calling the retry function
+      const flashcards = await generateFlashcardsWithRetry();
+
+      // Prepare data for database insertion
+      const flashcardsData = flashcards
+        .filter(card => card.question?.trim() && card.answer?.trim())
+        .map(({ question, answer }) => [setId, question.trim(), answer.trim()]);
+
+      if (flashcardsData.length === 0) {
+        return res.status(400).json({ error: 'No valid flashcards generated' });
+      }
+
+      // Insert the generated flashcards into the database
+      connection.query(
+        'INSERT INTO flashcard (set_id, question, answer) VALUES ?',
+        [flashcardsData],
+        (err) => {
+          if (err) {
+            console.error('Error inserting flashcards:', err);
+            return res.status(500).json({ error: 'Database error' });
+          }
+
+          res.json({ flashcardSetId: setId, flashcards });
+        }
+      );
+    });
+  } catch (error) {
+    console.error('Error processing request:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+
+
 // Route to send emails to users
 app.post('/send-emails/selected-users/admin', async (req, res) => {
   const { content, subject, selectedUsers } = req.body;
