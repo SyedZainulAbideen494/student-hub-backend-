@@ -6465,6 +6465,44 @@ app.post("/room/posts/add/:roomId", upload.single("image"), async (req, res) => 
   }
 });
 
+// Handle post deletion
+app.delete("/room/posts/delete/:postId", async (req, res) => {
+  const { postId } = req.params;
+
+  // Ensure the user is authorized to delete the post
+  const token = req.headers['authorization'].split(' ')[1];
+  if (!token) return res.status(401).send({ message: 'No token provided' });
+
+  try {
+    const decoded = jwt.verify(token, 'your_jwt_secret'); // Verify JWT token
+    const userId = decoded.userId; // Get the userId from the token
+
+    // First, check if the post exists and belongs to the user
+    const [post] = await connection.promise().query(
+      `SELECT * FROM room_posts WHERE id = ?`, [postId]
+    );
+
+    if (!post) {
+      return res.status(404).send({ message: 'Post not found' });
+    }
+
+    if (post.user_id !== userId) {
+      return res.status(403).send({ message: 'You are not authorized to delete this post' });
+    }
+
+    // Proceed to delete the post
+    await connection.promise().query(
+      `DELETE FROM room_posts WHERE id = ?`, [postId]
+    );
+
+    res.status(200).send({ message: 'Post deleted successfully' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send({ message: 'Error deleting post' });
+  }
+});
+
+
 // Fetch posts for a room
 app.get("/room/posts/fetch/:roomId", async (req, res) => {
   const { roomId } = req.params;
