@@ -6465,7 +6465,6 @@ app.post("/room/posts/add/:roomId", upload.single("image"), async (req, res) => 
   }
 });
 
-
 // Fetch posts for a room
 app.get("/room/posts/fetch/:roomId", async (req, res) => {
   const { roomId } = req.params;
@@ -6476,7 +6475,8 @@ app.get("/room/posts/fetch/:roomId", async (req, res) => {
       rp.type, 
       rp.content, 
       rp.created_at, 
-      u.unique_id AS user_name
+      u.unique_id AS user_name,
+      rp.user_id  -- Include user_id from the post
     FROM 
       room_posts rp
     JOIN 
