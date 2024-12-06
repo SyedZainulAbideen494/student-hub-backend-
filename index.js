@@ -6486,9 +6486,6 @@ app.delete("/room/posts/delete/:postId", async (req, res) => {
       return res.status(404).send({ message: 'Post not found' });
     }
 
-    if (post.user_id !== userId) {
-      return res.status(403).send({ message: 'You are not authorized to delete this post' });
-    }
 
     // Proceed to delete the post
     await connection.promise().query(
