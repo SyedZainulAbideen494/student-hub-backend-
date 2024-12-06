@@ -76,7 +76,7 @@ app.use(cors({
 // Define storage for multer
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-      cb(null, '/root/student-hub-backend-/public/');
+      cb(null, 'public/');
   },
   filename: (req, file, cb) => {
       const ext = path.extname(file.originalname);
@@ -6424,6 +6424,73 @@ app.get('/api/stats', async (req, res) => {
     console.error('Error in /stats route:', error);
     return res.status(500).json({ message: 'Internal Server Error' });
   }
+});
+
+app.post("/room/posts/add/:roomId", upload.single("image"), async (req, res) => {
+  try {
+      const token = req.headers.authorization?.split(" ")[1];
+      if (!token) {
+          return res.status(401).send({ message: "Authorization token missing." });
+      }
+
+      const userId = await getUserIdFromToken(token);
+      const roomId = req.params.roomId;
+      const { type, content } = req.body;
+
+      if (!["text", "image"].includes(type)) { // Removed "poll"
+          return res.status(400).send({ message: "Invalid post type." });
+      }
+
+      let postContent = content;
+      if (type === "image" && req.file) {
+          postContent = `${req.file.filename}`;
+      } else if (type === "image" && !req.file) {
+          return res.status(400).send({ message: "Image is required for image post type." });
+      }
+
+      const query = `
+          INSERT INTO room_posts (user_id, room_id, type, content)
+          VALUES (?, ?, ?, ?)
+      `;
+      connection.query(query, [userId, roomId, type, postContent], (err) => {
+          if (err) {
+              console.error("Database Insert Error: ", err);
+              return res.status(500).send({ message: "Error creating post." });
+          }
+          res.status(201).send({ message: "Post created successfully." });
+      });
+  } catch (error) {
+      console.error("Server Error: ", error);
+      res.status(500).send({ message: "Internal server error." });
+  }
+});
+
+
+// Fetch posts for a room
+app.get("/room/posts/fetch/:roomId", async (req, res) => {
+  const { roomId } = req.params;
+
+  const query = `
+    SELECT 
+      rp.id AS post_id, 
+      rp.type, 
+      rp.content, 
+      rp.created_at, 
+      u.unique_id AS user_name
+    FROM 
+      room_posts rp
+    JOIN 
+      users u ON rp.user_id = u.id
+    WHERE 
+      rp.room_id = ?
+    ORDER BY 
+      rp.created_at DESC
+  `;
+
+  connection.query(query, [roomId], (err, results) => {
+    if (err) return res.status(500).send({ message: "Error fetching posts." });
+    res.status(200).send(results);
+  });
 });
 
 
