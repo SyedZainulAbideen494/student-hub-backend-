@@ -5912,8 +5912,8 @@ app.post('/leaveRoom', async (req, res) => {
 });
 
 // Room progress endpoint
-app.get('/room-progress', async (req, res) => {
-  const { roomId } = req.query;
+app.post('/room-progress', async (req, res) => {
+  const { roomId } = req.body; // Get roomId from the body
 
   try {
     // Step 1: Get all user_ids in the room
@@ -5993,6 +5993,7 @@ app.get('/room-progress', async (req, res) => {
     res.status(500).json({ message: 'Internal Server Error' });
   }
 });
+
 
 // Define storage for PDF uploads
 const pdfStorage = multer.diskStorage({
