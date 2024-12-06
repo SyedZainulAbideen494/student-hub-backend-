@@ -5911,6 +5911,89 @@ app.post('/leaveRoom', async (req, res) => {
   }
 });
 
+// Room progress endpoint
+app.get('/room-progress', async (req, res) => {
+  const { roomId } = req.query;
+
+  try {
+    // Step 1: Get all user_ids in the room
+    const roomMembers = await query('SELECT user_id FROM room_members WHERE room_id = ?', [roomId]);
+    
+    if (!roomMembers.length) {
+      return res.status(404).json({ message: 'Room not found or no members in the room' });
+    }
+
+    const userIds = roomMembers.map(member => member.user_id);
+
+    // Step 2: Fetch user details
+    const users = await query('SELECT * FROM users WHERE id IN (?)', [userIds]);
+
+    // Step 3: Get task progress
+    const taskProgressPromises = userIds.map(async (userId) => {
+      const totalTasks = await query('SELECT COUNT(*) AS total FROM tasks WHERE user_id = ?', [userId]);
+      const completedTasks = await query('SELECT COUNT(*) AS completed FROM tasks WHERE user_id = ? AND completed = 1', [userId]);
+
+      return {
+        userId,
+        totalTasks: totalTasks[0].total,
+        completedTasks: completedTasks[0].completed,
+      };
+    });
+
+    const taskProgress = await Promise.all(taskProgressPromises);
+
+    // Step 4: Get flashcard progress
+    const flashcardProgressPromises = userIds.map(async (userId) => {
+      const flashcardSets = await query('SELECT id FROM flashcard_sets WHERE user_id = ?', [userId]);
+
+      const flashcardProgressPromises = flashcardSets.map(async (set) => {
+        const flashcards = await query('SELECT COUNT(*) AS known FROM flashcard WHERE set_id = ? AND status = "I know"', [set.id]);
+        return flashcards[0].known;
+      });
+
+      const flashcardCounts = await Promise.all(flashcardProgressPromises);
+      const totalKnownFlashcards = flashcardCounts.reduce((acc, count) => acc + count, 0);
+
+      return { userId, totalKnownFlashcards };
+    });
+
+    const flashcardProgress = await Promise.all(flashcardProgressPromises);
+
+    // Step 5: Get Pomodoro data
+    const pomodoroProgressPromises = userIds.map(async (userId) => {
+      const pomodoroData = await query('SELECT SUM(duration) AS totalDuration FROM pomodoro_date WHERE user_id = ?', [userId]);
+      const totalDurationInHours = pomodoroData[0].totalDuration / 3600; // Convert seconds to hours
+
+      return { userId, totalPomodoroHours: totalDurationInHours };
+    });
+
+    const pomodoroProgress = await Promise.all(pomodoroProgressPromises);
+
+    // Combine all the progress data
+    const roomProgress = users.map((user) => {
+      const taskData = taskProgress.find(task => task.userId === user.id);
+      const flashcardData = flashcardProgress.find(flashcard => flashcard.userId === user.id);
+      const pomodoroData = pomodoroProgress.find(pomodoro => pomodoro.userId === user.id);
+
+      return {
+        userId: user.id,
+        name: user.unique_id,
+        totalTasks: taskData ? taskData.totalTasks : 0,
+        completedTasks: taskData ? taskData.completedTasks : 0,
+        totalKnownFlashcards: flashcardData ? flashcardData.totalKnownFlashcards : 0,
+        totalPomodoroHours: pomodoroData ? pomodoroData.totalPomodoroHours : 0,
+      };
+    });
+
+    // Respond with the room progress data
+    res.json(roomProgress);
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
 // Define storage for PDF uploads
 const pdfStorage = multer.diskStorage({
   destination: (req, file, cb) => {
