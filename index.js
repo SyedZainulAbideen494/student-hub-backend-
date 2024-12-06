@@ -652,6 +652,8 @@ app.post('/delete/task', (req, res) => {
       });
   });
 });
+
+
 async function sendTaskReminders() {
   try {
     // Step 1: Fetch tasks with email reminders
@@ -662,9 +664,18 @@ async function sendTaskReminders() {
       WHERE t.completed = 0 AND t.email_reminder = 1
     `);
 
-    // Step 2: Filter out tasks with passed due dates
+    // Step 2: Filter out tasks with passed due dates and check if the due date is 1 day away
     const currentDateTime = new Date();
-    const validTasks = tasks.filter((task) => new Date(task.due_date) > currentDateTime);
+    const targetDate = new Date(currentDateTime);
+    targetDate.setHours(0, 0, 0, 0); // Reset time for a clear comparison
+
+    const oneDayLater = new Date(targetDate);
+    oneDayLater.setDate(targetDate.getDate() + 1); // One day later
+
+    const validTasks = tasks.filter((task) => {
+      const dueDate = new Date(task.due_date);
+      return dueDate > currentDateTime && dueDate <= oneDayLater;
+    });
 
     // Step 3: Group valid tasks by user
     const userTasks = validTasks.reduce((acc, task) => {
