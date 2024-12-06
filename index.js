@@ -76,7 +76,7 @@ app.use(cors({
 // Define storage for multer
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-      cb(null, 'public/');
+      cb(null, '/root/student-hub-backend-/public/');
   },
   filename: (req, file, cb) => {
       const ext = path.extname(file.originalname);
@@ -5903,7 +5903,7 @@ app.post('/leaveRoom', async (req, res) => {
 // Define storage for PDF uploads
 const pdfStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, './public/'); // Save PDFs in a dedicated folder
+    cb(null, '/root/student-hub-backend-/public/'); // Save PDFs in a dedicated folder
   },
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname);
