@@ -5994,6 +5994,58 @@ app.post('/room-progress', async (req, res) => {
   }
 });
 
+// API route to add a new task
+app.post('/api/room_tasks/add', (req, res) => {
+  const { room_id, title, description, due_date, priority } = req.body;
+
+  if (!room_id || !title) {
+    return res.status(400).json({ message: 'Room ID and Title are required' });
+  }
+
+  const query = `
+    INSERT INTO room_tasks (room_id, title, description, due_date, priority)
+    VALUES (?, ?, ?, ?, ?)
+  `;
+
+  connection.query(query, [room_id, title, description || null, due_date || null, priority || 'normal'], (err, result) => {
+    if (err) {
+      return res.status(500).json({ message: 'Error adding task' });
+    }
+    res.status(201).json({ message: 'Task added successfully', taskId: result.insertId });
+  });
+});
+
+// API route to get tasks for a specific room
+app.get('/api/room_tasks/get/:room_id', (req, res) => {
+  const room_id = req.params.room_id;
+
+  const query = 'SELECT * FROM room_tasks WHERE room_id = ?';
+
+  connection.query(query, [room_id], (err, tasks) => {
+    if (err) {
+      return res.status(500).json({ message: 'Error fetching tasks' });
+    }
+    res.status(200).json(tasks);
+  });
+});
+
+// API route to delete a task
+app.delete('/api/room_tasks/delete/:taskId', (req, res) => {
+  const taskId = req.params.taskId;
+
+  const query = 'DELETE FROM room_tasks WHERE id = ?';
+
+  connection.query(query, [taskId], (err, result) => {
+    if (err) {
+      return res.status(500).json({ message: 'Error deleting task' });
+    }
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+    res.status(200).json({ message: 'Task deleted successfully' });
+  });
+});
+
 
 // Define storage for PDF uploads
 const pdfStorage = multer.diskStorage({
