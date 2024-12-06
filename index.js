@@ -5994,7 +5994,6 @@ app.post('/room-progress', async (req, res) => {
   }
 });
 
-// API route to add a new task
 app.post('/api/room_tasks/add', (req, res) => {
   const { room_id, title, description, due_date, priority } = req.body;
 
