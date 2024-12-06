@@ -6474,8 +6474,8 @@ app.delete("/room/posts/delete/:postId", async (req, res) => {
   if (!token) return res.status(401).send({ message: 'No token provided' });
 
   try {
-    const decoded = jwt.verify(token, 'your_jwt_secret'); // Verify JWT token
-    const userId = decoded.userId; // Get the userId from the token
+
+    const userId = await getUserIdFromToken(token);
 
     // First, check if the post exists and belongs to the user
     const [post] = await connection.promise().query(
