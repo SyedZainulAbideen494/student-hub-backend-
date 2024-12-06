@@ -652,7 +652,6 @@ app.post('/delete/task', (req, res) => {
       });
   });
 });
-
 async function sendTaskReminders() {
   try {
     // Step 1: Fetch tasks with email reminders
@@ -663,8 +662,12 @@ async function sendTaskReminders() {
       WHERE t.completed = 0 AND t.email_reminder = 1
     `);
 
-    // Step 2: Group tasks by user
-    const userTasks = tasks.reduce((acc, task) => {
+    // Step 2: Filter out tasks with passed due dates
+    const currentDateTime = new Date();
+    const validTasks = tasks.filter((task) => new Date(task.due_date) > currentDateTime);
+
+    // Step 3: Group valid tasks by user
+    const userTasks = validTasks.reduce((acc, task) => {
       const userKey = task.user_id;
       if (!acc[userKey]) {
         acc[userKey] = { unique_id: task.unique_id, email: task.email, tasks: [] };
@@ -677,7 +680,7 @@ async function sendTaskReminders() {
       return acc;
     }, {});
 
-    // Step 3: Send emails to each user
+    // Step 4: Send emails to each user
     for (const userId in userTasks) {
       const { unique_id, email, tasks } = userTasks[userId];
       const taskList = tasks
@@ -691,7 +694,7 @@ async function sendTaskReminders() {
         )
         .join("");
 
-        const emailBody = `
+      const emailBody = `
         <div style="
           font-family: 'Helvetica Neue', Arial, sans-serif; 
           background-color: #f9f9f9; 
@@ -752,7 +755,6 @@ async function sendTaskReminders() {
           </p>
         </div>
       `;
-      
 
       await transporter.sendMail({
         from: "edusify@gmail.com",
@@ -773,6 +775,7 @@ schedule.scheduleJob("0 7,15,20 * * *", async () => {
   console.log("Running task reminders at", new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }));
   await sendTaskReminders();
 });
+
 
 
 app.post('/api/add/flashcards', upload.array('images'), (req, res) => {
@@ -6328,6 +6331,100 @@ app.post('/api/flashcards/generate-from-notes', async (req, res) => {
   }
 });
 
+const getStats = async (token) => {
+  try {
+    // Get userId from the token
+    const userId = await getUserIdFromToken(token);
+
+    if (!userId) {
+      throw new Error('User not found');
+    }
+
+    // Fetch completed tasks
+    const tasksCompleted = await query('SELECT COUNT(*) AS count FROM tasks WHERE completed = 1 AND user_id = ?', [userId]);
+
+    // Calculate total duration from Pomodoro data in seconds
+    const pomodoroDurationRows = await query('SELECT duration FROM pomodoro_date WHERE user_id = ?', [userId]);
+
+    // Sum up the durations and convert from seconds to hours
+    const totalPomodoroDuration = pomodoroDurationRows.reduce((sum, row) => sum + row.duration, 0) / 3600; // convert seconds to hours
+
+    // Count Pomodoro sessions
+    const pomodoroSessions = await query('SELECT COUNT(*) AS count FROM pomodoro_date WHERE user_id = ?', [userId]);
+
+    // Fetch the setIds from flashcard_sets
+    const flashcardSets = await query('SELECT id FROM flashcard_sets WHERE user_id = ?', [userId]);
+    const setIds = flashcardSets.map(set => set.id);
+
+    // If no flashcard sets exist for the user, return 0 mastered flashcards
+    if (setIds.length === 0) {
+      return {
+        tasksCompleted: tasksCompleted[0].count,
+        totalPomodoroDuration, // in hours
+        pomodoroSessions: pomodoroSessions[0].count,
+        flashcardsMastered: 0,
+        leaderboardPosition: null, // Position will be null if no sets exist
+      };
+    }
+
+    // Fetch mastered flashcards by setId
+    const flashcardsMastered = await query(
+      'SELECT COUNT(*) AS count FROM flashcard WHERE set_id IN (?) AND status = "I Know"',
+      [setIds]
+    );
+
+    // Fetch user points and calculate leaderboard position
+    const userPoints = await query('SELECT points FROM user_points WHERE user_id = ?', [userId]);
+
+    if (!userPoints || userPoints.length === 0) {
+      throw new Error('User points not found');
+    }
+
+    const userPointsValue = userPoints[0].points;
+
+    // Fetch all user points and sort them in descending order
+    const allUserPoints = await query('SELECT user_id, points FROM user_points ORDER BY points DESC');
+
+    // Find the position by comparing user's points with all other users
+    const leaderboardPosition = allUserPoints.findIndex(user => user.points === userPointsValue) + 1;
+
+    return {
+      tasksCompleted: tasksCompleted[0].count,
+      totalPomodoroDuration, // in hours
+      pomodoroSessions: pomodoroSessions[0].count,
+      flashcardsMastered: flashcardsMastered[0].count,
+      leaderboardPosition,
+    };
+  } catch (error) {
+    console.error('Error fetching stats:', error);
+    return null;
+  }
+};
+
+// API route to get stats based on token
+app.get('/api/stats', async (req, res) => {
+  try {
+    // Get the token from query parameters or headers
+    const token = req.query.token || req.headers['authorization'];
+
+    if (!token) {
+      return res.status(400).json({ message: 'Token is required' });
+    }
+
+    // Call the function to get stats
+    const stats = await getStats(token);
+
+    if (!stats) {
+      return res.status(500).json({ message: 'Error fetching stats' });
+    }
+
+    // Return the stats as a response
+    return res.status(200).json(stats);
+  } catch (error) {
+    console.error('Error in /stats route:', error);
+    return res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
 
 
 // Route to send emails to users
