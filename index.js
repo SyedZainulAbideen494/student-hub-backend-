@@ -3905,6 +3905,7 @@ app.post('/api/flashcards/generate', async (req, res) => {
 
 
 
+
 app.get('/api/flashcards/view/individual/:id', (req, res) => {
   const { id } = req.params;
 
@@ -6674,6 +6675,14 @@ app.get("/room/posts/fetch/:roomId", async (req, res) => {
   });
 });
 
+// Route to end the current event
+const transporterSec = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+      user: 'edusiyfy@gmail.com',
+      pass: 'hvht twsf ejma juft',
+  },
+});
 
 // Route to send emails to users
 app.post('/send-emails/selected-users/admin', async (req, res) => {
@@ -6695,14 +6704,14 @@ app.post('/send-emails/selected-users/admin', async (req, res) => {
           const personalizedContent = content.replace(/{{name}}/g, user.unique_id);
 
           return {
-              from: 'edusyfy@gmail.com',
+              from: 'edusiyfy@gmail.com',
               to: user.email,
               subject: subject,
               html: personalizedContent,
           };
       });
 
-      await Promise.all(emailsToSend.map((email) => transporter.sendMail(email)));
+      await Promise.all(emailsToSend.map((email) => transporterSec.sendMail(email)));
 
       res.status(200).json({ message: 'Emails sent successfully!' });
   } catch (error) {
