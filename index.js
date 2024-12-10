@@ -788,7 +788,6 @@ schedule.scheduleJob("0 7,15,20 * * *", async () => {
 });
 
 
-
 app.post('/api/add/flashcards', upload.array('images'), (req, res) => {
   const { title, description, isPublic, token, headings, subjectId } = req.body;
 
@@ -807,24 +806,22 @@ app.post('/api/add/flashcards', upload.array('images'), (req, res) => {
     }
 
     const userId = results[0].user_id;
-    const imageNames = req.files ? req.files.map(file => file.filename) : [];
+    const imageNames = req.files ? req.files.map((file) => file.filename) : [];
 
-    console.log('Image filenames:', imageNames); // Log image filenames
-
-    // Step 2: Update the SQL query to include subjectId
     const query = `
       INSERT INTO flashcards (title, description, images, is_public, user_id, headings, subject_id) 
-      VALUES (?, ?, ?, ?, ?, ?, ?) 
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `;
     const values = [title, description, JSON.stringify(imageNames), isPublic, userId, headings, subjectId];
 
-    connection.query(query, values, (error) => {
+    connection.query(query, values, (error, results) => {
       if (error) {
         console.error('Error inserting flashcard:', error);
         return res.status(500).json({ message: 'Failed to save flashcard.' });
       }
 
-      // Step 3: Update Points
+      const flashcardId = results.insertId; // Get the newly inserted flashcard ID
+
       const pointsQuery = 'SELECT points, updated_at FROM user_points WHERE user_id = ?';
       connection.query(pointsQuery, [userId], (err, pointsResults) => {
         if (err) {
@@ -833,18 +830,15 @@ app.post('/api/add/flashcards', upload.array('images'), (req, res) => {
         }
 
         const currentTime = new Date();
-        const fiveMinutesAgo = new Date(currentTime.getTime() - 5 * 60000); // Subtract 5 minutes
-        let pointsToAdd = 10; // Default points to add
+        const fiveMinutesAgo = new Date(currentTime.getTime() - 5 * 60000);
+        let pointsToAdd = 10;
 
         if (pointsResults.length > 0) {
-          // If user exists, check updated_at timestamp
           const lastUpdated = new Date(pointsResults[0].updated_at);
           if (lastUpdated > fiveMinutesAgo) {
-            // If last update was less than 5 minutes ago, add fewer points
-            pointsToAdd = 10; // Or any number you choose
+            pointsToAdd = 10; // Add default points
           }
 
-          // Update points and set the updated_at timestamp
           connection.query(
             'UPDATE user_points SET points = points + ?, updated_at = ? WHERE user_id = ?',
             [pointsToAdd, currentTime, userId],
@@ -853,11 +847,14 @@ app.post('/api/add/flashcards', upload.array('images'), (req, res) => {
                 console.error('Error updating points:', err);
                 return res.status(500).json({ message: 'Failed to update points.' });
               }
-              res.status(200).json({ message: 'Flashcard saved successfully! Points updated.' });
+
+              res.status(200).json({
+                message: 'Flashcard saved successfully!',
+                flashcardId: flashcardId,
+              });
             }
           );
         } else {
-          // If user does not exist, insert new record with the points
           connection.query(
             'INSERT INTO user_points (user_id, points, updated_at) VALUES (?, ?, ?)',
             [userId, pointsToAdd, currentTime],
@@ -866,7 +863,11 @@ app.post('/api/add/flashcards', upload.array('images'), (req, res) => {
                 console.error('Error inserting points:', err);
                 return res.status(500).json({ message: 'Failed to update points.' });
               }
-              res.status(200).json({ message: 'Flashcard saved successfully! Points added.' });
+
+              res.status(200).json({
+                message: 'Flashcard saved successfully!',
+                flashcardId: flashcardId,
+              });
             }
           );
         }
