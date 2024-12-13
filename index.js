@@ -5079,35 +5079,18 @@ app.post('/start-session/pomodoro', async (req, res) => {
       // Log when Pomodoro session starts for the user     
       console.log(`Pomodoro session started for userId: ${user_id}`);      
 
-      // Check the most recent session's created_at timestamp
-      const latestSessionQuery = 'SELECT start_time FROM pomodoro_date WHERE user_id = ? ORDER BY start_time DESC LIMIT 1';
-      const latestSessionResult = await query(latestSessionQuery, [user_id]);
+      // Check if user_points row exists for the user
+      const checkPointsQuery = 'SELECT * FROM user_points WHERE user_id = ?';  
+      const pointsResult = await query(checkPointsQuery, [user_id]);  
 
-      let awardPoints = true; // Default to awarding points
-
-      if (latestSessionResult.length > 0) {
-          const latestStartTime = new Date(latestSessionResult[0].start_time);
-          const timeDifference = (start_time - latestStartTime) / (1000 * 60); // Difference in minutes
-
-          if (timeDifference <= 5) {
-              awardPoints = false; // Don't award points if the session started within the last 5 minutes
-          }
-      }
-
-      if (awardPoints) {
-          // Check if user_points row exists for the user
-          const checkPointsQuery = 'SELECT * FROM user_points WHERE user_id = ?';  
-          const pointsResult = await query(checkPointsQuery, [user_id]);  
-
-          if (pointsResult.length === 0) { 
-              // If no row exists, insert a new one with initial points
-              const insertPointsQuery = 'INSERT INTO user_points (user_id, points) VALUES (?, ?)';
-              await query(insertPointsQuery, [user_id, 5]);  // Assuming initial points are 5
-          } else { 
-              // If row exists, update the points
-              const updatePointsQuery = 'UPDATE user_points SET points = points + 5 WHERE user_id = ?';
-              await query(updatePointsQuery, [user_id]);  
-          }
+      if (pointsResult.length === 0) { 
+          // If no row exists, insert a new one with initial points
+          const insertPointsQuery = 'INSERT INTO user_points (user_id, points) VALUES (?, ?)';
+          await query(insertPointsQuery, [user_id, 15]);  // Assuming initial points are 5
+      } else { 
+          // If row exists, update the points
+          const updatePointsQuery = 'UPDATE user_points SET points = points + 3 WHERE user_id = ?';
+          await query(updatePointsQuery, [user_id]);  
       }
 
       // Return the session ID and start time     
