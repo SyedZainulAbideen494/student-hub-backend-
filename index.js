@@ -5080,17 +5080,24 @@ app.post('/start-session/pomodoro', async (req, res) => {
       console.log(`Pomodoro session started for userId: ${user_id}`);      
 
       // Check if user_points row exists for the user
-      const checkPointsQuery = 'SELECT * FROM user_points WHERE user_id = ?';  
+      const checkPointsQuery = 'SELECT points, updated_at FROM user_points WHERE user_id = ?';  
       const pointsResult = await query(checkPointsQuery, [user_id]);  
 
       if (pointsResult.length === 0) { 
           // If no row exists, insert a new one with initial points
-          const insertPointsQuery = 'INSERT INTO user_points (user_id, points) VALUES (?, ?)';
-          await query(insertPointsQuery, [user_id, 15]);  // Assuming initial points are 5
+          const insertPointsQuery = 'INSERT INTO user_points (user_id, points, updated_at) VALUES (?, ?, ?)';
+          await query(insertPointsQuery, [user_id, 5, start_time]);  // Assuming initial points are 5
       } else { 
-          // If row exists, update the points
-          const updatePointsQuery = 'UPDATE user_points SET points = points + 3 WHERE user_id = ?';
-          await query(updatePointsQuery, [user_id]);  
+          const lastUpdated = new Date(pointsResult[0].updated_at);
+          const timeDifference = (start_time - lastUpdated) / 1000 / 60; // Difference in minutes
+
+          if (timeDifference >= 3) {
+              // If last updated more than 3 minutes ago, update points
+              const updatePointsQuery = 'UPDATE user_points SET points = points + 5, updated_at = ? WHERE user_id = ?';
+              await query(updatePointsQuery, [start_time, user_id]);  
+          } else {
+              console.log(`Points not updated for userId: ${user_id} as the last update was less than 3 minutes ago.`);
+          }
       }
 
       // Return the session ID and start time     
@@ -5099,6 +5106,7 @@ app.post('/start-session/pomodoro', async (req, res) => {
       res.status(401).json({ message: 'Invalid or expired token' });   
   } 
 });
+
 
 
 app.post('/end-session/pomodoro', async (req, res) => {
