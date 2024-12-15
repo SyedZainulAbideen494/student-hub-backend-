@@ -3512,6 +3512,64 @@ app.post('/api/chat/ai', async (req, res) => {
   }
 });
 
+app.post('/api/chat/ai/demo', async (req, res) => {
+  const { message, chatHistory } = req.body;
+
+  try {
+    // Validate required inputs
+    if (!message) {
+      return res.status(400).json({ error: 'Message is required.' });
+    }
+
+    const initialChatHistory = [
+      {
+        role: 'user',
+        parts: [{ text: 'Hello' }],
+      },
+      {
+        role: 'model',
+        parts: [{ text: 'Great to meet you. What would you like to know?' }],
+      },
+    ];
+
+    const chat = model.startChat({
+      history: chatHistory || initialChatHistory,
+    });
+
+    // Log the user's question
+    console.log('User asked from website demo:', message);
+
+    // Send message to the AI model and get the response
+    const result = await chat.sendMessage(message);
+    const aiResponse = result.response.text();
+
+    // Log the AI's response
+    console.log('AI responded');
+
+    // Send the response back to the client
+    res.json({ response: aiResponse });
+  } catch (error) {
+    // Handle errors
+    console.error('Error in /api/chat/ai/demo endpoint:', error);
+
+    let errorMessage = 'An error occurred while processing your request. Please try again later.';
+    if (error.response) {
+      errorMessage = `Error: ${error.response.status} - ${
+        error.response.data?.message || error.response.statusText
+      }`;
+    } else if (error.message) {
+      errorMessage = `Error: ${error.message}`;
+    }
+
+    // Log the final error message for debugging
+    console.error('Final error message sent to user:', errorMessage);
+
+    // Send a user-friendly error message
+    res.status(500).json({ error: errorMessage });
+  }
+});
+
+
 // Endpoint to fetch chat history
 app.post('/api/chat/history/ai', async (req, res) => {
   const { token } = req.body;
