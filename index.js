@@ -3867,89 +3867,77 @@ app.get('/api/leaderboard', (req, res) => {
       res.json(results); // Return the leaderboard data as JSON
   });
 });
-
 app.post('/api/flashcards/generate', async (req, res) => {
-  const { set_id } = req.body; // Get the set ID from the request body
+  const { set_id, subject, topic } = req.body; // Get subject, topic, and set_id from the request body
 
   try {
-    // Fetch the subject and topic based on the set_id
-    const setQuery = 'SELECT subject, topic FROM flashcard_sets WHERE id = ?';
-    connection.query(setQuery, [set_id], async (err, results) => {
-      if (err || results.length === 0) {
-        console.error('Error fetching flashcard set:', err);
-        return res.status(500).json({ error: 'Flashcard set not found' });
-      }
+    // AI prompt to generate 15 question and answer flashcards
+    const prompt = `Generate 15 flashcards in JSON format with questions and answers for the subject: ${subject} and topic: ${topic}. Each flashcard should be an object with 'question' and 'answer' fields, ensuring no additional text is included. Please do not use any Markdown formatting or backticks.`;
 
-      const { subject, topic } = results[0];
-
-      // AI prompt to generate 15 question and answer flashcards
-      const prompt = `Generate 15 flashcards in JSON format with questions and answers for the subject: ${subject} and topic: ${topic}. Each flashcard should be an object with 'question' and 'answer' fields, ensuring no additional text is included. Please do not use any Markdown formatting or backticks.`;
-
-      const chat = model.startChat({
-        history: [
-          {
-            role: 'user',
-            parts: [{ text: 'Hello' }],
-          },
-          {
-            role: 'model',
-            parts: [{ text: 'I can help generate flashcards for your study!' }],
-          },
-        ],
-      });
-
-      console.log('Generating flashcards with prompt:', prompt);
-      const result = await chat.sendMessage(prompt);
-
-      // Sanitize the response to remove any unwanted characters
-      const sanitizedResponse = result.response.text().replace(/```json|```|`/g, '').trim();
-
-      // Expecting a JSON format response
-      let flashcards;
-      try {
-        flashcards = JSON.parse(sanitizedResponse);
-      } catch (parseError) {
-        console.error('Failed to parse JSON:', parseError);
-        return res.status(500).json({ error: 'Invalid JSON response from the AI model' });
-      }
-
-      // Prepare flashcards data to insert
-      const flashcardsData = [];
-
-      // Ensure that we have valid question-answer pairs
-      for (const card of flashcards) {
-        const question = card.question?.trim();
-        const answer = card.answer?.trim();
-
-        // Validate question and answer
-        if (question && answer) {
-          flashcardsData.push({ set_id, subject, topic, question, answer });
-        } else {
-          console.warn(`Skipping pair due to missing question or answer: ${question || 'No question'} - ${answer || 'No answer'}`);
-        }
-      }
-
-      // Insert flashcards into the database if there are valid pairs
-      if (flashcardsData.length > 0) {
-        const flashcardsValues = flashcardsData.map(({ set_id, question, answer }) => [set_id, question, answer]);
-
-        connection.query(
-          'INSERT INTO flashcard (set_id, question, answer) VALUES ?',
-          [flashcardsValues],
-          (err) => {
-            if (err) {
-              console.error('Error inserting into database:', err);
-              return res.status(500).json({ error: 'Database error' });
-            }
-
-            // Return the generated flashcards
-            res.json({ flashcards: flashcardsData });
-          }
-        );
-      } else {
-        res.status(400).json({ error: 'No valid flashcards generated' });
-      }
+    const chat = model.startChat({
+      history: [
+        {
+          role: 'user',
+          parts: [{ text: 'Hello' }],
+        },
+        {
+          role: 'model',
+          parts: [{ text: 'I can help generate flashcards for your study!' }],
+        },
+      ],
     });
+
+    console.log('Generating flashcards with prompt:', prompt);
+    const result = await chat.sendMessage(prompt);
+
+    // Sanitize the response to remove any unwanted characters
+    const sanitizedResponse = result.response.text().replace(/```json|```|`/g, '').trim();
+
+    // Expecting a JSON format response
+    let flashcards;
+    try {
+      flashcards = JSON.parse(sanitizedResponse);
+    } catch (parseError) {
+      console.error('Failed to parse JSON:', parseError);
+      return res.status(500).json({ error: 'Invalid JSON response from the AI model' });
+    }
+
+    // Prepare flashcards data to insert
+    const flashcardsData = [];
+
+    // Ensure that we have valid question-answer pairs
+    for (const card of flashcards) {
+      const question = card.question?.trim();
+      const answer = card.answer?.trim();
+
+      // Validate question and answer
+      if (question && answer) {
+        flashcardsData.push({ set_id, subject, topic, question, answer });
+      } else {
+        console.warn(`Skipping pair due to missing question or answer: ${question || 'No question'} - ${answer || 'No answer'}`);
+      }
+    }
+
+    // Insert flashcards into the database if there are valid pairs
+    if (flashcardsData.length > 0) {
+      const flashcardsValues = flashcardsData.map(({ set_id, question, answer }) => [set_id, question, answer]);
+
+      connection.query(
+        'INSERT INTO flashcard (set_id, question, answer) VALUES ?',
+        [flashcardsValues],
+        (err) => {
+          if (err) {
+            console.error('Error inserting into database:', err);
+            return res.status(500).json({ error: 'Database error' });
+          }
+
+          // Return the generated flashcards
+          res.json({ flashcards: flashcardsData });
+        }
+      );
+    } else {
+      res.status(400).json({ error: 'No valid flashcards generated' });
+    }
   } catch (error) {
     console.error('Error generating flashcards:', error);
     let errorMessage = 'Failed to generate flashcards';
@@ -3961,8 +3949,6 @@ app.post('/api/flashcards/generate', async (req, res) => {
     res.status(500).json({ error: errorMessage });
   }
 });
-
-
 
 
 app.get('/api/flashcards/view/individual/:id', (req, res) => {
@@ -6220,6 +6206,81 @@ app.post('/api/flashcards/upload', uploadPDF.single('pdf'), async (req, res) => 
         }
       );
     });
+  } catch (error) {
+    console.error('Error processing PDF upload:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// API endpoint for PDF upload and flashcard generation
+app.post('/api/flashcards/upload/set-created', uploadPDF.single('pdf'), async (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+
+  try {
+    // Extract user ID from token
+    const userId = await getUserIdFromToken(token); // Implement your own token handling logic
+    const { set_id } = req.body; // Set ID is passed from the frontend
+
+    // Make sure we have a valid set_id
+    if (!set_id) {
+      return res.status(400).json({ error: 'Missing set_id' });
+    }
+
+    // Extract text from the uploaded PDF
+    const pdfPath = req.file.path; // File path from multer
+    const pdfText = await pdfParse(fs.readFileSync(pdfPath)).then((data) => data.text);
+    
+    if (!pdfText) {
+      return res.status(400).json({ error: 'Failed to extract text from PDF' });
+    }
+
+    // Generate flashcards using AI logic based on PDF text
+    const prompt = `Generate flashcards in JSON format based on the following text extracted from a PDF. Each flashcard should have a 'question' and 'answer' field. No additional formatting or Markdown:\n\n${pdfText}`;
+    
+    const chat = model.startChat({
+      history: [
+        { role: 'user', parts: [{ text: 'Generate flashcards from this PDF text' }] },
+      ],
+    });
+
+    const result = await chat.sendMessage(prompt);
+
+    // Sanitize and parse the AI response
+    const sanitizedResponse = result.response.text().replace(/```json|```|`/g, '').trim();
+    let flashcards;
+    try {
+      flashcards = JSON.parse(sanitizedResponse);
+    } catch (parseError) {
+      console.error('Failed to parse JSON:', parseError);
+      return res.status(500).json({ error: 'Invalid JSON response from the AI model' });
+    }
+
+    // Insert flashcards into the database and associate them with the set_id
+    const flashcardsData = flashcards.map(({ question, answer }) => [set_id, question.trim(), answer.trim()]);
+    
+    connection.query(
+      'INSERT INTO flashcard (set_id, question, answer) VALUES ?',
+      [flashcardsData],
+      (err) => {
+        if (err) {
+          console.error('Error inserting flashcards:', err);
+          return res.status(500).json({ error: 'Database error' });
+        }
+
+        // Optionally delete the file after processing
+        fs.unlink(pdfPath, (unlinkErr) => {
+          if (unlinkErr) {
+            console.error('Error deleting file:', unlinkErr);
+          }
+        });
+
+        // Send response with the generated flashcards
+        res.json({ flashcardSetId: set_id, flashcards });
+      }
+    );
   } catch (error) {
     console.error('Error processing PDF upload:', error);
     res.status(500).json({ error: 'Internal server error' });
