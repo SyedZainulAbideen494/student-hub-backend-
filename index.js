@@ -3498,20 +3498,31 @@ app.post('/api/chat/ai', uploadPDF.single('pdf'), async (req, res) => {
     }
 
     let pdfText = '';
+    let pdfIncluded = false;
+
     if (req.file) {
+      pdfIncluded = true;
       // Extract text from the uploaded PDF
       const pdfPath = req.file.path;
-      pdfText = await pdfParse(fs.readFileSync(pdfPath)).then((data) => data.text);
-      if (!pdfText) {
-        return res.status(400).json({ error: 'Failed to extract text from PDF.' });
+      try {
+        pdfText = await pdfParse(fs.readFileSync(pdfPath)).then((data) => data.text);
+        if (!pdfText) {
+          console.log(`User ID: ${userId} - Unable to extract text from PDF.`);
+          return res.status(400).json({ error: 'Unable to extract text from the provided PDF.' });
+        }
+      } catch (error) {
+        console.error(`Error extracting text from PDF for User ID: ${userId}:`, error);
+        return res.status(400).json({ error: 'Failed to process the PDF. Please try again.' });
       }
     }
 
     // Combine PDF text with the user message
     const finalMessage = pdfText ? `${pdfText}\n\n${message}` : message;
 
-    // Log the user's message
-    console.log(`User ID: ${userId}, Message: ${message}`);
+    // Log the type of message
+    console.log(
+      `User ID: ${userId}, Message Type: ${pdfIncluded ? 'With PDF' : 'Just Message'}, Message: ${message}`
+    );
 
     // Start a new chat session
     const chat = model.startChat({
@@ -3524,7 +3535,7 @@ app.post('/api/chat/ai', uploadPDF.single('pdf'), async (req, res) => {
 
     // Log success and AI's response
     console.log(`AI Response for User ID: ${userId} - Success`);
-    console.log(`AI Responded`);
+    console.log(`AI Responded with: ${aiResponse}`);
 
     // Save the interaction in the database
     await query(
@@ -3541,6 +3552,7 @@ app.post('/api/chat/ai', uploadPDF.single('pdf'), async (req, res) => {
     });
   }
 });
+
 
 
 app.post('/api/chat/ai/demo', async (req, res) => {
