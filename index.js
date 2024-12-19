@@ -3524,7 +3524,7 @@ app.post('/api/chat/ai', uploadPDF.single('pdf'), async (req, res) => {
 
     // Log success and AI's response
     console.log(`AI Response for User ID: ${userId} - Success`);
-    console.log(`AI Response Text: ${aiResponse}`);
+    console.log(`AI Responded`);
 
     // Save the interaction in the database
     await query(
