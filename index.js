@@ -3498,21 +3498,20 @@ app.post('/api/chat/ai', uploadPDF.single('pdf'), async (req, res) => {
     }
 
     let pdfText = '';
-    let pdfIncluded = false;
+    let pdfError = false;
 
     if (req.file) {
-      pdfIncluded = true;
       // Extract text from the uploaded PDF
       const pdfPath = req.file.path;
       try {
         pdfText = await pdfParse(fs.readFileSync(pdfPath)).then((data) => data.text);
         if (!pdfText) {
           console.log(`User ID: ${userId} - Unable to extract text from PDF.`);
-          return res.status(400).json({ error: 'Unable to extract text from the provided PDF.' });
+          pdfError = true; // Indicate PDF could not be read
         }
       } catch (error) {
         console.error(`Error extracting text from PDF for User ID: ${userId}:`, error);
-        return res.status(400).json({ error: 'Failed to process the PDF. Please try again.' });
+        pdfError = true; // Indicate PDF could not be read
       }
     }
 
@@ -3521,7 +3520,7 @@ app.post('/api/chat/ai', uploadPDF.single('pdf'), async (req, res) => {
 
     // Log the type of message
     console.log(
-      `User ID: ${userId}, Message Type: ${pdfIncluded ? 'With PDF' : 'Just Message'}, Message: ${message}`
+      `User ID: ${userId}, Message Type: ${req.file ? 'With PDF' : 'Just Message'}, Message: ${message}`
     );
 
     // Start a new chat session
@@ -3531,11 +3530,16 @@ app.post('/api/chat/ai', uploadPDF.single('pdf'), async (req, res) => {
 
     // Send the message to the AI model
     const result = await chat.sendMessage(finalMessage);
-    const aiResponse = result.response.text();
+    let aiResponse = result.response.text();
+
+    // Append a note about PDF reading issues if applicable
+    if (pdfError) {
+      aiResponse += ' (PDF could not be read)';
+    }
 
     // Log success and AI's response
     console.log(`AI Response for User ID: ${userId} - Success`);
-    console.log(`AI Responded with: ${aiResponse}`);
+    console.log(`AI Responded `);
 
     // Save the interaction in the database
     await query(
