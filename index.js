@@ -110,6 +110,35 @@ const connection = mysql.createPool({
   database: "studenthub",
 });
 
+
+
+// Define storage for PDF uploads
+const pdfStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, '/root/student-hub-backend-/public/'); // Save PDFs in a dedicated folder
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, `${Date.now()}${ext}`); // Timestamp to ensure unique file names
+  },
+});
+
+// File filter for PDFs
+const pdfFileFilter = (req, file, cb) => {
+  if (file.mimetype === 'application/pdf') {
+    cb(null, true);
+  } else {
+    cb(new Error('Invalid file type. Only PDFs are allowed.'), false);
+  }
+};
+
+// Multer instance for PDF uploads
+const uploadPDF = multer({
+  storage: pdfStorage,
+  fileFilter: pdfFileFilter,
+  limits: { fileSize: 10 * 1024 * 1024 }, // Limit file size to 10 MB
+});
+
 connection.getConnection((err) => {
   if (err) {
     console.error("Error connecting to MySQL database: ", err);
@@ -3441,12 +3470,11 @@ const MAX_RETRIES = 15;
 // Helper function to introduce a delay (in milliseconds)
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-
-app.post('/api/chat/ai', async (req, res) => {
-  const { message, chatHistory, token } = req.body;
-
+app.post('/api/chat/ai', uploadPDF.single('pdf'), async (req, res) => {
   try {
-    // Validate required inputs
+    const { message, chatHistory, token } = req.body;
+
+    // Validate inputs
     if (!message || !token) {
       return res.status(400).json({ error: 'Message and token are required.' });
     }
@@ -3457,58 +3485,55 @@ app.post('/api/chat/ai', async (req, res) => {
       return res.status(401).json({ error: 'Invalid token or user not authenticated.' });
     }
 
+    let parsedChatHistory = [];
+    if (chatHistory) {
+      try {
+        parsedChatHistory = JSON.parse(chatHistory);
+      } catch (e) {
+        return res.status(400).json({ error: 'Invalid chat history format.' });
+      }
+    }
 
-    const initialChatHistory = [
-      {
-        role: 'user',
-        parts: [{ text: 'Hello' }],
-      },
-      {
-        role: 'model',
-        parts: [{ text: 'Great to meet you. What would you like to know?' }],
-      },
-    ];
+    // Ensure chat history starts with a valid 'user' role
+    if (!parsedChatHistory.length || parsedChatHistory[0].role !== 'user') {
+      return res.status(400).json({ error: 'Chat history must start with role "user".' });
+    }
 
+    let pdfText = '';
+    if (req.file) {
+      // Extract text from the uploaded PDF
+      const pdfPath = req.file.path;
+      pdfText = await pdfParse(fs.readFileSync(pdfPath)).then((data) => data.text);
+      if (!pdfText) {
+        return res.status(400).json({ error: 'Failed to extract text from PDF.' });
+      }
+    }
+
+    // Combine PDF text with the user message
+    const finalMessage = pdfText ? `${pdfText}\n\n${message}` : message;
+
+    // Start a new chat session
     const chat = model.startChat({
-      history: chatHistory || initialChatHistory,
+      history: parsedChatHistory,
     });
 
-    // Log the user's question
-    console.log('User asked:', message);
-
-    // Send message to the AI model and get the response
-    const result = await chat.sendMessage(message);
+    // Send the message to the AI model
+    const result = await chat.sendMessage(finalMessage);
     const aiResponse = result.response.text();
 
-    // Log the AI's response
-    console.log('AI responded');
-
-    // Store user message and AI response in the database
+    // Save the interaction in the database
     await query(
       'INSERT INTO ai_history (user_id, user_message, ai_response) VALUES (?, ?, ?)',
       [userId, message, aiResponse]
     );
 
-    // Send the response back to the client
+    // Send the AI response back to the client
     res.json({ response: aiResponse });
   } catch (error) {
-    // Handle errors
     console.error('Error in /api/chat/ai endpoint:', error);
-
-    let errorMessage = 'An error occurred while processing your request. Please try again later.';
-    if (error.response) {
-      errorMessage = `Error: ${error.response.status} - ${
-        error.response.data?.message || error.response.statusText
-      }`;
-    } else if (error.message) {
-      errorMessage = `Error: ${error.message}`;
-    }
-
-    // Log the final error message for debugging
-    console.error('Final error message sent to user:', errorMessage);
-
-    // Send a user-friendly error message
-    res.status(500).json({ error: errorMessage });
+    res.status(500).json({
+      error: 'An error occurred while processing your request. Please try again later.',
+    });
   }
 });
 
@@ -6100,32 +6125,7 @@ app.delete('/api/room_tasks/delete/:taskId', (req, res) => {
 });
 
 
-// Define storage for PDF uploads
-const pdfStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, '/root/student-hub-backend-/public/'); // Save PDFs in a dedicated folder
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    cb(null, `${Date.now()}${ext}`); // Timestamp to ensure unique file names
-  },
-});
 
-// File filter for PDFs
-const pdfFileFilter = (req, file, cb) => {
-  if (file.mimetype === 'application/pdf') {
-    cb(null, true);
-  } else {
-    cb(new Error('Invalid file type. Only PDFs are allowed.'), false);
-  }
-};
-
-// Multer instance for PDF uploads
-const uploadPDF = multer({
-  storage: pdfStorage,
-  fileFilter: pdfFileFilter,
-  limits: { fileSize: 10 * 1024 * 1024 }, // Limit file size to 10 MB
-});
 
 // API endpoint to upload PDF and generate flashcards
 app.post('/api/flashcards/upload', uploadPDF.single('pdf'), async (req, res) => {
