@@ -3511,7 +3511,7 @@ app.post('/api/chat/ai', uploadPDF.single('pdf'), async (req, res) => {
 
     // Combine PDF text with the user message
     const finalMessage = pdfText ? `${pdfText}\n\n${message}` : message;
-
+    
     // Start a new chat session
     const chat = model.startChat({
       history: parsedChatHistory,
