@@ -3468,7 +3468,6 @@ const MAX_RETRIES = 15;
 // Helper function to introduce a delay (in milliseconds)
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-
 app.post('/api/chat/ai', uploadPDF.single('pdf'), async (req, res) => {
   try {
     const { message, chatHistory, token } = req.body;
@@ -3511,6 +3510,9 @@ app.post('/api/chat/ai', uploadPDF.single('pdf'), async (req, res) => {
     // Combine PDF text with the user message
     const finalMessage = pdfText ? `${pdfText}\n\n${message}` : message;
 
+    // Log the user's message
+    console.log(`User ID: ${userId}, Message: ${message}`);
+
     // Start a new chat session
     const chat = model.startChat({
       history: parsedChatHistory,
@@ -3519,6 +3521,10 @@ app.post('/api/chat/ai', uploadPDF.single('pdf'), async (req, res) => {
     // Send the message to the AI model
     const result = await chat.sendMessage(finalMessage);
     const aiResponse = result.response.text();
+
+    // Log success and AI's response
+    console.log(`AI Response for User ID: ${userId} - Success`);
+    console.log(`AI Response Text: ${aiResponse}`);
 
     // Save the interaction in the database
     await query(
@@ -3535,6 +3541,7 @@ app.post('/api/chat/ai', uploadPDF.single('pdf'), async (req, res) => {
     });
   }
 });
+
 
 app.post('/api/chat/ai/demo', async (req, res) => {
   const { message, chatHistory } = req.body;
