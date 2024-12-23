@@ -3867,6 +3867,8 @@ app.get('/api/leaderboard', (req, res) => {
       res.json(results); // Return the leaderboard data as JSON
   });
 });
+
+
 app.post('/api/flashcards/generate', async (req, res) => {
   const { set_id, subject, topic } = req.body; // Get subject, topic, and set_id from the request body
 
@@ -6802,6 +6804,88 @@ app.get("/room/posts/fetch/:roomId", async (req, res) => {
     res.status(200).send(results);
   });
 });
+
+
+app.get('/user-profile/:user_id', async (req, res) => {
+  const user_id = req.params.user_id;
+
+  try {
+    // Query to fetch user details (username, bio, avatar)
+    const userResult = await query('SELECT unique_id, user_name, bio, avatar FROM users WHERE id = ?', [user_id]);
+
+    if (userResult.length === 0) {
+      return res.status(404).send({ message: 'User not found' });
+    }
+
+    const user = userResult[0];
+
+    // Fetch room name using room_id
+    const roomResult = await query(
+      'SELECT r.name FROM room_members rm JOIN rooms r ON rm.room_id = r.room_id WHERE rm.user_id = ?',
+      [user_id]
+    );
+    const room = roomResult.length > 0 ? roomResult[0].name : 'No room';
+
+    // Fetch points from user_points table
+    const pointsResult = await query(
+      'SELECT points FROM user_points WHERE user_id = ?',
+      [user_id]
+    );
+    const points = pointsResult.length > 0 ? pointsResult[0].points : 0;
+
+    // Fetch Pomodoro duration in hours (rounding to 2 decimal places)
+    const pomodoroResult = await query(
+      'SELECT SUM(duration) AS total_seconds FROM pomodoro_date WHERE user_id = ?',
+      [user_id]
+    );
+    const pomodoroHours = pomodoroResult[0].total_seconds ? (pomodoroResult[0].total_seconds / 3600).toFixed(2) : 0;
+
+    // Fetch user quizzes data: highest score and quizzes attended
+    const quizzesResult = await query(
+      'SELECT MAX(score) AS highest_score, COUNT(*) AS quizzes_attended FROM user_quizzes WHERE user_id = ?',
+      [user_id]
+    );
+    const highestQuizScore = quizzesResult[0].highest_score || 0;
+    const quizzesAttended = quizzesResult[0].quizzes_attended || 0;
+
+    // Fetch number of completed tasks
+    const tasksResult = await query(
+      'SELECT COUNT(*) AS completed_tasks FROM tasks WHERE user_id = ? AND completed = "1"',
+      [user_id]
+    );
+    const completedTasks = tasksResult[0].completed_tasks || 0;
+
+    // Fetch subjects for the user (correct query with user_subjects)
+    const subjectsResult = await query(
+      'SELECT s.name FROM subjects s JOIN subjects us ON s.id = us.id WHERE us.user_id = ?',
+      [user_id]
+    );
+    const topSubjects = subjectsResult.map((subject) => subject.name);
+
+    // Prepare final response
+    const response = {
+      user_id: user.unique_id,
+      name: user.user_name,
+      bio: user.bio,
+      avatar: user.avatar,
+      room,
+      leaderboardPoints: points,
+      highestQuizScore,
+      pomodoroHours,
+      completedTasks,
+      quizzesAttended,
+      topSubjects
+    };
+
+    // Send the response
+    res.json(response);
+  } catch (error) {
+    console.error('Error:', error.message);
+    res.status(500).send({ error: 'Internal Server Error' });
+  }
+});
+
+
 
 // Route to end the current event
 const transporterSec = nodemailer.createTransport({
