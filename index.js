@@ -6884,7 +6884,177 @@ app.get('/user-profile/:user_id', async (req, res) => {
     res.status(500).send({ error: 'Internal Server Error' });
   }
 });
+// Endpoint to send friend request
+app.post('/api/friend/request', async (req, res) => {
+  const token = req.headers['authorization'].split(' ')[1];// Assuming token is passed as Bearer token in the Authorization header
+  const { profileUserId } = req.body;
+  try {
+    // Get current user ID from token
+    const currentUserId = await getUserIdFromToken(token);
 
+    // Check if the current user is trying to send a request to themselves
+  if (currentUserId === profileUserId) {
+     return res.status(400).json({ message: 'Cannot send a friend request to yourself' });
+   }
+
+    // Check if a friend request already exists and is pending
+    const existingRequest = await query(
+      'SELECT * FROM friend_requests WHERE sender_id = ? AND receiver_id = ? AND status = "pending"',
+      [currentUserId, profileUserId]
+    );
+
+    if (existingRequest.length > 0) {
+      return res.status(400).json({ message: 'Friend request already sent' });
+    }
+
+    // Insert friend request into the database
+    await query(
+      'INSERT INTO friend_requests (sender_id, receiver_id, status) VALUES (?, ?, "pending")',
+      [currentUserId, profileUserId]
+    );
+
+    res.status(200).json({ message: 'Friend request sent successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error sending friend request' });
+  }
+});
+
+// Endpoint to accept or decline friend request
+app.post('/api/friend/response', async (req, res) => {
+  const { token, profileUserId, action } = req.body;
+
+  try {
+    // Get current user ID from token
+    const currentUserId = await getUserIdFromToken(token);
+
+    // Update the friend request status based on the action
+    let status = 'pending';
+    if (action === 'accept') {
+      status = 'accepted';
+      // Add both users to the friends table
+      await query(
+        'INSERT INTO friends (user_id_1, user_id_2) VALUES (?, ?), (?, ?)',
+        [currentUserId, profileUserId, profileUserId, currentUserId]
+      );
+    } else if (action === 'decline') {
+      status = 'declined';
+    }
+
+    // Update the friend request status in the database
+    await query(
+      'UPDATE friend_requests SET status = ? WHERE sender_id = ? AND receiver_id = ?',
+      [status, profileUserId, currentUserId]
+    );
+
+    res.status(200).json({ message: `Friend request ${action}ed successfully` });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error processing friend request' });
+  }
+});
+
+
+// Endpoint to check the status of the friend request
+app.get('/api/friend/status/:profileUserId', async (req, res) => {
+  const token = req.headers['authorization'].split(' ')[1];// Assuming token is passed as Bearer token in the Authorization header
+  const { profileUserId } = req.params;
+
+  if (!token) {
+    return res.status(400).json({ message: 'Token is required' });
+  }
+
+  try {
+    const currentUserId = await getUserIdFromToken(token);
+
+    // Check if there's an existing friend request from the current user to the profile user
+    const requestStatus = await query(
+      'SELECT status FROM friend_requests WHERE sender_id = ? AND receiver_id = ?',
+      [currentUserId, profileUserId]
+    );
+
+    // If a request exists from the current user to the profile user, return the status
+    if (requestStatus.length > 0) {
+      return res.status(200).json({ status: requestStatus[0].status });
+    }
+
+    // Check if there's a reverse friend request from the profile user to the current user
+    const reverseRequestStatus = await query(
+      'SELECT status FROM friend_requests WHERE sender_id = ? AND receiver_id = ?',
+      [profileUserId, currentUserId]
+    );
+
+    // If a request exists from the profile user to the current user, return the status
+    if (reverseRequestStatus.length > 0) {
+      return res.status(200).json({ status: reverseRequestStatus[0].status });
+    }
+
+    // If no request exists, return 'none'
+    res.status(200).json({ status: 'none' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error retrieving friend request status' });
+  }
+});
+
+
+app.get('/api/friends-dashboard', async (req, res) => {
+  try {
+    const token = req.headers.authorization.split(' ')[1]; // Assuming Bearer token
+    const userId = await getUserIdFromToken(token); // Fetch user ID from token
+
+    // Fetch pending friend requests for the current user
+    const friendRequests = await query(
+      'SELECT * FROM friend_requests WHERE receiver_id = ? AND status = "pending"',
+      [userId]
+    );
+
+    // Fetch the details of each sender (unique_id, avatar, and id)
+    const detailedRequests = await Promise.all(friendRequests.map(async (request) => {
+      const senderData = await query(
+        'SELECT unique_id, avatar, id FROM users WHERE id = ?',
+        [request.sender_id]
+      );
+      return {
+        ...request,
+        sender_unique_id: senderData[0].unique_id,
+        sender_avatar: senderData[0].avatar,
+        sender_id: senderData[0].id,
+      };
+    }));
+
+    // Fetch all friends for the current user
+    const friends = await query(
+      'SELECT * FROM friends WHERE user_id_1 = ? OR user_id_2 = ?',
+      [userId, userId]
+    );
+
+    // Fetch the friend details (avatar and unique ID) for each friend
+    const friendsList = await Promise.all(friends.map(async (friend) => {
+      const otherUserId = friend.user_id_1 === userId ? friend.user_id_2 : friend.user_id_1;
+
+      // Fetch the friend's unique ID and avatar from the users table
+      const userData = await query(
+        'SELECT unique_id, avatar FROM users WHERE id = ?',
+        [otherUserId]
+      );
+
+      return {
+        id: otherUserId,
+        avatar: userData[0].avatar,
+        uniqueId: userData[0].unique_id,
+      };
+    }));
+
+    res.json({
+      friendRequests: detailedRequests,
+      friends: friendsList,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error fetching friends and requests' });
+  }
+});
 
 
 // Route to end the current event
