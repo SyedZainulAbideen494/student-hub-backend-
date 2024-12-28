@@ -27,7 +27,7 @@ const pdfParse = require('pdf-parse');
 const fs = require('fs');
 const webPush = require('web-push');
 // Initialize Google Generative AI
-const genAI = new GoogleGenerativeAI('AIzaSyDNx6QYkHkvFYd8-lc-O1HgFgCDaChGkV0');
+const genAI = new GoogleGenerativeAI('AIzaSyBdN7h9ABBfiDmBGIuYJ73zDH7s5SLIWYg');
 
 const safetySettings = [
   {
@@ -6884,6 +6884,8 @@ app.get('/user-profile/:user_id', async (req, res) => {
     res.status(500).send({ error: 'Internal Server Error' });
   }
 });
+
+
 // Endpoint to send friend request
 app.post('/api/friend/request', async (req, res) => {
   const token = req.headers['authorization'].split(' ')[1];// Assuming token is passed as Bearer token in the Authorization header
@@ -7055,6 +7057,7 @@ app.get('/api/friends-dashboard', async (req, res) => {
     res.status(500).json({ message: 'Error fetching friends and requests' });
   }
 });
+
 
 
 // Route to end the current event
