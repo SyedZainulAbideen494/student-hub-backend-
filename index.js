@@ -7058,7 +7058,24 @@ app.get('/api/friends-dashboard', async (req, res) => {
   }
 });
 
+// API to fetch user resources
+app.get('/user-resources/:userId', async (req, res) => {
+  const { userId } = req.params;
 
+  try {
+    // Fetch notes (flashcards)
+    const notes = await query('SELECT * FROM flashcards WHERE user_id = ? AND is_public = true', [userId]);
+
+    // Fetch quizzes
+    const quizzes = await query('SELECT * FROM quizzes WHERE creator_id = ?', [userId]);
+
+    // Send the combined result
+    res.json({ notes, quizzes });
+  } catch (error) {
+    console.error('Error fetching user resources:', error);
+    res.status(500).json({ message: 'Error fetching user resources' });
+  }
+});
 
 // Route to end the current event
 const transporterSec = nodemailer.createTransport({
