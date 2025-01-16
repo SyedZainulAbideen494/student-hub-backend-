@@ -50,7 +50,7 @@ const safetySettings = [
 
 
 
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash", safetySettings: safetySettings });
+const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp", safetySettings: safetySettings });
 
 
 app.use(express.urlencoded({ extended: true }));
@@ -3091,15 +3091,16 @@ app.post('/api/create-checkout-session', (req, res) => {
         payment_method_types: ['card'],
         line_items: [{
           price_data: {
-            currency: 'USD',
+            currency: 'INR',
             product_data: {
-              name: 'edusify premium',
-              description: 'Unlock premium features of edusify!',
+              name: 'Edusify Premium',
+              description: 'Unlock premium features of Edusify!',
             },
-            unit_amount: 118, // Amount in cents (e.g., $1.00)
+            unit_amount: 11800, // Amount in paise (₹118.00)
           },
           quantity: 1,
         }],
+        
         mode: 'payment',
         success_url: `${SUCCESS_URL}${senderId}`, // Redirect to backend success URL
         cancel_url: CANCEL_URL, // Redirect to backend cancel URL
@@ -7084,6 +7085,29 @@ const transporterSec = nodemailer.createTransport({
       user: 'edusiyfy@gmail.com',
       pass: 'hvht twsf ejma juft',
   },
+});
+
+// Route to fetch all journals
+app.get('/journals', async (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1]; // Assuming token is in 'Bearer token'
+
+  if (!token) {
+    return res.status(401).json({ error: 'Authorization token missing' });
+  }
+
+  try {
+    const userId = await getUserIdFromToken(token);
+    const journals = await query('SELECT * FROM journals WHERE user_id = ?', [userId]);
+
+    if (journals.length === 0) {
+      return res.json({ message: 'No journals found' });
+    }
+
+    res.json(journals);
+  } catch (error) {
+    console.error('Error fetching journals:', error);
+    res.status(500).json({ error: 'Failed to fetch journals' });
+  }
 });
 
 // Route to send emails to users
