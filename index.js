@@ -50,7 +50,7 @@ const safetySettings = [
 
 
 
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash", safetySettings: safetySettings });
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-8b", safetySettings: safetySettings });
 
 
 app.use(express.urlencoded({ extended: true }));
