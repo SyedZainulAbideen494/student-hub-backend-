@@ -1884,8 +1884,9 @@ app.post('/submitQuiz', async (req, res) => {
   try {
     const userId = await getUserIdFromToken(token);
     let correctCount = 0;
+    const correctAnswers = {};
 
-    // Step 1: Check answers
+    // Step 1: Check answers and collect correct answers
     for (const answer of answers) {
       if (typeof answer.answerId !== 'number' || typeof answer.questionId !== 'number') {
         console.error('Invalid answer format:', answer);
@@ -1893,11 +1894,19 @@ app.post('/submitQuiz', async (req, res) => {
       }
 
       const [result] = await connection.promise().query(
-        'SELECT * FROM answers WHERE id = ? AND question_id = ? AND is_correct = TRUE',
-        [answer.answerId, answer.questionId]
+        'SELECT * FROM answers WHERE question_id = ? AND is_correct = TRUE',
+        [answer.questionId]
       );
 
-      if (result.length) correctCount++;
+      if (result.length) {
+        // Add correct answer to the correctAnswers object
+        correctAnswers[answer.questionId] = {
+          id: result[0].id,
+          text: result[0].answer_text,
+        };
+
+        if (result[0].id === answer.answerId) correctCount++;
+      }
     }
 
     // Step 2: Get total questions
@@ -1932,7 +1941,7 @@ app.post('/submitQuiz', async (req, res) => {
       await connection.promise().query('INSERT INTO user_points (user_id, points) VALUES (?, ?)', [userId, 15]);
     }
 
-    res.json({ score });
+    res.json({ score, correctAnswers });
 
   } catch (error) {
     console.error('Error submitting quiz:', error.message);
