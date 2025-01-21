@@ -7284,45 +7284,66 @@ const processImage = (file) => {
     }
   });
 };
-// Use the uploadAI middleware for your specific route for AI image processing
+
+
 app.post('/api/process-images', uploadAI.single('image'), async (req, res) => {
   try {
+    const { prompt, token } = req.body;
+
+    // Validate token
+    if (!token) {
+      return res.status(400).json({ error: 'Token is required.' });
+    }
+
+    // Get user ID from token
+    const userId = await getUserIdFromToken(token);
+    if (!userId) {
+      return res.status(401).json({ error: 'Invalid token or user not authenticated.' });
+    }
+
+    if (!req.file && !prompt) {
+      return res.status(400).json({ error: 'Either image or prompt must be provided.' });
+    }
+
+    let imageBase64 = null;
+
     if (req.file) {
       console.log('Received image, processing...');
+      imageBase64 = await processImage(req.file); // Convert image to Base64
     } else {
-      console.log('No image received');
-      return res.status(400).json({ error: 'No image provided' });
+      console.log('No image received.');
     }
 
-    // Handle prompt
-    const prompt = req.body.prompt || '';
-    if (prompt) {
-      console.log('Received prompt:', prompt);
-    }
+    console.log('Received prompt:', prompt || 'No prompt provided.');
 
-    // Process the image
-    const imageBase64 = await processImage(req.file);
-
-    // Call your AI model with the image and prompt
+    // Send image and prompt to AI model
     const response = await model.generateContent([
       { inlineData: { data: imageBase64, mimeType: req.file.mimetype } },
-      prompt,  // Use the prompt from the frontend
+      prompt || '', // Use prompt if available
     ]);
-    console.log('AI responded');
-    // Extract the result text
+
+    console.log('AI responded.');
+
     const resultText = response?.response?.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!resultText) {
       throw new Error('No AI response text received.');
     }
 
-    // Send the result back
+    // Store user input and AI response in the database
+    await query(
+      'INSERT INTO ai_history (user_id, user_message, ai_response) VALUES (?, ?, ?)',
+      [userId, prompt || 'Image uploaded by user', resultText]
+    );
+
+    // Send the response back
     res.json({ result: resultText });
   } catch (error) {
     console.error('Error during image processing:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
+
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
