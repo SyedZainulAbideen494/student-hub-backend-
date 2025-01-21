@@ -7268,6 +7268,7 @@ const processImage = (file) => {
     }
   });
 };
+
 app.post(
   '/api/process-images',
   uploadai.single('image'), // Expect only one image
@@ -7293,7 +7294,10 @@ app.post(
         req.body.prompt,  // Use the prompt from the frontend
       ]);
 
-      // Log the AI response in a summarized way
+      // Log the complete response object for debugging
+      console.log('Complete AI response:', JSON.stringify(response, null, 2));
+
+      // Extract the result text
       const resultText =
         response?.response?.candidates?.[0]?.content?.parts?.[0]?.text;
 
@@ -7308,6 +7312,7 @@ app.post(
     }
   }
 );
+
 
 
 
