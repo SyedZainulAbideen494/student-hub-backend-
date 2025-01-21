@@ -7256,7 +7256,7 @@ const processImage = (file) => {
   return new Promise((resolve, reject) => {
     try {
       // Validate file type (if necessary)
-      if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) {
+      if (!['image/jpeg', 'image/png', 'image/webp', 'image/jpg'].includes(file.mimetype)) {
         return reject(new Error('Unsupported image format'));
       }
 
