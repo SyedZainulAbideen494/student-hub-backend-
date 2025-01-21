@@ -26,7 +26,7 @@ const schedule = require("node-schedule");
 const pdfParse = require('pdf-parse');
 const fs = require('fs');
 const webPush = require('web-push');
-const sharp = require("sharp"); // Install with `npm install sharp`
+
 // Initialize Google Generative AI
 const genAI = new GoogleGenerativeAI('AIzaSyBdN7h9ABBfiDmBGIuYJ73zDH7s5SLIWYg');
 
