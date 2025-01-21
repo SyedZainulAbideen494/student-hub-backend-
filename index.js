@@ -7251,7 +7251,16 @@ app.post('/api/updates/add', (req, res) => {
   });
 });
 
-const uploadai = multer();
+// Set the file size limit in bytes (for example, 50MB)
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+
+const uploadai = multer({
+  limits: {
+    fileSize: MAX_FILE_SIZE // Set the max file size limit
+  }
+});
+
+// Your image processing logic
 const processImage = (file) => {
   return new Promise((resolve, reject) => {
     try {
@@ -7268,6 +7277,7 @@ const processImage = (file) => {
     }
   });
 };
+
 
 app.post(
   '/api/process-images',
