@@ -7308,7 +7308,7 @@ app.post('/api/process-images', uploadAI.single('image'), async (req, res) => {
       { inlineData: { data: imageBase64, mimeType: req.file.mimetype } },
       prompt,  // Use the prompt from the frontend
     ]);
-
+    console.log('AI responded');
     // Extract the result text
     const resultText = response?.response?.candidates?.[0]?.content?.parts?.[0]?.text;
 
