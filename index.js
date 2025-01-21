@@ -7268,40 +7268,47 @@ const processImage = (file) => {
     }
   });
 };
-
 app.post(
   '/api/process-images',
   uploadai.single('image'), // Expect only one image
   async (req, res) => {
     try {
-      console.log('File received:', req.file);
-      console.log('Prompt:', req.body.prompt); // Log the prompt to ensure it's sent
+      if (req.file) {
+        console.log('Received image, processing...');
+      } else {
+        console.log('No image received');
+      }
+
+      if (req.body.prompt) {
+        console.log('Received prompt:', req.body.prompt);
+      } else {
+        console.log('No prompt provided');
+      }
 
       const imageBase64 = await processImage(req.file);
 
-      console.log('Making API request...');
+      // If necessary, limit logs for sensitive data or too much detail
       const response = await model.generateContent([
         { inlineData: { data: imageBase64, mimeType: req.file.mimetype } },
         req.body.prompt,  // Use the prompt from the frontend
       ]);
 
-      console.log('Full AI response:', JSON.stringify(response, null, 2));
-
-      // Extract the text from the response
+      // Log the AI response in a summarized way
       const resultText =
         response?.response?.candidates?.[0]?.content?.parts?.[0]?.text;
 
       if (!resultText) {
-        throw new Error('No AI response text received. Please verify the input or try again later.');
+        throw new Error('No AI response text received.');
       }
 
       res.json({ result: resultText });
     } catch (error) {
-      console.error('Error during processing:', error);
+      console.error('Error during image processing:', error.message);
       res.status(500).json({ error: error.message });
     }
   }
 );
+
 
 
 
