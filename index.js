@@ -26,6 +26,7 @@ const schedule = require("node-schedule");
 const pdfParse = require('pdf-parse');
 const fs = require('fs');
 const webPush = require('web-push');
+const sharp = require("sharp"); // Install with `npm install sharp`
 // Initialize Google Generative AI
 const genAI = new GoogleGenerativeAI('AIzaSyBdN7h9ABBfiDmBGIuYJ73zDH7s5SLIWYg');
 
@@ -50,7 +51,35 @@ const safetySettings = [
 
 
 
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-8b", safetySettings: safetySettings });
+const model = genAI.getGenerativeModel({
+  model: "gemini-1.5-flash-8b",
+  safetySettings: safetySettings,
+  systemInstruction: "You are Edusify, an AI-powered productivity assistant designed to help students manage their academic tasks, study materials, and stay organized. Your mission is to provide tailored assistance and streamline the study experience with a wide range of features. Below are the core functionalities that you support: \n\n" +
+  
+  "- **Sticky Notes**: Users can quickly add sticky notes on the dashboard by clicking 'Add Note'. They can input a title, optional description, and select the note color. Notes are saved for easy access and organization. The dashboard also displays today's tasks and events.\n" +
+  
+  "- **AI Assistant**: Edusify helps users by generating notes, quizzes, and even adding AI responses directly to their notes with the 'Magic' feature. Users can click on the 'Magic' button to generate content like quizzes and notes from their AI response and add that content to their study materials.\n" +
+  
+  "- **To-Do List**: The To-Do List helps users manage their tasks more efficiently. Tasks can be created with a title, description, due date, priority level, and email reminders. AI can even generate tasks based on user input or upcoming deadlines.\n" +
+  
+  "- **Notes**: Users can create notes by going to the 'Notes' section and clicking 'Create Notes'. They can input a name and description for the note, select a subject category, and optionally add images. Notes are customizable and can be saved for future reference. Additionally, users can generate flashcards and quizzes from their notes for better retention.\n" +
+  
+  "- **Flashcards**: Users can create flashcards manually, from AI-generated content, or by uploading PDFs. When uploading PDFs, Edusify extracts text and generates relevant flashcards. Flashcards can be customized, saved, and studied.\n" +
+  
+  "- **Rooms**: Rooms allow users to create or join study groups where they can share resources, track each other's progress, and collaborate on projects. Rooms help create a sense of community for focused learning.\n" +
+  
+  "- **Quizzes**: Users can generate quizzes manually, with AI, or from PDFs. AI can help generate relevant quiz questions based on the user's study material, and quizzes can be shared with others for collaborative learning.\n" +
+  
+  "- **Document Locker**: A secure space where students can store important documents with the option to add password protection for extra security.\n" +
+  
+  "- **Calendar**: Users can track important dates like exams, assignments, and events, keeping their schedule organized and well-managed.\n" +
+  
+  "- **Pomodoro Timer**: The Pomodoro Timer helps users maintain focus with study sessions and breaks. It tracks study and break times, allowing users to monitor their productivity and download stats for social sharing.\n\n" +
+  
+  "Your goal is to provide a seamless and engaging experience by offering personalized study tools, helping students organize their academic tasks, and encouraging efficient study habits through the integration of AI-powered features. You are designed to assist students in staying on top of their goals, providing reminders, feedback, and support whenever needed."
+});
+
+
 
 
 app.use(express.urlencoded({ extended: true }));
@@ -7119,6 +7148,37 @@ app.get('/journals', async (req, res) => {
   }
 });
 
+// Save study data
+app.post('/api/save-study-data', (req, res) => {
+  const {
+      educationLevel,
+      grades,
+      dailyStudyTime,
+      studyPerformance,
+      subjects,
+      goals,
+      challenges
+  } = req.body;
+
+  const query = `
+      INSERT INTO study_plans 
+      (education_level, grades, daily_study_time, study_performance, subjects, goals, challenges) 
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+  `;
+  connection.query(
+      query,
+      [educationLevel, grades, dailyStudyTime, studyPerformance, JSON.stringify(subjects), goals, challenges],
+      (err, result) => {
+          if (err) {
+              console.error(err);
+              res.status(500).send('Error saving data');
+          } else {
+              res.send({ message: 'Study data saved successfully!', id: result.insertId });
+          }
+      }
+  );
+});
+
 // Route to send emails to users
 app.post('/send-emails/selected-users/admin', async (req, res) => {
   const { content, subject, selectedUsers } = req.body;
@@ -7192,6 +7252,58 @@ app.post('/api/updates/add', (req, res) => {
       res.status(201).json({ id: results.insertId, title, content });
   });
 });
+const uploadai = multer();
+const processImage = (file) => {
+  return new Promise((resolve, reject) => {
+    try {
+      // Validate file type (if necessary)
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) {
+        return reject(new Error('Unsupported image format'));
+      }
+
+      // Convert buffer to Base64
+      const base64Image = file.buffer.toString('base64');
+      resolve(base64Image);
+    } catch (error) {
+      reject(error);
+    }
+  });
+};
+app.post(
+  '/api/process-images',
+  uploadai.fields([{ name: 'image1' }, { name: 'image2' }]),
+  async (req, res) => {
+    try {
+      console.log('Files received:', req.files);
+
+      const image1Base64 = await processImage(req.files.image1[0]);
+      const image2Base64 = await processImage(req.files.image2[0]);
+
+      console.log('Making API request...');
+      const response = await model.generateContent([
+        { inlineData: { data: image1Base64, mimeType: req.files.image1[0].mimetype } },
+        { inlineData: { data: image2Base64, mimeType: req.files.image2[0].mimetype } },
+        'Generate a list of all the objects contained in both images.',
+      ]);
+
+      console.log('Full AI response:', JSON.stringify(response, null, 2));
+
+      // Extract the text from the response
+      const resultText =
+        response?.response?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+      if (!resultText) {
+        throw new Error('No AI response text received. Please verify the input or try again later.');
+      }
+
+      res.json({ result: resultText });
+    } catch (error) {
+      console.error('Error during processing:', error);
+      res.status(500).json({ error: error.message });
+    }
+  }
+);
+
 
 // Start the server
 app.listen(PORT, () => {
