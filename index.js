@@ -124,7 +124,7 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 50 * 1024 * 1024 }, // Limit file size to 5 MB
+  limits: { fileSize: 50 * 1024 * 1024 }, // Limit file size to 50 MB
 });
 // Serve static files from the 'public' directory
 app.use(express.static(path.join(__dirname, 'public')));
@@ -7251,24 +7251,31 @@ app.post('/api/updates/add', (req, res) => {
   });
 });
 
-// Set the file size limit in bytes (for example, 50MB)
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+// Set the file size limit for AI image processing (e.g., 100MB)
+const AI_MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 
-const uploadai = multer({
+// Create a new multer instance for AI image processing
+const uploadAI = multer({
   limits: {
-    fileSize: MAX_FILE_SIZE // Set the max file size limit
-  }
+    fileSize: AI_MAX_FILE_SIZE, // Set the max file size limit for AI processing
+  },
+  // Store files in memory (alternatively, you can use disk storage if needed)
+  storage: multer.memoryStorage(),
+  // Optionally, add a file filter if required
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Unsupported image format'), false);
+    }
+  },
 });
 
 // Your image processing logic
 const processImage = (file) => {
   return new Promise((resolve, reject) => {
     try {
-      // Validate file type (if necessary)
-      if (!['image/jpeg', 'image/png', 'image/webp', 'image/jpg'].includes(file.mimetype)) {
-        return reject(new Error('Unsupported image format'));
-      }
-
       // Convert buffer to Base64
       const base64Image = file.buffer.toString('base64');
       resolve(base64Image);
@@ -7277,56 +7284,45 @@ const processImage = (file) => {
     }
   });
 };
-
-
-app.post(
-  '/api/process-images',
-  uploadai.single('image'), // Expect only one image
-  async (req, res) => {
-    try {
-      if (req.file) {
-        console.log('Received image, processing...');
-      } else {
-        console.log('No image received');
-      }
-
-      if (req.body.prompt) {
-        console.log('Received prompt:', req.body.prompt);
-      } else {
-        console.log('No prompt provided');
-      }
-
-      const imageBase64 = await processImage(req.file);
-
-      // If necessary, limit logs for sensitive data or too much detail
-      const response = await model.generateContent([
-        { inlineData: { data: imageBase64, mimeType: req.file.mimetype } },
-        req.body.prompt,  // Use the prompt from the frontend
-      ]);
-
-      // Log the complete response object for debugging
-      console.log('Complete AI response:', JSON.stringify(response, null, 2));
-
-      // Extract the result text
-      const resultText =
-        response?.response?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-      if (!resultText) {
-        throw new Error('No AI response text received.');
-      }
-
-      res.json({ result: resultText });
-    } catch (error) {
-      console.error('Error during image processing:', error.message);
-      res.status(500).json({ error: error.message });
+// Use the uploadAI middleware for your specific route for AI image processing
+app.post('/api/process-images', uploadAI.single('image'), async (req, res) => {
+  try {
+    if (req.file) {
+      console.log('Received image, processing...');
+    } else {
+      console.log('No image received');
+      return res.status(400).json({ error: 'No image provided' });
     }
+
+    // Handle prompt
+    const prompt = req.body.prompt || '';
+    if (prompt) {
+      console.log('Received prompt:', prompt);
+    }
+
+    // Process the image
+    const imageBase64 = await processImage(req.file);
+
+    // Call your AI model with the image and prompt
+    const response = await model.generateContent([
+      { inlineData: { data: imageBase64, mimeType: req.file.mimetype } },
+      prompt,  // Use the prompt from the frontend
+    ]);
+
+    // Extract the result text
+    const resultText = response?.response?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!resultText) {
+      throw new Error('No AI response text received.');
+    }
+
+    // Send the result back
+    res.json({ result: resultText });
+  } catch (error) {
+    console.error('Error during image processing:', error.message);
+    res.status(500).json({ error: error.message });
   }
-);
-
-
-
-
-
+});
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
