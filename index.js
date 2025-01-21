@@ -7250,6 +7250,7 @@ app.post('/api/updates/add', (req, res) => {
       res.status(201).json({ id: results.insertId, title, content });
   });
 });
+
 const uploadai = multer();
 const processImage = (file) => {
   return new Promise((resolve, reject) => {
@@ -7267,21 +7268,21 @@ const processImage = (file) => {
     }
   });
 };
+
 app.post(
   '/api/process-images',
-  uploadai.fields([{ name: 'image1' }, { name: 'image2' }]),
+  uploadai.single('image'), // Expect only one image
   async (req, res) => {
     try {
-      console.log('Files received:', req.files);
+      console.log('File received:', req.file);
+      console.log('Prompt:', req.body.prompt); // Log the prompt to ensure it's sent
 
-      const image1Base64 = await processImage(req.files.image1[0]);
-      const image2Base64 = await processImage(req.files.image2[0]);
+      const imageBase64 = await processImage(req.file);
 
       console.log('Making API request...');
       const response = await model.generateContent([
-        { inlineData: { data: image1Base64, mimeType: req.files.image1[0].mimetype } },
-        { inlineData: { data: image2Base64, mimeType: req.files.image2[0].mimetype } },
-        'Generate a list of all the objects contained in both images.',
+        { inlineData: { data: imageBase64, mimeType: req.file.mimetype } },
+        req.body.prompt,  // Use the prompt from the frontend
       ]);
 
       console.log('Full AI response:', JSON.stringify(response, null, 2));
@@ -7301,6 +7302,7 @@ app.post(
     }
   }
 );
+
 
 
 // Start the server
