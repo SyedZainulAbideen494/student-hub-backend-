@@ -7347,7 +7347,7 @@ app.post('/api/process-images', uploadAI.single('image'), async (req, res) => {
 
 app.post("/summarize-pdf/notes", uploadPDF.single("file"), async (req, res) => {
   try {
-    // Check for uploaded file
+    
     if (!req.file) {
       return res.status(400).json({ error: "No file uploaded" });
     }
