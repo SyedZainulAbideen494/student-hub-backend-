@@ -7362,12 +7362,15 @@ app.post("/summarize-pdf/notes", uploadPDF.single("file"), async (req, res) => {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
-    // Build AI prompt based on selected options
+    // Build AI prompt based on selected options, ensuring plain HTML output without extra text
     const prompts = {
-      summary: `You are an AI responsible for generating concise notes from documents...`,
-      key_points: `You are an AI designed to extract key points from documents...`,
-      detailed_explanation: `You are an AI responsible for generating detailed explanations...`,
-      question_generation: `You are an AI designed to generate questions from documents...`,
+      summary: `You are an AI responsible for generating concise notes from documents. Your task is to summarize this document and respond ONLY in valid plain HTML. Use tags such as <h1> for the title, <h2> for headings, and <p> for paragraphs. DO NOT include any introductory text like "Here is the summary" or "This is in HTML format." DO NOT use markdown or non-HTML elements. Your output must STRICTLY be the requested summary in raw HTML format. Any extraneous content will invalidate the response.`,
+      
+      key_points: `You are an AI designed to extract key points from documents. Your task is to extract the main points and respond ONLY in valid plain HTML using <ul> and <li> tags. DO NOT include any additional text like "Here are the key points" or "This is in HTML." DO NOT use markdown or non-HTML content. Your response must STRICTLY contain the key points formatted in raw HTML. Deviation from this format will invalidate the output.`,
+      
+      detailed_explanation: `You are an AI responsible for generating detailed explanations of documents. Your task is to provide a detailed explanation of this document and respond ONLY in valid plain HTML. Use <h1> for the title, <h2> for subheadings, and <p> for detailed paragraphs. DO NOT include any additional text like "Here is the explanation" or any markdown formatting. Respond STRICTLY with valid raw HTML content. Any additional or non-compliant content will render the response invalid.`,
+      
+      question_generation: `You are an AI designed to generate questions from documents. Your task is to create questions and answers and respond ONLY in valid plain HTML. Use <p> for each question and <ul> with <li> for the answer options. DO NOT include any introductory phrases such as "Here are the questions" or "In HTML format." Respond STRICTLY with valid raw HTML content. Any extra or non-HTML content will invalidate your response.`,
     };
     
     const userPrompt = options.map((opt) => prompts[opt]).join("\n");
