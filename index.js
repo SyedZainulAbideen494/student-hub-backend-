@@ -7344,6 +7344,77 @@ app.post('/api/process-images', uploadAI.single('image'), async (req, res) => {
   }
 });
 
+
+app.post("/summarize-pdf/notes", uploadPDF.single("file"), async (req, res) => {
+  try {
+    // Check for uploaded file
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+
+    const filePath = req.file.path;
+    const options = JSON.parse(req.body.options); // Parse selected options
+    const token = req.body.token; // Extract token from the request body
+
+    // Extract user_id from token
+    const userId = await getUserIdFromToken(token);
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    // Build AI prompt based on selected options
+    const prompts = {
+      summary: `You are an AI responsible for generating concise notes from documents...`,
+      key_points: `You are an AI designed to extract key points from documents...`,
+      detailed_explanation: `You are an AI responsible for generating detailed explanations...`,
+      question_generation: `You are an AI designed to generate questions from documents...`,
+    };
+    
+    const userPrompt = options.map((opt) => prompts[opt]).join("\n");
+
+    // Process the document using generative AI
+    const model = genAI.getGenerativeModel({ model: "models/gemini-1.5-flash" });
+    const result = await model.generateContent([
+      {
+        inlineData: {
+          data: Buffer.from(fs.readFileSync(filePath)).toString("base64"),
+          mimeType: "application/pdf",
+        },
+      },
+      userPrompt,
+    ]);
+
+    // Extract generated content (HTML)
+    const generatedText = result.response.candidates?.[0]?.content?.parts?.[0]?.text || "No content generated";
+
+    // Insert notes into the database
+    const queryStr = `
+      INSERT INTO flashcards (title, description, headings, is_public, user_id, subject_id)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `;
+    const title = "Generated Notes"; // Example title
+    const description = "Notes generated from uploaded PDF"; // Example description
+    const isPublic = false; // Notes are private by default
+    const subjectId = null; // No subject_id for now
+
+    const resultInsert = await query(queryStr, [title, description, generatedText, isPublic, userId, subjectId]);
+
+    // Retrieve the inserted note ID
+    const noteId = resultInsert.insertId;
+
+    // Cleanup temporary file
+    fs.unlinkSync(filePath);
+
+    res.json({ result: generatedText, message: "Notes saved successfully!", noteId });
+    console.log('created notes from pdf')
+  } catch (error) {
+    console.error("Error:", error);
+    res.status(500).json({ error: "Something went wrong!" });
+  }
+});
+
+
+
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
