@@ -7417,6 +7417,117 @@ app.post("/summarize-pdf/notes", uploadPDF.single("file"), async (req, res) => {
 });
 
 
+app.post('/api/notes/generate', async (req, res) => {
+  const { topic, types, token } = req.body;
+
+  try {
+    const userId = await getUserIdFromToken(token);
+    if (!userId) {
+      return res.status(401).json({ error: 'Invalid token or user not found' });
+    }
+
+    // Get today's date in YYYY-MM-DD format
+    const todayDate = new Date().toISOString().split('T')[0];
+
+    // Initialize the prompt with basic structure
+    let prompt = `Generate notes on the topic "${topic}". Format the notes in HTML using only <p>, <li>, <ul>, <h1>, <h2>, and <h3> tags. The notes should be detailed, structured, and easy to read.`;
+
+    // Handle specific types of notes requested by the user
+    Object.keys(types).forEach(type => {
+      if (types[type]) { // Check if the type is true
+        if (type === 'summary') {
+          prompt += ' Provide a brief summary of the topic.';
+        } else if (type === 'detailed') {
+          prompt += ' Provide a detailed explanation of the topic, including key concepts and important details.';
+        } else if (type === 'question-and-answer') {
+          prompt += ' Include potential questions and answers related to the topic.';
+        } else if (type === 'key points') {
+          prompt += ' Include key points that summarize the most important aspects of the topic.';
+        } else if (type === 'subtopics') {
+          prompt += ' Break down the topic into relevant subtopics with explanations.';
+        } else if (type === 'important questions') {
+          prompt += ' Provide a list of important questions related to the topic that may be asked during exams or discussions.';
+        }
+      }
+    });
+
+    console.log('Generating notes with prompt:', prompt);
+
+    // Function to attempt generating notes and retry on failure
+    const generateNotesWithRetry = async () => {
+      let attempts = 0;
+
+      while (attempts < MAX_RETRIES) {
+        try {
+          // Call the AI model with the prompt
+          const chat = model.startChat({
+            history: [
+              { role: 'user', parts: [{ text: 'Hello' }] },
+              { role: 'model', parts: [{ text: 'I can help generate notes on your topic!' }] },
+            ],
+          });
+
+          const result = await chat.sendMessage(prompt);
+
+          // Extract only the HTML part from the AI response
+          const responseText = result.response.text();
+          const htmlResponse = responseText.match(/<p[\s\S]*?<\/p>/g);
+          if (!htmlResponse || htmlResponse.length === 0) {
+            throw new Error('Could not extract valid HTML from AI response');
+          }
+
+          // Join the extracted HTML notes
+          const notesContent = htmlResponse.join(' ');
+
+          return notesContent; // Return the successfully generated notes content
+        } catch (error) {
+          attempts++;
+          console.log(`Attempt ${attempts} failed, retrying...`);
+
+          if (attempts === MAX_RETRIES) {
+            throw new Error('Failed to generate notes after multiple attempts');
+          }
+
+          // Delay before retrying
+          await delay(2000); // Delay for 2 seconds before the next attempt
+        }
+      }
+    };
+
+    // Try to generate notes with retries
+    const notesContent = await generateNotesWithRetry();
+
+    const notesData = {
+      userId,
+      title: topic || 'Untitled Notes',
+      description: `Notes on the topic: ${topic}`,
+      headings: notesContent, // HTML content as headings
+      is_public: false,
+      subject_id: null, // You can add subject id if required
+    };
+    
+    // Insert notes into the database and get the id using the promisified query
+    const result = await query('INSERT INTO flashcards (title, description, headings, is_public, user_id, subject_id) VALUES (?, ?, ?, ?, ?, ?)', [
+      notesData.title,
+      notesData.description,
+      notesData.headings,
+      notesData.is_public,
+      notesData.userId,
+      notesData.subject_id,
+    ]);
+    
+    // Assuming the query returns the inserted row with an 'id' field
+    const noteId = result.insertId; // This depends on your query and database setup
+    
+    // Add the id to notesData and send it back in the response
+    res.json({ notes: { ...notesData, id: noteId } });
+
+  } catch (error) {
+    console.error('Error generating notes:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 
 // Start the server
 app.listen(PORT, () => {
