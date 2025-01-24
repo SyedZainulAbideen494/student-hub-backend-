@@ -6142,14 +6142,14 @@ app.delete('/api/room_tasks/delete/:taskId', (req, res) => {
 // Define storage for PDF uploads
 const pdfStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, '/root/student-hub-backend-/public/'); // Save PDFs in a dedicated folder
+    cb(null, 'public/'); // Save PDFs in a dedicated folder
   },
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname);
     cb(null, `${Date.now()}${ext}`); // Timestamp to ensure unique file names
   },
 });
-
+// /root/student-hub-backend-/public/
 // File filter for PDFs
 const pdfFileFilter = (req, file, cb) => {
   if (file.mimetype === 'application/pdf') {
@@ -7341,6 +7341,71 @@ app.post('/api/process-images', uploadAI.single('image'), async (req, res) => {
   } catch (error) {
     console.error('Error during image processing:', error.message);
     res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/ai-chatbox/pdf/ai", uploadPDF.single("file"), async (req, res) => {
+  try {
+    const { prompt, token } = req.body; // Extract user prompt and token
+    const file = req.file; // Extract the uploaded file (if any)
+
+    // Validate that either a prompt or a file is provided
+    if (!prompt && !file) {
+      return res.status(400).json({ error: "No input provided (message or file)" });
+    }
+
+    // Validate the user's token and extract the user ID
+    const userId = await getUserIdFromToken(token);
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    let resultText = "";
+
+    // Handle PDF file processing
+    if (file) {
+      const filePath = file.path; // Path to the uploaded file
+
+     
+
+      // Load the generative model
+      const model = genAI.getGenerativeModel({ model: "models/gemini-1.5-flash" });
+      const result = await model.generateContent([
+        {
+          inlineData: {
+            data: Buffer.from(fs.readFileSync(filePath)).toString("base64"),
+            mimeType: "application/pdf",
+          },
+        },
+        prompt,
+      ]);
+
+      // Extract the result content
+      resultText = result.response.candidates?.[0]?.content?.parts?.[0]?.text || "No content generated";
+
+      // Clean up temporary files
+      fs.unlinkSync(filePath);
+    } else {
+      // Handle text prompt without file
+      const model = genAI.getGenerativeModel({ model: "models/gemini-1.5-chat" });
+      const result = await model.generateContent([{ inlineData: { data: prompt } }]);
+
+      resultText = result.response.candidates?.[0]?.content || "No content generated";
+    }
+
+    // Save the user input and AI response to the database
+    const queryStr = `
+      INSERT INTO ai_history (user_id, user_message, ai_response)
+      VALUES (?, ?, ?)
+    `;
+    await query(queryStr, [userId, prompt || "PDF uploaded by user", resultText]);
+
+    // Respond with the AI result
+    res.json({ result: resultText, message: "AI response generated successfully!" });
+    console.log("AI response from pdf.");
+  } catch (error) {
+    console.error("Error:", error);
+    res.status(500).json({ error: "Something went wrong!" });
   }
 });
 

@@ -45,6 +45,7 @@
     "web-push": "^3.6.7",
     "wikipedia": "^2.1.2",
     "youtube-caption-extractor": "^1.4.3",
-    "yt-dlp-wrapper": "^1.2.2"
+    "yt-dlp-wrapper": "^1.2.2",
+    "ytdl-core": "^4.11.5"
   }
 }
