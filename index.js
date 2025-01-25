@@ -640,15 +640,15 @@ app.post('/delete/task', (req, res) => {
               }
 
               const currentTime = new Date();
-              const fiveMinutesAgo = new Date(currentTime.getTime() - 5 * 60000); // Subtract 5 minutes
+              const twoMinutesAgo = new Date(currentTime.getTime() - 2 * 60000); // Subtract 2 minutes
               let pointsToAdd = 3; // Default points to add
 
               if (pointsResults.length > 0) {
                   // If user exists, check updated_at timestamp
                   const lastUpdated = new Date(pointsResults[0].updated_at);
-                  if (lastUpdated > fiveMinutesAgo) {
-                      // If last update was less than 5 minutes ago, add fewer points
-                      pointsToAdd = 3; // Or any number you choose
+                  if (lastUpdated > twoMinutesAgo) {
+                      // If last update was less than 2 minutes ago, add 1 point
+                      pointsToAdd = 1;
                   }
 
                   // Update points
@@ -679,6 +679,7 @@ app.post('/delete/task', (req, res) => {
       });
   });
 });
+
 
 
 async function sendTaskReminders() {
@@ -7590,6 +7591,291 @@ app.post('/api/notes/generate', async (req, res) => {
   } catch (error) {
     console.error('Error generating notes:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/saveGoal", async (req, res) => {
+  const { token, data } = req.body;
+
+  console.log("Received data:", data); // Debug log to check if all data is present
+
+  try {
+    const userId = await getUserIdFromToken(token);
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    // Parse the subjects field to ensure it's an array
+    const subjects = JSON.parse(data.subjects); // Parse the string into an array
+
+    const sql = `
+      INSERT INTO user_goal (
+        user_id,
+        grade,
+        goal,
+        study_time,
+        speed,
+        revision_method,
+        pomodoro_preference,
+        subjects
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    const params = [
+      userId,
+      data.grade,
+      data.goal,
+      data.study_time,
+      data.speed,
+      data.revision_method,
+      data.pomodoro_preference,
+      JSON.stringify(subjects) // Convert subjects back to JSON string
+    ];
+
+    console.log("SQL params:", params); // Debug log to verify the params being sent to SQL
+
+    await query(sql, params);
+
+    const prompt = `
+    Generate a personalized study plan based on the following data:
+    - Goal: ${data.goal}
+    - Daily Study Time: ${data.study_time}
+    - Subjects: ${subjects.map((sub) => sub.subject).join(", ")}
+    - Pomodoro Preference: ${data.pomodoro_preference ? "Yes" : "No"}
+    - Speed: ${data.speed}
+    
+    The study plan should adhere to the following JSON structure:
+    
+    {
+      "study_plan": {
+        "goal": "Goal description",
+        "notes": "This plan is a suggestion and can be adjusted to suit your needs. Remember to take breaks and maintain a healthy study-life balance.",
+        "speed": "fast",  // or "medium" or "slow"
+        "subjects": ["List of subjects to study"],
+        "daily_study_time": "X hours",  // e.g., "1-2 hours"
+        "weekly_timetable": [
+          {
+            "day": "Monday",
+            "tips": "Study tips for this day",
+            "method": "Study method (e.g., Pomodoro)",
+            "subjects": ["Subject 1", "Subject 2", ...],
+            "hours_allocation": [
+              {
+                "hours": "X",  // Number of hours allocated for the subject
+                "subject": "Subject Name"
+              },
+              // More subjects can be added here
+            ],
+            "total_study_time": X,  // Total study time for that day in hours
+            "current_situation": X,  // Current situation out of 10
+            "AI_task_generation_instructions": "Specific task generation instructions for this day"
+          },
+          {
+            "day": "Tuesday",
+            "tips": "Study tips for this day",
+            "method": "Study method (e.g., Pomodoro)",
+            "subjects": ["Subject 1", "Subject 2", ...],
+            "hours_allocation": [
+              {
+                "hours": "X",  // Number of hours allocated for the subject
+                "subject": "Subject Name"
+              },
+              // More subjects can be added here
+            ],
+            "total_study_time": X,  // Total study time for that day in hours
+            "current_situation": X,  // Current situation out of 10
+            "AI_task_generation_instructions": "Specific task generation instructions for this day"
+          },
+          {
+            "day": "Wednesday",
+            "tips": "Study tips for this day",
+            "method": "Study method (e.g., Pomodoro)",
+            "subjects": ["Subject 1", "Subject 2", ...],
+            "hours_allocation": [
+              {
+                "hours": "X",  // Number of hours allocated for the subject
+                "subject": "Subject Name"
+              },
+              // More subjects can be added here
+            ],
+            "total_study_time": X,  // Total study time for that day in hours
+            "current_situation": X,  // Current situation out of 10
+            "AI_task_generation_instructions": "Specific task generation instructions for this day"
+          },
+          {
+            "day": "Thursday",
+            "tips": "Study tips for this day",
+            "method": "Study method (e.g., Pomodoro)",
+            "subjects": ["Subject 1", "Subject 2", ...],
+            "hours_allocation": [
+              {
+                "hours": "X",  // Number of hours allocated for the subject
+                "subject": "Subject Name"
+              },
+              // More subjects can be added here
+            ],
+            "total_study_time": X,  // Total study time for that day in hours
+            "current_situation": X,  // Current situation out of 10
+            "AI_task_generation_instructions": "Specific task generation instructions for this day"
+          },
+          {
+            "day": "Friday",
+            "tips": "Study tips for this day",
+            "method": "Study method (e.g., Pomodoro)",
+            "subjects": ["Subject 1", "Subject 2", ...],
+            "hours_allocation": [
+              {
+                "hours": "X",  // Number of hours allocated for the subject
+                "subject": "Subject Name"
+              },
+              // More subjects can be added here
+            ],
+            "total_study_time": X,  // Total study time for that day in hours
+            "current_situation": X,  // Current situation out of 10
+            "AI_task_generation_instructions": "Specific task generation instructions for this day"
+          },
+          {
+            "day": "Saturday",
+            "tips": "Study tips for this day",
+            "method": "Study method (e.g., Pomodoro)",
+            "subjects": ["Subject 1", "Subject 2", ...],
+            "hours_allocation": [
+              {
+                "hours": "X",  // Number of hours allocated for the subject
+                "subject": "Subject Name"
+              },
+              // More subjects can be added here
+            ],
+            "total_study_time": X,  // Total study time for that day in hours
+            "current_situation": X,  // Current situation out of 10
+            "AI_task_generation_instructions": "Specific task generation instructions for this day"
+          },
+          {
+            "day": "Sunday",
+            "tips": "Study tips for this day",
+            "method": "Study method (e.g., Pomodoro)",
+            "subjects": ["Subject 1", "Subject 2", ...],
+            "hours_allocation": [
+              {
+                "hours": "X",  // Number of hours allocated for the subject
+                "subject": "Subject Name"
+              },
+              // More subjects can be added here
+            ],
+            "total_study_time": X,  // Total study time for that day in hours
+            "current_situation": X,  // Current situation out of 10
+            "AI_task_generation_instructions": "Specific task generation instructions for this day"
+          }
+        ],
+        "pomodoro_preference": true  // Or false
+      }
+    }
+    
+    Ensure the JSON format is consistent and contains all the fields as described. The subjects should be based on the provided data, and the study plan should be balanced based on the available study time each day. Be sure to include relevant study tips and task generation instructions for each day.
+    
+    Provide the study plan as a valid JSON object.
+    `;
+    
+    
+    
+
+    console.log("Generating study plan with AI");
+
+    // AI Integration Logic
+    const generateStudyPlanWithRetry = async () => {
+      let attempts = 0;
+      const MAX_RETRIES = 3;
+
+      while (attempts < MAX_RETRIES) {
+        try {
+          const chat = model.startChat({ history: [] });
+          const result = await chat.sendMessage(prompt);
+          const rawResponse = await result.response.text();
+
+          const sanitizedResponse = rawResponse.replace(/```(?:json)?/g, "").trim();
+          let studyPlan;
+
+          try {
+            studyPlan = JSON.parse(sanitizedResponse);
+          } catch (parseError) {
+            throw new Error("Invalid JSON response from the AI model");
+          }
+
+          return studyPlan;
+        } catch (error) {
+          attempts++;
+          if (attempts === MAX_RETRIES) {
+            throw new Error("Failed to generate study plan after multiple attempts");
+          }
+          await new Promise((resolve) => setTimeout(resolve, 2000)); // Retry delay
+        }
+      }
+    };
+
+    // Get the study plan by calling the retry function
+    const studyPlan = await generateStudyPlanWithRetry();
+
+    // Insert the study plan into the database
+    const studyPlanQuery = "INSERT INTO study_plans (user_id, study_plan) VALUES (?, ?)";
+    connection.query(studyPlanQuery, [userId, JSON.stringify(studyPlan)], (err, results) => {
+      if (err) {
+        console.error("Error inserting study plan:", err);
+        return res.status(500).json({ success: false, message: "Error saving study plan" });
+      }
+
+      // Respond with the generated study plan
+      res.json({
+        success: true,
+        message: "Goal and study plan saved successfully!",
+        studyPlan: studyPlan
+      });
+    });
+  } catch (error) {
+    console.error("Error saving goal and generating study plan:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
+
+app.post("/api/study-plan", async (req, res) => {
+  try {
+    const { token } = req.body; // Get token from the request body
+
+    if (!token) {
+      return res.status(401).json({ success: false, message: "No token provided" });
+    }
+
+    // Get userId from token (this function should be defined based on your auth system)
+    const userId = await getUserIdFromToken(token);
+
+    // Query to get the latest study plan from the database
+    const sql = `
+      SELECT study_plan 
+      FROM study_plans 
+      WHERE user_id = ? 
+      ORDER BY created_at DESC 
+      LIMIT 1
+    `;
+
+    const results = await query(sql, [userId]);
+
+    if (results.length === 0) {
+      return res.status(404).json({ success: false, message: "Study plan not found" });
+    }
+
+    let studyPlan = results[0].study_plan;
+
+    // Check if the study plan is already an object and doesn't need parsing
+    if (typeof studyPlan === 'string') {
+      studyPlan = JSON.parse(studyPlan); // Parse it only if it's a string
+    }
+
+    // Send the parsed study plan as the response
+    res.status(200).json({ success: true, data: studyPlan });
+  } catch (error) {
+    console.error("Error fetching study plan:", error);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 });
 
