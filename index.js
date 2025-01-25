@@ -26,7 +26,7 @@ const schedule = require("node-schedule");
 const pdfParse = require('pdf-parse');
 const fs = require('fs');
 const webPush = require('web-push');
-
+const moment = require('moment');
 // Initialize Google Generative AI
 const genAI = new GoogleGenerativeAI('AIzaSyBdN7h9ABBfiDmBGIuYJ73zDH7s5SLIWYg');
 
@@ -7878,6 +7878,83 @@ app.post("/api/study-plan", async (req, res) => {
     res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 });
+
+
+app.post('/api/today-pomodoro-study-plan', async (req, res) => {
+
+  const token = req.body.token;
+
+  try {
+    const userId = await getUserIdFromToken(token);  // Await the promise here
+
+    if (!userId) {
+      console.log('Unauthorized: No user ID found in token');
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+
+    const todayStart = moment().startOf('day').format('YYYY-MM-DD HH:mm:ss');
+    const todayEnd = moment().endOf('day').format('YYYY-MM-DD HH:mm:ss');
+
+    const sql = `
+      SELECT duration FROM pomodoro_date
+      WHERE user_id = ? AND end_time BETWEEN ? AND ?
+    `;
+    
+    const results = await query(sql, [userId, todayStart, todayEnd]);
+
+    if (results.length === 0) {
+      return res.status(404).json({ message: 'No Pomodoro data for today' });
+    }
+
+    const durationInSeconds = results[0].duration;
+    res.json({ durationInSeconds });
+    
+  } catch (err) {
+    console.error('Error:', err);  // Log the full error
+    res.status(500).json({ error: 'Server Error', message: err.message });
+  }
+});
+
+
+
+app.post("/api/study-plan/dashboard", async (req, res) => {
+  try {
+    const { token } = req.body;
+
+    if (!token) {
+      return res.status(401).json({ success: false, message: "No token provided" });
+    }
+
+    const userId = await getUserIdFromToken(token);
+
+    const sql = `
+      SELECT study_plan 
+      FROM study_plans 
+      WHERE user_id = ? 
+      ORDER BY created_at DESC 
+      LIMIT 1
+    `;
+
+    const results = await query(sql, [userId]);
+
+    if (results.length === 0) {
+      return res.status(404).json({ success: false, message: "Study plan not found" });
+    }
+
+    let studyPlan = results[0].study_plan;
+
+    if (typeof studyPlan === 'string') {
+      studyPlan = JSON.parse(studyPlan); 
+    }
+
+    res.status(200).json({ success: true, data: studyPlan });
+  } catch (error) {
+    console.error("Error fetching study plan:", error);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+});
+
 
 
 // Start the server
