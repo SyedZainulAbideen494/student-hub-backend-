@@ -7956,6 +7956,45 @@ app.post("/api/study-plan/dashboard", async (req, res) => {
 });
 
 
+// Route to fetch tasks and calculate completion percentages
+app.post('/getTasks/plan/study', async (req, res) => {
+  const token = req.body.token; // Assuming token is passed for user identification (e.g., JWT)
+
+  try {
+    const userId = await getUserIdFromToken(token); // Get user ID from token
+
+    // Get today's date in the format YYYY-MM-DD
+    const today = new Date().toISOString().split('T')[0];
+
+    // Fetch tasks for today and overall
+    const todayTasks = await query(
+      `SELECT * FROM tasks WHERE user_id = ? AND (due_date = ? OR completed_at IS NOT NULL)`,
+      [userId, today]
+    );
+
+    const allTasks = await query('SELECT * FROM tasks WHERE user_id = ?', [userId]);
+
+    // Calculate task completion percentages
+    const completedTasksToday = todayTasks.filter(task => task.completed === 1).length;
+    const totalTasksToday = todayTasks.length;
+    const completedTasksOverall = allTasks.filter(task => task.completed === 1).length;
+    const totalTasksOverall = allTasks.length;
+
+    const taskCompletionTodayPercentage = totalTasksToday > 0 ? (completedTasksToday / totalTasksToday) * 100 : 0;
+    const taskCompletionOverallPercentage = totalTasksOverall > 0 ? (completedTasksOverall / totalTasksOverall) * 100 : 0;
+
+    res.json({
+      today: todayTasks,
+      all: allTasks,
+      taskCompletionTodayPercentage,
+      taskCompletionOverallPercentage,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'An error occurred while fetching tasks' });
+  }
+});
+
 
 // Start the server
 app.listen(PORT, () => {
