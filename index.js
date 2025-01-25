@@ -7597,7 +7597,7 @@ app.post('/api/notes/generate', async (req, res) => {
 app.post("/api/saveGoal", async (req, res) => {
   const { token, data } = req.body;
 
-  console.log("Received data:", data); // Debug log to check if all data is present
+
 
   try {
     const userId = await getUserIdFromToken(token);
@@ -7633,7 +7633,7 @@ app.post("/api/saveGoal", async (req, res) => {
       JSON.stringify(subjects) // Convert subjects back to JSON string
     ];
 
-    console.log("SQL params:", params); // Debug log to verify the params being sent to SQL
+
 
     await query(sql, params);
 
@@ -7823,7 +7823,7 @@ app.post("/api/saveGoal", async (req, res) => {
         console.error("Error inserting study plan:", err);
         return res.status(500).json({ success: false, message: "Error saving study plan" });
       }
-
+      console.log("ai plan generated!", userId)
       // Respond with the generated study plan
       res.json({
         success: true,
