@@ -4387,17 +4387,18 @@ app.post('/api/generate/ai/today/plan/tasks', async (req, res) => {
       return res.status(400).json({ error: 'Missing AI task generation instructions' });
     }
 
+    // Get today's date in YYYY-MM-DD format
+    const todayDate = new Date().toISOString().split('T')[0];
 
-
-    // Generate prompt
+    // Generate prompt with today's date
     const prompt = `
-      You are an AI designed to generate structured task plans. Your output should only contain valid JSON without any additional text. Please generate a highly detailed and structured task plan in JSON format, tasks to be completed within 1 day. The JSON structure should follow this exact format:
+      You are an AI designed to generate structured task plans for today, ${todayDate}. Your output should only contain valid JSON without any additional text. Please generate a highly detailed and structured task plan in JSON format, tasks to be completed within today, ${todayDate}. The JSON structure should follow this exact format:
 
       [
         {
           "title": "Task title summarizing the specific action",
           "description": "Detailed description with clear, actionable steps, necessary resources, helpful suggestions, and motivational reminders.",
-          "due_date": "YYYY-MM-DD",
+          "due_date": "${todayDate}",
           "priority": "Low | Normal | High",
           "estimated_time": "Number of hours for task completion"
         },
@@ -4465,7 +4466,6 @@ app.post('/api/generate/ai/today/plan/tasks', async (req, res) => {
     const tasks = await generateTasksWithRetry();
 
     // Prepare tasks for database insertion
-    const todayDate = new Date().toISOString().split('T')[0];
     const tasksData = tasks.map(task => ({
       userId,
       title: task.title?.trim() || 'Untitled Task',
@@ -4495,7 +4495,6 @@ app.post('/api/generate/ai/today/plan/tasks', async (req, res) => {
     res.status(500).json({ error: error.message || 'Failed to generate tasks' });
   }
 });
-
 
 
 
