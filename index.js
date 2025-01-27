@@ -4372,73 +4372,131 @@ app.get('/api/flashcards/:subjectId', (req, res) => {
       });
 });
 
-
-// Route to fetch stories for the users the current user follows
-app.post('/fetchStories', async (req, res) => {
-  const { token } = req.body;  // Token from the request body
+app.post('/api/generate/ai/today/plan/tasks', async (req, res) => {
+  const { token, AI_task_generation_instructions } = req.body;
 
   try {
+    // Validate token and get user ID
     const userId = await getUserIdFromToken(token);
-    
-    // Fetching the list of following_ids
-    const followQuery = 'SELECT following_id FROM followers WHERE follower_id = ?';
-    const followingUsers = await query(followQuery, [userId]);
-
-    const followingIds = followingUsers.map(follow => follow.following_id);
-
-    if (followingIds.length === 0) {
-      return res.json({ stories: [] });
+    if (!userId) {
+      return res.status(401).json({ error: 'Invalid token or user not found' });
     }
 
-    // Fetch stories from the followed users (within 24 hours)
-    const storyQuery = `
-      SELECT s.content, s.story_type, s.expires_at, u.user_name, u.avatar
-      FROM stories s
-      JOIN users u ON s.user_id = u.id
-      WHERE s.user_id IN (?) AND s.expires_at > NOW()
-    `;
-    const stories = await query(storyQuery, [followingIds]);
+    // Validate AI instructions
+    if (!AI_task_generation_instructions) {
+      return res.status(400).json({ error: 'Missing AI task generation instructions' });
+    }
 
-    res.json({ stories });
+
+
+    // Generate prompt
+    const prompt = `
+      You are an AI designed to generate structured task plans. Your output should only contain valid JSON without any additional text. Please generate a highly detailed and structured task plan in JSON format, tasks to be completed within 1 day. The JSON structure should follow this exact format:
+
+      [
+        {
+          "title": "Task title summarizing the specific action",
+          "description": "Detailed description with clear, actionable steps, necessary resources, helpful suggestions, and motivational reminders.",
+          "due_date": "YYYY-MM-DD",
+          "priority": "Low | Normal | High",
+          "estimated_time": "Number of hours for task completion"
+        },
+        ...
+      ]
+
+      Follow these specific instructions: ${AI_task_generation_instructions}
+      Return **only the JSON** as the response without any explanations, comments, or code blocks. If the input is invalid or insufficient to generate a task plan, return an empty JSON array: [].`;
+
+    console.log('Generating tasks with prompt:', prompt);
+
+    // Generate tasks with retry logic
+    const generateTasksWithRetry = async () => {
+      let attempts = 0;
+
+      while (attempts < MAX_RETRIES) {
+        try {
+          // Call the AI model with the prompt
+          const chat = model.startChat({
+            history: [
+              { role: 'user', parts: [{ text: 'Hello' }] },
+              { role: 'model', parts: [{ text: 'I can help generate tasks for your project!' }] },
+            ],
+          });
+
+          const result = await chat.sendMessage(prompt);
+
+          // Extract only the JSON part using a regular expression
+          const responseText = result.response.text();
+          const jsonResponse = responseText.match(/```json([\s\S]*?)```/);
+          if (!jsonResponse || jsonResponse.length < 2) {
+            throw new Error('Could not extract JSON from AI response');
+          }
+
+          // Parse the JSON
+          let tasks;
+          try {
+            tasks = JSON.parse(jsonResponse[1].trim());
+          } catch (parseError) {
+            console.error('Failed to parse JSON:', parseError);
+            throw new Error('Invalid JSON response from the AI model.');
+          }
+
+          // Ensure tasks is an array
+          if (!Array.isArray(tasks)) {
+            console.error('AI response does not contain an array of tasks.');
+            throw new Error('Invalid task structure returned from AI model.');
+          }
+
+          return tasks;  // Return the successfully generated tasks
+        } catch (error) {
+          attempts++;
+          console.log(`Attempt ${attempts} failed, retrying...`);
+
+          if (attempts === MAX_RETRIES) {
+            throw new Error('Failed to generate tasks after multiple attempts');
+          }
+
+          // Delay before retrying
+          await delay(2000); // Delay for 2 seconds before the next attempt
+        }
+      }
+    };
+
+    const tasks = await generateTasksWithRetry();
+
+    // Prepare tasks for database insertion
+    const todayDate = new Date().toISOString().split('T')[0];
+    const tasksData = tasks.map(task => ({
+      userId,
+      title: task.title?.trim() || 'Untitled Task',
+      description: task.description?.trim() || 'No description provided',
+      due_date: task.due_date?.trim() || todayDate,
+      priority: task.priority?.trim() || 'Normal',
+    }));
+
+    if (tasksData.length > 0) {
+      const tasksValues = tasksData.map(({ userId, title, description, due_date, priority }) => [
+        userId,
+        title,
+        description,
+        due_date,
+        priority,
+      ]);
+
+      // Insert tasks into the database
+      await query('INSERT INTO tasks (user_id, title, description, due_date, priority) VALUES ?', [tasksValues]);
+
+      res.json({ tasks: tasksData });
+    } else {
+      res.status(400).json({ error: 'No valid tasks generated' });
+    }
   } catch (error) {
-    console.error('Error fetching stories:', error);
-    res.status(500).json({ error: 'Failed to fetch stories' });
+    console.error('Error generating tasks:', error);
+    res.status(500).json({ error: error.message || 'Failed to generate tasks' });
   }
 });
 
 
-// Add a new story endpoint
-app.post('/addStory', upload.single('file'), async (req, res) => {
-  const { token } = req.body; // Token in the request body
-  const { storyType, content } = req.body;
-
-  try {
-    // Get user ID from token
-    const userId = await getUserIdFromToken(token);
-
-    // Calculate expiration time (24 hours from now)
-    const expiresAt = new Date();
-    expiresAt.setHours(expiresAt.getHours() + 24);
-
-    // Store file path if it's an image or video
-    let filePath = null;
-    if (req.file) {
-      filePath = req.file.path; // Get the file path from the uploaded file
-    }
-
-    // Insert new story into the database
-    const sql = `
-      INSERT INTO stories (user_id, story_type, content, file_path, expires_at)
-      VALUES (?, ?, ?, ?, ?)
-    `;
-    await query(sql, [userId, storyType, content, filePath, expiresAt]);
-
-    res.status(201).json({ message: 'Story uploaded successfully' });
-  } catch (error) {
-    console.error('Error uploading story:', error);
-    res.status(500).json({ error: 'Failed to upload story' });
-  }
-});
 
 
 app.post('/api/tasks/generate', async (req, res) => {
