@@ -7667,40 +7667,49 @@ app.post("/api/saveGoal", async (req, res) => {
     const subjects = JSON.parse(data.subjects); // Parse the string into an array
 
     const sql = `
-      INSERT INTO user_goal (
-        user_id,
-        grade,
-        goal,
-        study_time,
-        speed,
-        revision_method,
-        pomodoro_preference,
-        subjects
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-
-    const params = [
-      userId,
-      data.grade,
-      data.goal,
-      data.study_time,
-      data.speed,
-      data.revision_method,
-      data.pomodoro_preference,
-      JSON.stringify(subjects) // Convert subjects back to JSON string
-    ];
-
+    INSERT INTO user_goal (
+      user_id,
+      grade,
+      goal,
+      study_time,
+      speed,
+      revision_method,
+      pomodoro_preference,
+      subjects,
+      recent_grades,        -- Add this
+      exam_details,         -- Add this
+      daily_routine         -- Add this
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `;
+  
+  const params = [
+    userId,
+    data.grade,
+    data.goal,
+    data.study_time,
+    data.speed,
+    data.revision_method,
+    data.pomodoro_preference,
+    JSON.stringify(subjects),
+    JSON.stringify(data.recent_grades),  // Convert recent grades to JSON if needed
+    JSON.stringify(data.exam_details),   // Convert exam details to JSON if needed
+    JSON.stringify(data.daily_routine)   // Convert daily routine to JSON if needed
+  ];
+  
 
 
     await query(sql, params);
 
     const prompt = `
-    Generate a personalized study plan based on the following data:
-    - Goal: ${data.goal}
-    - Daily Study Time: ${data.study_time}
-    - Subjects: ${subjects.map((sub) => sub.subject).join(", ")}
-    - Pomodoro Preference: ${data.pomodoro_preference ? "Yes" : "No"}
-    - Speed: ${data.speed}
+     Generate a personalized study plan based on the following data:
+  - Goal: ${data.goal}
+  - Daily Study Time: ${data.study_time}
+  - Subjects: ${subjects.map((sub) => sub.subject).join(", ")}
+  - Pomodoro Preference: ${data.pomodoro_preference ? "Yes" : "No"}
+  - Speed: ${data.speed}
+  - Recent Grades: ${JSON.stringify(data.recent_grades)}
+  - Exam Details: ${JSON.stringify(data.exam_details)}
+  - Daily Routine: ${JSON.stringify(data.daily_routine)}
     
     The study plan should adhere to the following JSON structure:
     
