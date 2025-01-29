@@ -27,6 +27,7 @@ const pdfParse = require('pdf-parse');
 const fs = require('fs');
 const webPush = require('web-push');
 const moment = require('moment');
+const Razorpay = require('razorpay');
 // Initialize Google Generative AI
 const genAI = new GoogleGenerativeAI('AIzaSyBdN7h9ABBfiDmBGIuYJ73zDH7s5SLIWYg');
 
@@ -1833,8 +1834,8 @@ app.post('/api/quiz/generate', async (req, res) => {
     const title = `${subject} - ${topic} Quiz`;
     const description = `Quiz on ${subject} - ${topic}`;
     const [quizResult] = await connection.promise().query(
-      'INSERT INTO quizzes (title, description, creator_id) VALUES (?, ?, ?)',
-      [title, description, userId]
+      'INSERT INTO quizzes (title, description, creator_id, is_ai) VALUES (?, ?, ?, ?)',
+      [title, description, userId, 1] // Insert 1 for is_ai to indicate AI-generated quiz
     );
     const quizId = quizResult.insertId;
 
@@ -1863,6 +1864,38 @@ app.post('/api/quiz/generate', async (req, res) => {
   }
 });
 
+// API endpoint to fetch the number of flashcards created from AI
+app.get("/api/quizzes/count/ai-premium", async (req, res) => {
+  try {
+    const token = req.headers.authorization; // Extract token from the Authorization header
+    
+    if (!token) {
+      return res.status(400).json({ error: "Token is required" });
+    }
+
+    // Extract user_id from token
+    const userId = await getUserIdFromToken(token);
+
+    // Get the count of flashcards created from PDFs by the user
+    const queryStr = `
+      SELECT COUNT(*) AS QuizzesCount
+      FROM quizzes
+      WHERE creator_id = ? AND is_ai = 1 AND DATE(created_at) = CURDATE()
+    `;
+
+    connection.query(queryStr, [userId], (err, result) => {
+      if (err) {
+        console.error("Error fetching flashcards count:", err);
+        return res.status(500).json({ error: "Something went wrong!" });
+      }
+      const QuizzesCount = result[0].QuizzesCount;
+      res.json({ QuizzesCount });
+    });
+  } catch (error) {
+    console.error("Error:", error);
+    res.status(500).json({ error: "Something went wrong!" });
+  }
+});
 
 // Get all quizzes for a user
 app.post('/getUserQuizzes', async (req, res) => {
@@ -2273,77 +2306,44 @@ app.post('/api/session-check', (req, res) => {
   });
 });
 
-const clientId = '0aac6cb1ec104103a5e2e5d6f9b490e7';
-const clientSecret = '4e2d9a5a3be9406c970cf3f6cb78b7a3';
-const redirectUri = `http://localhost:8080/callback`; // Ensure this matches your Spotify Dashboard
+const CLIENT_ID = '0aac6cb1ec104103a5e2e5d6f9b490e7';
+const CLIENT_SECRET = '4e2d9a5a3be9406c970cf3f6cb78b7a3';
+const REDIRECT_URI = 'http://localhost:8080/callback/spotify';
+const FRONTEND_REDIRECT_URI = 'http://localhost:3000/music'; // Your React app's page
 
-app.use(cors());
-
+// Spotify Auth Endpoint
 app.get('/login/spotify', (req, res) => {
-  const scope = 'user-read-private user-read-email streaming user-modify-playback-state';
-  res.redirect('https://accounts.spotify.com/authorize?' +
-    querystring.stringify({
-      response_type: 'code',
-      client_id: clientId,
-      scope: scope,
-      redirect_uri: redirectUri
-    }));
+  const authUrl = `https://accounts.spotify.com/authorize?response_type=code&client_id=${CLIENT_ID}&scope=streaming%20user-library-read%20user-read-playback-state%20user-modify-playback-state&redirect_uri=${REDIRECT_URI}`;
+  res.redirect(authUrl);
 });
 
-app.get('/callback', (req, res) => {
-  const code = req.query.code || null;
-  const authOptions = {
-    url: 'https://accounts.spotify.com/api/token',
-    form: {
-      code: code,
-      redirect_uri: redirectUri,
-      grant_type: 'authorization_code'
-    },
-    headers: {
-      'Authorization': 'Basic ' + Buffer.from(clientId + ':' + clientSecret).toString('base64')
-    },
-    json: true
-  };
+// Callback route to get access token
+app.get('/callback/spotify', async (req, res) => {
+  const code = req.query.code;
+  try {
+    const tokenResponse = await axios.post(
+      'https://accounts.spotify.com/api/token',
+      null,
+      {
+        params: {
+          code,
+          redirect_uri: REDIRECT_URI,
+          grant_type: 'authorization_code',
+        },
+        headers: {
+          Authorization: `Basic ${Buffer.from(CLIENT_ID + ':' + CLIENT_SECRET).toString('base64')}`,
+        },
+      }
+    );
 
-  request.post(authOptions, (error, response, body) => {
-    if (!error && response.statusCode === 200) {
-      const access_token = body.access_token;
-      const refresh_token = body.refresh_token;
+    const access_token = tokenResponse.data.access_token;
 
-      const uri = 'http://localhost:3000/music';
-      res.redirect(uri + '?access_token=' + access_token + '&refresh_token=' + refresh_token);
-    } else {
-      res.redirect('/#' +
-        querystring.stringify({
-          error: 'invalid_token'
-        }));
-    }
-  });
-});
-
-app.post('/refresh_token', async (req, res) => {
-  const { refreshToken } = req.body;
-
-  const authOptions = {
-    url: 'https://accounts.spotify.com/api/token',
-    form: {
-      grant_type: 'refresh_token',
-      refresh_token: refreshToken
-    },
-    headers: {
-      'Authorization': 'Basic ' + Buffer.from(clientId + ':' + clientSecret).toString('base64')
-    },
-    json: true
-  };
-
-  request.post(authOptions, (error, response, body) => {
-    if (!error && response.statusCode === 200) {
-      res.json({ accessToken: body.access_token });
-    } else {
-      console.error('Error refreshing token:', error);
-      res.status(response.statusCode).json({ error: 'Failed to refresh token' });
-    }
-  });
+    // Redirect back to the frontend with the access token as a query parameter
+    res.redirect(`${FRONTEND_REDIRECT_URI}?access_token=${access_token}`);
+  } catch (error) {
+    console.error('Error during token exchange', error);
+    res.status(500).send('Failed to authenticate with Spotify');
+  }
 });
 
 app.post('/api/profile/user', async (req, res) => {
@@ -4392,21 +4392,34 @@ app.post('/api/generate/ai/today/plan/tasks', async (req, res) => {
 
     // Generate prompt with today's date
     const prompt = `
-      You are an AI designed to generate structured task plans for today, ${todayDate}. Your output should only contain valid JSON without any additional text. Please generate a highly detailed and structured task plan in JSON format, tasks to be completed within today, ${todayDate}. The JSON structure should follow this exact format:
-
-      [
-        {
-          "title": "Task title summarizing the specific action",
-          "description": "Detailed description with clear, actionable steps, necessary resources, helpful suggestions, and motivational reminders.",
-          "due_date": "${todayDate}",
-          "priority": "Low | Normal | High",
-          "estimated_time": "Number of hours for task completion"
-        },
-        ...
-      ]
-
-      Follow these specific instructions: ${AI_task_generation_instructions}
-      Return **only the JSON** as the response without any explanations, comments, or code blocks. If the input is invalid or insufficient to generate a task plan, return an empty JSON array: [].`;
+    You are an AI designed to generate structured task plans for Edusify users for today, ${todayDate}. Your output should only contain valid JSON without any additional text. Please generate a highly detailed, structured task plan for the user to complete within today, ${todayDate}. The JSON structure should follow this exact format:
+  
+    [
+      {
+        "title": "Task title summarizing the specific action",
+        "description": "Brief description with clear, actionable steps, necessary resources, helpful suggestions, and motivational reminders.",
+        "due_date": "${todayDate}",
+        "priority": "Low | Normal | High",
+        "estimated_time": "Number of minutes for task completion"
+      },
+      ...
+    ]
+  
+    The tasks should be relevant to a student using Edusify. Focus on tasks related to studying, reviewing, organizing, and using Edusify features like:
+    - Attending quizzes
+    - Reviewing and completing flashcards
+    - Creating and reviewing study notes
+    - Generating AI-powered quizzes or notes
+    - Organizing tasks with to-do lists and study plans
+    - Using the Pomodoro timer for study sessions
+    - Analyzing progress with personalized stats
+  
+    The descriptions should be brief but actionable, encouraging the user to make the most of Edusify's tools, while staying motivated and organized throughout their study session.
+  
+    Follow these specific instructions: ${AI_task_generation_instructions}
+    Return **only the JSON** as the response without any explanations, comments, or code blocks. If the input is invalid or insufficient to generate a task plan, return an empty JSON array: [].
+  `;
+  
 
     console.log('Generating tasks with prompt:', prompt);
 
@@ -5482,7 +5495,7 @@ if (tasks.length >= 3 || pomodoroSessions.length >= 2 || quizzes.length >= 2) {
     // Prepare the AI prompt
     const prompt = `
       Today's Date: ${new Date().toISOString().split('T')[0]}
-      Analyze the following user data and generate a detailed report including user type, improvement areas, and strengths, and provide constructive feedback in an encouraging and empowering tone. 
+      Analyze the following user data and generate a detailed report including user type, improvement areas, and strengths, and provide constructive feedback in an encouraging and empowering tone this reprot has to be shown to user directly so make it accordingly. 
       Format the report in JSON. The fields should include: "userType", "strengths", "improvementAreas", and a "summary".
 
       Tasks:
@@ -6579,6 +6592,105 @@ app.post('/api/quiz/generate/from-notes', upload.none(), async (req, res) => {
   }
 });
 
+app.post('/api/quiz/generate/from-magic', upload.none(), async (req, res) => {
+  const { subject, notes, token } = req.body;
+
+  try {
+    // Step 1: Retrieve userId from the token
+    const userId = await getUserIdFromToken(token);
+
+    // Step 2: Define a refined prompt to ensure proper quiz generation based on the notes
+    const prompt = `Generate a valid JSON array of 15 multiple-choice questions based on the following notes:
+      - Notes: ${notes}
+      
+      
+      Each question must strictly follow this format:
+      [
+        {
+          "question": "string",
+          "options": ["string", "string", "string", "string"],
+          "correct_answer": "string"
+        }
+      ]
+
+      Rules:
+      1. Return only the JSON array without any explanations or comments.
+      2. Ensure each question and options are meaningful and unique.
+      3. Format the JSON properly.
+  `;
+
+    console.log('Generating quiz with Magic');
+
+    // Step 4: AI Integration and retry logic
+    const generateQuizWithRetry = async () => {
+      let attempts = 0;
+
+      while (attempts < MAX_RETRIES) {
+        try {
+          const chat = model.startChat({ history: [] });
+          const result = await chat.sendMessage(prompt);
+          const rawResponse = await result.response.text();
+
+          const sanitizedResponse = rawResponse.replace(/```(?:json)?/g, '').trim();
+          let quizQuestions;
+
+          try {
+            quizQuestions = JSON.parse(sanitizedResponse);
+          } catch (parseError) {
+            throw new Error('Invalid JSON response from the AI model');
+          }
+
+          return quizQuestions;
+        } catch (error) {
+          attempts++;
+          if (attempts === MAX_RETRIES) {
+            throw new Error('Failed to generate quiz after multiple attempts');
+          }
+          await new Promise((resolve) => setTimeout(resolve, 2000)); // Retry delay
+        }
+      }
+    };
+
+    const quizQuestions = await generateQuizWithRetry();
+
+    // Step 6: Insert quiz details into the database
+    const title = `${subject} Quiz`; // Use the subject from the frontend
+    const description = `Quiz on ${subject}`; // Use subject for description as well
+    const [quizResult] = await connection.promise().query(
+      'INSERT INTO quizzes (title, description, creator_id) VALUES (?, ?, ?)',
+      [title, description, userId]
+    );
+    const quizId = quizResult.insertId;
+
+    // Step 7: Insert questions and their options into the database
+    for (const question of quizQuestions) {
+      const [questionResult] = await connection.promise().query(
+        'INSERT INTO questions (quiz_id, question_text) VALUES (?, ?)',
+        [quizId, question.question]
+      );
+      const questionId = questionResult.insertId;
+
+      for (const option of question.options) {
+        const isCorrect = option === question.correct_answer;
+        await connection.promise().query(
+          'INSERT INTO answers (question_id, answer_text, is_correct) VALUES (?, ?, ?)',
+          [questionId, option, isCorrect]
+        );
+      }
+    }
+
+
+    const magicUsageQuery = 'INSERT INTO magic_usage (user_id, type) VALUES (?, ?)';
+    await connection.promise().query(magicUsageQuery, [userId, 'quiz_generation']);
+
+    // Step 8: Return the generated quiz details
+    res.json({ message: 'Quiz generated successfully', quizId });
+  } catch (error) {
+    console.error('Error generating quiz:', error);
+    res.status(500).json({ error: 'Error generating quiz' });
+  }
+});
+
 app.post('/complete-flashcard-quiz', async (req, res) => {
   const { token } = req.body;
   try {
@@ -6594,6 +6706,8 @@ app.post('/complete-flashcard-quiz', async (req, res) => {
     res.status(500).json({ message: 'Internal server error' });
   }
 });
+
+
 
 app.post('/api/flashcards/generate-from-notes', async (req, res) => {
   const { headings, subject } = req.body; // Accept headings and subject
@@ -6692,6 +6806,123 @@ app.post('/api/flashcards/generate-from-notes', async (req, res) => {
             console.error('Error inserting flashcards:', err);
             return res.status(500).json({ error: 'Database error' });
           }
+
+          res.json({ flashcardSetId: setId, flashcards });
+        }
+      );
+    });
+  } catch (error) {
+    console.error('Error processing request:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+
+app.post('/api/flashcards/generate-from-magic', async (req, res) => {
+  const { headings, subject } = req.body; // Accept headings and subject
+  const token = req.headers.authorization?.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+
+  try {
+    const userId = await getUserIdFromToken(token); // Fetch user ID from token
+
+    // Validate input
+    if (!headings || !subject) {
+      return res.status(400).json({ error: 'Headings and subject are required' });
+    }
+
+    // Create a new flashcard set in the database
+    const setQuery = 'INSERT INTO flashcard_sets (name, subject, user_id, topic) VALUES (?, ?, ?, ?)';
+    connection.query(setQuery, [subject, subject, userId, subject], async (err, results) => {
+      if (err) {
+        console.error('Database error (flashcard_sets):', err);
+        return res.status(500).json({ error: 'Failed to create flashcard set' });
+      }
+
+      const setId = results.insertId; // Get the inserted flashcard set ID
+
+      // Define the AI prompt for generating flashcards based on the notes
+      const prompt = `Generate a valid JSON array of flashcards based on the following notes:
+      - Notes: ${headings}
+
+      Each flashcard should follow this format:
+      [
+        {
+          "question": "string",
+          "answer": "string"
+        }
+      ]
+
+      Rules:
+      1. Ensure the flashcards are accurate, concise, and relevant to the subject: ${subject}.
+      2. Return only the JSON array without any explanations or comments.
+      3. Format the JSON properly.`;
+
+      console.log('Generating flashcards with magic');
+
+      // Step 4: AI Integration and retry logic for flashcard generation
+      const generateFlashcardsWithRetry = async () => {
+        let attempts = 0;
+        const MAX_RETRIES = 3;
+
+        while (attempts < MAX_RETRIES) {
+          try {
+            const chat = model.startChat({ history: [] });
+            const result = await chat.sendMessage(prompt);
+            const rawResponse = await result.response.text();
+
+            const sanitizedResponse = rawResponse.replace(/```(?:json)?/g, '').trim();
+            let flashcards;
+
+            try {
+              flashcards = JSON.parse(sanitizedResponse);
+            } catch (parseError) {
+              throw new Error('Invalid JSON response from the AI model');
+            }
+
+            return flashcards;
+          } catch (error) {
+            attempts++;
+            if (attempts === MAX_RETRIES) {
+              throw new Error('Failed to generate flashcards after multiple attempts');
+            }
+            await new Promise((resolve) => setTimeout(resolve, 2000)); // Retry delay
+          }
+        }
+      };
+
+      // Get the flashcards by calling the retry function
+      const flashcards = await generateFlashcardsWithRetry();
+
+      // Prepare data for database insertion
+      const flashcardsData = flashcards
+        .filter(card => card.question?.trim() && card.answer?.trim())
+        .map(({ question, answer }) => [setId, question.trim(), answer.trim()]);
+
+      if (flashcardsData.length === 0) {
+        return res.status(400).json({ error: 'No valid flashcards generated' });
+      }
+
+      // Insert the generated flashcards into the database
+      connection.query(
+        'INSERT INTO flashcard (set_id, question, answer) VALUES ?',
+        [flashcardsData],
+        (err) => {
+          if (err) {
+            console.error('Error inserting flashcards:', err);
+            return res.status(500).json({ error: 'Database error' });
+          }
+           // Log the magic usage (without linking to flashcard_sets)
+        const magicUsageQuery = 'INSERT INTO magic_usage (user_id, type) VALUES (?, ?)';
+        connection.query(magicUsageQuery, [userId, 'flashcard_generation'], (err) => {
+          if (err) {
+            console.error('Error logging magic usage:', err);
+          }
+        });
+
 
           res.json({ flashcardSetId: setId, flashcards });
         }
@@ -7470,7 +7701,6 @@ app.post("/ai-chatbox/pdf/ai", uploadPDF.single("file"), async (req, res) => {
 
 app.post("/summarize-pdf/notes", uploadPDF.single("file"), async (req, res) => {
   try {
-    
     if (!req.file) {
       return res.status(400).json({ error: "No file uploaded" });
     }
@@ -7485,17 +7715,30 @@ app.post("/summarize-pdf/notes", uploadPDF.single("file"), async (req, res) => {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
+    // Check premium status
+    const isPremium = req.body.isPremium; // Pass premium status from frontend
+
+    // If user is not premium, check if they have already created more than 5 flashcards today
+    if (!isPremium) {
+      const today = new Date().toISOString().split("T")[0]; // Get today's date in YYYY-MM-DD format
+
+      const queryStr = `SELECT COUNT(*) AS flashcardsCount FROM flashcards WHERE user_id = ? AND DATE(created_at) = ?`;
+      const result = await query(queryStr, [userId, today]);
+
+      const flashcardsCount = result[0]?.flashcardsCount || 0;
+      if (flashcardsCount >= 5) {
+        return res.status(403).json({ error: "You can only create up to 5 flashcards per day as a free user." });
+      }
+    }
+
     // Build AI prompt based on selected options, ensuring plain HTML output without extra text
     const prompts = {
       summary: `You are an AI responsible for generating concise notes from documents. Your task is to summarize this document and respond ONLY in valid plain HTML. Use tags such as <h1> for the title, <h2> for headings, and <p> for paragraphs. DO NOT include any introductory text like "Here is the summary" or "This is in HTML format." DO NOT use markdown or non-HTML elements. Your output must STRICTLY be the requested summary in raw HTML format. Any extraneous content will invalidate the response.`,
-      
       key_points: `You are an AI designed to extract key points from documents. Your task is to extract the main points and respond ONLY in valid plain HTML using <ul> and <li> tags. DO NOT include any additional text like "Here are the key points" or "This is in HTML." DO NOT use markdown or non-HTML content. Your response must STRICTLY contain the key points formatted in raw HTML. Deviation from this format will invalidate the output.`,
-      
       detailed_explanation: `You are an AI responsible for generating detailed explanations of documents. Your task is to provide a detailed explanation of this document and respond ONLY in valid plain HTML. Use <h1> for the title, <h2> for subheadings, and <p> for detailed paragraphs. DO NOT include any additional text like "Here is the explanation" or any markdown formatting. Respond STRICTLY with valid raw HTML content. Any additional or non-compliant content will render the response invalid.`,
-      
       question_generation: `You are an AI designed to generate questions from documents. Your task is to create questions and answers and respond ONLY in valid plain HTML. Use <p> for each question and <ul> with <li> for the answer options. DO NOT include any introductory phrases such as "Here are the questions" or "In HTML format." Respond STRICTLY with valid raw HTML content. Any extra or non-HTML content will invalidate your response.`,
     };
-    
+
     const userPrompt = options.map((opt) => prompts[opt]).join("\n");
 
     // Process the document using generative AI
@@ -7514,31 +7757,64 @@ app.post("/summarize-pdf/notes", uploadPDF.single("file"), async (req, res) => {
     const generatedText = result.response.candidates?.[0]?.content?.parts?.[0]?.text || "No content generated";
 
     // Insert notes into the database
-    const queryStr = `
-      INSERT INTO flashcards (title, description, headings, is_public, user_id, subject_id)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `;
-    const title = "Generated Notes"; // Example title
-    const description = "Notes generated from uploaded PDF"; // Example description
-    const isPublic = false; // Notes are private by default
-    const subjectId = null; // No subject_id for now
+    const queryStrInsert = `
+    INSERT INTO flashcards (title, description, headings, is_public, user_id, subject_id, is_pdf)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `;
+  const title = "Generated Notes"; // Example title
+  const description = "Notes generated from uploaded PDF"; // Example description
+  const isPublic = false; // Notes are private by default
+  const subjectId = null; // No subject_id for now
+  const isPdf = 1; // Setting the is_pdf column to 1
 
-    const resultInsert = await query(queryStr, [title, description, generatedText, isPublic, userId, subjectId]);
+  const resultInsert = await query(queryStrInsert, [title, description, generatedText, isPublic, userId, subjectId, isPdf]);
 
-    // Retrieve the inserted note ID
+  // Retrieve the inserted note ID
     const noteId = resultInsert.insertId;
 
     // Cleanup temporary file
     fs.unlinkSync(filePath);
 
     res.json({ result: generatedText, message: "Notes saved successfully!", noteId });
-    console.log('created notes from pdf')
+    console.log('created notes from pdf');
   } catch (error) {
     console.error("Error:", error);
     res.status(500).json({ error: "Something went wrong!" });
   }
 });
 
+// API endpoint to fetch the number of flashcards created from PDFs
+app.get("/api/flashcards/count/pdf-premium", async (req, res) => {
+  try {
+    const token = req.headers.authorization; // Extract token from the Authorization header
+    
+    if (!token) {
+      return res.status(400).json({ error: "Token is required" });
+    }
+
+    // Extract user_id from token
+    const userId = await getUserIdFromToken(token);
+
+    // Get the count of flashcards created from PDFs by the user
+    const queryStr = `
+      SELECT COUNT(*) AS flashcardsCount
+      FROM flashcards
+      WHERE user_id = ? AND is_pdf = 1 AND DATE(created_at) = CURDATE()
+    `;
+
+    connection.query(queryStr, [userId], (err, result) => {
+      if (err) {
+        console.error("Error fetching flashcards count:", err);
+        return res.status(500).json({ error: "Something went wrong!" });
+      }
+      const flashcardsCount = result[0].flashcardsCount;
+      res.json({ flashcardsCount });
+    });
+  } catch (error) {
+    console.error("Error:", error);
+    res.status(500).json({ error: "Something went wrong!" });
+  }
+});
 
 app.post('/api/notes/generate', async (req, res) => {
   const { topic, types, token } = req.body;
@@ -7627,16 +7903,18 @@ app.post('/api/notes/generate', async (req, res) => {
       headings: notesContent, // HTML content as headings
       is_public: false,
       subject_id: null, // You can add subject id if required
+      is_ai: 1, // Set the new column is_ai to 1 for AI-generated notes
     };
     
     // Insert notes into the database and get the id using the promisified query
-    const result = await query('INSERT INTO flashcards (title, description, headings, is_public, user_id, subject_id) VALUES (?, ?, ?, ?, ?, ?)', [
+    const result = await query('INSERT INTO flashcards (title, description, headings, is_public, user_id, subject_id, is_ai) VALUES (?, ?, ?, ?, ?, ?, ?)', [
       notesData.title,
       notesData.description,
       notesData.headings,
       notesData.is_public,
       notesData.userId,
       notesData.subject_id,
+      notesData.is_ai, // Inserting the AI flag
     ]);
     
     // Assuming the query returns the inserted row with an 'id' field
@@ -7648,6 +7926,39 @@ app.post('/api/notes/generate', async (req, res) => {
   } catch (error) {
     console.error('Error generating notes:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// API endpoint to fetch the number of flashcards created from AI
+app.get("/api/flashcards/count/ai-premium", async (req, res) => {
+  try {
+    const token = req.headers.authorization; // Extract token from the Authorization header
+    
+    if (!token) {
+      return res.status(400).json({ error: "Token is required" });
+    }
+
+    // Extract user_id from token
+    const userId = await getUserIdFromToken(token);
+
+    // Get the count of flashcards created from PDFs by the user
+    const queryStr = `
+      SELECT COUNT(*) AS flashcardsCount
+      FROM flashcards
+      WHERE user_id = ? AND is_ai = 1 AND DATE(created_at) = CURDATE()
+    `;
+
+    connection.query(queryStr, [userId], (err, result) => {
+      if (err) {
+        console.error("Error fetching flashcards count:", err);
+        return res.status(500).json({ error: "Something went wrong!" });
+      }
+      const flashcardsCount = result[0].flashcardsCount;
+      res.json({ flashcardsCount });
+    });
+  } catch (error) {
+    console.error("Error:", error);
+    res.status(500).json({ error: "Something went wrong!" });
   }
 });
 
@@ -7946,6 +8257,44 @@ app.post("/api/study-plan", async (req, res) => {
 });
 
 
+app.post("/api/study-plan-created-date", async (req, res) => {
+  try {
+    const { token } = req.body; // Get token from the request body
+
+    if (!token) {
+      return res.status(401).json({ success: false, message: "No token provided" });
+    }
+
+    // Get userId from token (this function should be defined based on your auth system)
+    const userId = await getUserIdFromToken(token);
+
+    // Query to get the latest study plan from the database
+    const sql = `
+      SELECT created_at 
+      FROM study_plans 
+      WHERE user_id = ? 
+      ORDER BY created_at DESC 
+      LIMIT 1
+    `;
+
+    const results = await query(sql, [userId]);
+
+    if (results.length === 0) {
+      return res.status(404).json({ success: false, message: "Study plan not found" });
+    }
+
+    const created_at = results[0].created_at;
+
+    // Send the created_at date as the response
+    res.status(200).json({ success: true, data: { created_at } });
+  } catch (error) {
+    console.error("Error fetching study plan:", error);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+});
+
+
+
 app.post('/api/today-pomodoro-study-plan', async (req, res) => {
 
   const token = req.body.token;
@@ -8058,6 +8407,157 @@ app.post('/getTasks/plan/study', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'An error occurred while fetching tasks' });
+  }
+});
+
+
+
+// Razorpay setup
+const razorpay = new Razorpay({
+  key_id: 'rzp_live_jPX6SxetQbApHC',
+  key_secret: 'ec9nrw9RjbIcvpkufzaYxmr6',
+});
+
+// Create Order
+app.post('/buy-premium', async (req, res) => {
+  try {
+    const { amount, currency, subscription_plan, token } = req.body;
+    
+    // Extract user ID from token
+    const userId = await getUserIdFromToken(token);
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const options = {
+      amount: amount * 100, // Convert to paise
+      currency,
+      receipt: `order_rcptid_${Math.floor(Math.random() * 100000)}`,
+      notes: { subscription_plan, userId },
+    };
+
+    razorpay.orders.create(options, (err, order) => {
+      if (err) return res.status(500).json({ error: err });
+      res.json({ order });
+    });
+
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post('/verify-payment', async (req, res) => {
+  try {
+    const { payment_id, order_id, signature, token, subscription_plan } = req.body;
+
+    // Extract user ID from token
+    const userId = await getUserIdFromToken(token);
+    if (!userId) {
+      console.error('Invalid or expired token');
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const body = `${order_id}|${payment_id}`;
+    const expected_signature = crypto
+      .createHmac('sha256', 'ec9nrw9RjbIcvpkufzaYxmr6') // Ensure this is your actual secret key
+      .update(body)
+      .digest('hex');
+
+    if (expected_signature === signature) {
+      // Store the subscription in the database
+      const expiryDate = new Date();
+      expiryDate.setDate(expiryDate.getDate() + 30); // Set subscription expiry (e.g., 30 days)
+
+      const queryText = `
+        INSERT INTO subscriptions (user_id, subscription_plan, payment_status, payment_date, expiry_date)
+        VALUES (?, ?, ?, NOW(), ?)
+      `;
+         // Log when the user is upgraded to premium
+         console.log(`User ${userId} upgraded to premium.`);
+
+      try {
+        await query(queryText, [userId, subscription_plan, 'success', expiryDate]);
+        res.json({ success: true });
+      } catch (dbError) {
+        console.error('Database error:', dbError);
+        res.status(500).json({ error: 'Database error' });
+      }
+    } else {
+      console.error('Signature mismatch');
+      res.status(400).json({ success: false });
+    }
+
+  } catch (error) {
+    console.error('Error in verify-payment:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+
+// API endpoint to check if the user is premium
+app.post('/check-premium', async (req, res) => {
+  const token = req.headers['authorization'];
+
+  if (!token) {
+    return res.status(400).json({ message: 'Token is required' });
+  }
+
+  try {
+    const userId = await getUserIdFromToken(token);
+
+    // Check in subscriptions table if user exists and is premium
+    connection.query('SELECT * FROM subscriptions WHERE user_id = ?', [userId], (err, results) => {
+      if (err) {
+        return res.status(500).json({ message: 'Database error', error: err });
+      }
+
+      if (results.length === 0) {
+        return res.status(200).json({ premium: false });
+      }
+
+      const subscription = results[0];
+
+      // Check expiry date
+      const currentDate = new Date();
+      const expiryDate = new Date(subscription.expiry_date);
+
+      if (expiryDate < currentDate) {
+        return res.status(200).json({ premium: false });
+      }
+
+      return res.status(200).json({ premium: true });
+    });
+  } catch (error) {
+    return res.status(500).json({ message: 'Error processing token', error });
+  }
+});
+
+app.post('/api/magic/usage', async (req, res) => {
+  const { token } = req.body;
+
+  try {
+    // Step 1: Retrieve userId from the token
+    const userId = await getUserIdFromToken(token);
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+
+    // Step 2: Check user's magic usage count for today
+    const [usageResult] = await connection.promise().query(
+      'SELECT COUNT(*) AS usage_count FROM magic_usage WHERE user_id = ? AND DATE(created_at) = CURDATE()',
+      [userId]
+    );
+
+    const usageCount = usageResult[0].usage_count;
+    const maxFreeMagicUsage = 5; // Max allowed magic usage per day for free users
+
+    // Step 3: Determine if the user can use Magic based on usage count
+    const canUseMagic = usageCount < maxFreeMagicUsage;
+
+    // Step 4: Return the result
+    res.json({ canUseMagic });
+  } catch (error) {
+    console.error('Error checking magic usage:', error);
+    res.status(500).json({ error: 'Error checking magic usage' });
   }
 });
 
