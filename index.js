@@ -8689,6 +8689,67 @@ app.post('/api/pomodoro/ai-recommendation', async (req, res) => {
 });
 
 
+app.post('/api/flashcard/ai-explanation', async (req, res) => {
+
+
+  try {
+
+
+    // Get the flashcard data from the request body
+    const { question, answer } = req.body;
+
+    // AI Prompt
+    const prompt = `You are an AI tutor. The following is a question and its answer. Please generate an explanation for the answer and explain why it is correct in simple terms:
+
+    Question: ${question}
+    Answer: ${answer}
+
+    Explanation: `;
+
+    console.log('Generating AI explanation for flashcard', question);
+
+    // AI Integration & Retry Logic
+    const generateExplanationWithRetry = async () => {
+      let attempts = 0;
+      const MAX_RETRIES = 5;
+
+      while (attempts < MAX_RETRIES) {
+        try {
+          const chat = model.startChat({ history: [] });
+          const result = await chat.sendMessage(prompt);
+          const rawResponse = await result.response.text();
+
+          const sanitizedResponse = rawResponse.replace(/```(?:json)?/g, '').trim();
+          let explanation;
+
+          try {
+            explanation = sanitizedResponse;
+          } catch (parseError) {
+            throw new Error('Invalid response from AI');
+          }
+
+          return explanation;
+        } catch (error) {
+          attempts++;
+          if (attempts === MAX_RETRIES) {
+            throw new Error('Failed to generate AI explanation after multiple attempts');
+          }
+          await new Promise(resolve => setTimeout(resolve, 2000)); // Retry delay
+        }
+      }
+    };
+
+    // Get AI-generated explanation
+    const aiExplanation = await generateExplanationWithRetry();
+    console.log('AI Explanation given');
+    res.json({ explanation: aiExplanation }); // Return explanation to frontend
+  } catch (error) {
+    console.error('Error processing request:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+
 
 // Start the server
 app.listen(PORT, () => {
