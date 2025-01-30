@@ -8589,6 +8589,107 @@ app.post('/api/magic/usage', async (req, res) => {
 });
 
 
+
+app.post('/api/pomodoro/ai-recommendation', async (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+
+  try {
+    const userId = await getUserIdFromToken(token); // Fetch user ID from token
+
+    // Fetch user's past Pomodoro sessions (including null durations)
+    const query = `
+      SELECT session_type, duration, session_date 
+      FROM pomodoro_date 
+      WHERE user_id = ?
+    `;
+
+    connection.query(query, [userId], async (err, results) => {
+      if (err) {
+        console.error('Database error (fetching pomodoro data):', err);
+        return res.status(500).json({ error: 'Failed to fetch pomodoro data' });
+      }
+
+      // Get today's day (e.g., Monday, Tuesday)
+      const today = moment().format('dddd');
+
+      // Format session data for AI prompt
+      const sessionData = results.map(row => ({
+        type: row.session_type || "unknown",  // Handle null session type
+        duration: row.duration ? row.duration / 60 : null, // Convert to minutes (keep null if duration is missing)
+        date: row.session_date,
+        day: moment(row.session_date).format('dddd') // Extract day name from date
+      }));
+
+      // AI Prompt
+      const prompt = `Analyze the following Pomodoro session history and suggest an optimal study and break duration for today (${today}):
+      
+      Sessions Data: 
+      ${JSON.stringify(sessionData, null, 2)}
+
+      Guidelines:
+      1. Suggest a balanced study and break time based on past completed sessions.
+      2. If user studies longer on weekends (Saturday/Sunday), suggest longer study times for those days.
+      3. If the user struggles with long sessions on weekdays, suggest shorter intervals for days like Monday-Friday.
+      4. Ignore sessions with null durations but consider them for behavioral patterns.
+      5. The break should be proportionate to study time (not too long or too short).
+      6. Return only a JSON object like this:
+      
+      {
+        "studyTime": "number (in minutes)",
+        "breakTime": "number (in minutes)"
+      }
+      `;
+
+      console.log('Generating AI-based Pomodoro recommendations for', today);
+
+      // AI Integration & Retry Logic
+      const generateRecommendationsWithRetry = async () => {
+        let attempts = 0;
+        const MAX_RETRIES = 3;
+
+        while (attempts < MAX_RETRIES) {
+          try {
+            const chat = model.startChat({ history: [] });
+            const result = await chat.sendMessage(prompt);
+            const rawResponse = await result.response.text();
+
+            const sanitizedResponse = rawResponse.replace(/```(?:json)?/g, '').trim();
+            let recommendation;
+
+            try {
+              recommendation = JSON.parse(sanitizedResponse);
+            } catch (parseError) {
+              throw new Error('Invalid JSON response from AI');
+            }
+
+            return recommendation;
+          } catch (error) {
+            attempts++;
+            if (attempts === MAX_RETRIES) {
+              throw new Error('Failed to generate AI recommendation after multiple attempts');
+            }
+            await new Promise(resolve => setTimeout(resolve, 2000)); // Retry delay
+          }
+        }
+      };
+
+      // Get AI-recommended Pomodoro times
+      const aiRecommendation = await generateRecommendationsWithRetry();
+      console.log('AI Recommendation:', aiRecommendation);
+      res.json(aiRecommendation); // Return AI recommendation to frontend
+    });
+  } catch (error) {
+    console.error('Error processing request:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+
+
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
