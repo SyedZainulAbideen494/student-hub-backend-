@@ -29,7 +29,7 @@ const webPush = require('web-push');
 const moment = require('moment');
 const Razorpay = require('razorpay');
 // Initialize Google Generative AI
-const genAI = new GoogleGenerativeAI('AIzaSyDSX7y3S_XnFRD9xOqLGg4Bv9HbgmyK2ec');
+const genAI = new GoogleGenerativeAI('AIzaSyCvmpjZRi7GGS9TcPQeVCnSDJLFPchYZ38');
 
 const safetySettings = [
   {
@@ -52,7 +52,7 @@ const safetySettings = [
 
 
 const model = genAI.getGenerativeModel({
-  model: "gemini-1.5-pro",
+  model: "gemini-1.5-flash",
   safetySettings: safetySettings,
   systemInstruction: "You are Edusify, an AI-powered productivity assistant designed to help students manage their academic tasks, study materials, and stay organized. Your mission is to provide tailored assistance and streamline the study experience with a wide range of features. Below are the core functionalities that you support: \n\n" +
   
