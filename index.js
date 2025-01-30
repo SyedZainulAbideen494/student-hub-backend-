@@ -7748,42 +7748,62 @@ app.post("/summarize-pdf/notes", uploadPDF.single("file"), async (req, res) => {
 
     const userPrompt = options.map((opt) => prompts[opt]).join("\n");
 
-    // Process the document using generative AI
     const model = genAI.getGenerativeModel({ model: "models/gemini-1.5-flash" });
-    const result = await model.generateContent([
-      {
-        inlineData: {
-          data: Buffer.from(fs.readFileSync(filePath)).toString("base64"),
-          mimeType: "application/pdf",
-        },
-      },
-      userPrompt,
-    ]);
 
-    // Extract generated content (HTML)
-    const generatedText = result.response.candidates?.[0]?.content?.parts?.[0]?.text || "No content generated";
+    let generatedText;
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const result = await model.generateContent([
+          {
+            inlineData: {
+              data: Buffer.from(fs.readFileSync(filePath)).toString("base64"),
+              mimeType: "application/pdf",
+            },
+          },
+          userPrompt,
+        ]);
+
+        // Extract generated content (HTML)
+        generatedText = result.response.candidates?.[0]?.content?.parts?.[0]?.text || "No content generated";
+
+        console.log(`AI successfully processed the document on attempt ${attempt}`);
+        break; // Exit loop if successful
+      } catch (error) {
+        console.error(`Attempt ${attempt} failed:`, error.message);
+
+        if (attempt === MAX_RETRIES) {
+          throw new Error("AI service failed after multiple attempts.");
+        }
+
+        // Exponential backoff delay (2^attempt * 100 ms)
+        const delayMs = Math.pow(2, attempt) * 100;
+        console.log(`Retrying in ${delayMs}ms...`);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
 
     // Insert notes into the database
     const queryStrInsert = `
     INSERT INTO flashcards (title, description, headings, is_public, user_id, subject_id, is_pdf)
     VALUES (?, ?, ?, ?, ?, ?, ?)
-  `;
-  const title = "Generated Notes"; // Example title
-  const description = "Notes generated from uploaded PDF"; // Example description
-  const isPublic = false; // Notes are private by default
-  const subjectId = null; // No subject_id for now
-  const isPdf = 1; // Setting the is_pdf column to 1
+    `;
 
-  const resultInsert = await query(queryStrInsert, [title, description, generatedText, isPublic, userId, subjectId, isPdf]);
+    const title = "Generated Notes"; // Example title
+    const description = "Notes generated from uploaded PDF"; // Example description
+    const isPublic = false; // Notes are private by default
+    const subjectId = null; // No subject_id for now
+    const isPdf = 1; // Setting the is_pdf column to 1
 
-  // Retrieve the inserted note ID
+    const resultInsert = await query(queryStrInsert, [title, description, generatedText, isPublic, userId, subjectId, isPdf]);
+
+    // Retrieve the inserted note ID
     const noteId = resultInsert.insertId;
 
     // Cleanup temporary file
     fs.unlinkSync(filePath);
 
     res.json({ result: generatedText, message: "Notes saved successfully!", noteId });
-    console.log('created notes from pdf');
+    console.log("Created notes from PDF");
   } catch (error) {
     console.error("Error:", error);
     res.status(500).json({ error: "Something went wrong!" });
@@ -8169,7 +8189,7 @@ app.post("/api/saveGoal", async (req, res) => {
     // AI Integration Logic
     const generateStudyPlanWithRetry = async () => {
       let attempts = 0;
-      const MAX_RETRIES = 3;
+      const MAX_RETRIES = 10;
 
       while (attempts < MAX_RETRIES) {
         try {
