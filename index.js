@@ -8644,7 +8644,7 @@ app.post('/api/pomodoro/ai-recommendation', async (req, res) => {
       }
       `;
 
-      console.log('Generating AI-based Pomodoro recommendations for', today);
+      console.log('Generating AI-based Pomodoro recommendations for', today, userId);
 
       // AI Integration & Retry Logic
       const generateRecommendationsWithRetry = async () => {
