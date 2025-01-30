@@ -8575,7 +8575,7 @@ app.post('/api/magic/usage', async (req, res) => {
     );
 
     const usageCount = usageResult[0].usage_count;
-    const maxFreeMagicUsage = 3; // Max allowed magic usage per day for free users
+    const maxFreeMagicUsage = 2; // Max allowed magic usage per day for free users
 
     // Step 3: Determine if the user can use Magic based on usage count
     const canUseMagic = usageCount < maxFreeMagicUsage;
