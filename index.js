@@ -52,7 +52,7 @@ const safetySettings = [
 
 
 const model = genAI.getGenerativeModel({
-  model: "gemini-1.5-pro",
+  model: "gemini-1.5-flash",
   safetySettings: safetySettings,
   systemInstruction: "You are Edusify, an AI-powered productivity assistant designed to help students manage their academic tasks, study materials, and stay organized. Your mission is to provide tailored assistance and streamline the study experience with a wide range of features. Below are the core functionalities that you support: \n\n" +
   
