@@ -52,7 +52,7 @@ const safetySettings = [
 
 
 const model = genAI.getGenerativeModel({
-  model: "gemini-1.5-flash",
+  model: "gemini-1.5-pro",
   safetySettings: safetySettings,
   systemInstruction: "You are Edusify, an AI-powered productivity assistant designed to help students manage their academic tasks, study materials, and stay organized. Your mission is to provide tailored assistance and streamline the study experience with a wide range of features. Below are the core functionalities that you support: \n\n" +
   
@@ -3474,11 +3474,10 @@ app.post('/api/feedback', (req, res) => {
 });
 
 
-const MAX_RETRIES = 15;
+const MAX_RETRIES = 10;
 
 // Helper function to introduce a delay (in milliseconds)
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 app.post('/api/chat/ai', async (req, res) => {
   const { message, chatHistory, token } = req.body;
@@ -3495,7 +3494,6 @@ app.post('/api/chat/ai', async (req, res) => {
       return res.status(401).json({ error: 'Invalid token or user not authenticated.' });
     }
 
-
     const initialChatHistory = [
       {
         role: 'user',
@@ -3511,44 +3509,53 @@ app.post('/api/chat/ai', async (req, res) => {
       history: chatHistory || initialChatHistory,
     });
 
-    // Log the user's question
     console.log('User asked:', message);
 
-    // Send message to the AI model and get the response
-    const result = await chat.sendMessage(message);
-    const aiResponse = result.response.text();
+    let aiResponse;
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        // Attempt to send message to AI
+        const result = await chat.sendMessage(message);
+        aiResponse = result.response.text();
+        console.log(`AI responded on attempt ${attempt}`);
+        break; // Exit loop if successful
+      } catch (error) {
+        console.error(`Attempt ${attempt} failed:`, error.message);
 
-    // Log the AI's response
-    console.log('AI responded');
+        if (attempt === MAX_RETRIES) {
+          throw new Error('AI service failed after multiple attempts.');
+        }
+
+        // Exponential backoff delay (2^attempt * 100 ms)
+        const delayMs = Math.pow(2, attempt) * 100;
+        console.log(`Retrying in ${delayMs}ms...`);
+        await delay(delayMs);
+      }
+    }
 
     // Store user message and AI response in the database
-    await query(
-      'INSERT INTO ai_history (user_id, user_message, ai_response) VALUES (?, ?, ?)',
-      [userId, message, aiResponse]
-    );
+    await query('INSERT INTO ai_history (user_id, user_message, ai_response) VALUES (?, ?, ?)', [
+      userId,
+      message,
+      aiResponse,
+    ]);
 
-    // Send the response back to the client
     res.json({ response: aiResponse });
   } catch (error) {
-    // Handle errors
     console.error('Error in /api/chat/ai endpoint:', error);
 
     let errorMessage = 'An error occurred while processing your request. Please try again later.';
     if (error.response) {
-      errorMessage = `Error: ${error.response.status} - ${
-        error.response.data?.message || error.response.statusText
-      }`;
+      errorMessage = `Error: ${error.response.status} - ${error.response.data?.message || error.response.statusText}`;
     } else if (error.message) {
       errorMessage = `Error: ${error.message}`;
     }
 
-    // Log the final error message for debugging
     console.error('Final error message sent to user:', errorMessage);
-
-    // Send a user-friendly error message
     res.status(500).json({ error: errorMessage });
   }
 });
+
 
 app.post('/api/chat/ai/demo', async (req, res) => {
   const { message, chatHistory } = req.body;
