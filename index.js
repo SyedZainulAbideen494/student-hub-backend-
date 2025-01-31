@@ -2109,56 +2109,49 @@ app.post('/api/fetchEvents', async (req, res) => {
   }
 });
 
-// Add event route
+
 app.post('/api/addEvent', async (req, res) => {
-  const { title, date, token } = req.body;
+  const { title, datetime, token } = req.body; // Change from `date` to `datetime`
 
   try {
     const userId = await getUserIdFromToken(token);
     if (!userId) return res.status(401).json({ message: 'Unauthorized' });
 
-    // Step 1: Insert event
-    const sql = 'INSERT INTO events (title, date, user_id) VALUES (?, ?, ?)';
-    const [result] = await connection.promise().query(sql, [title, date, userId]);
+    // Insert event with datetime
+    const sql = 'INSERT INTO events (title, datetime, user_id) VALUES (?, ?, ?)';
+    const [result] = await connection.promise().query(sql, [title, datetime, userId]);
 
-    // Step 2: Update Points
+    // Update Points (same as before)
     const pointsQuery = 'SELECT points, updated_at FROM user_points WHERE user_id = ?';
     const [pointsResults] = await connection.promise().query(pointsQuery, [userId]);
 
     const currentTime = new Date();
-    const fiveMinutesAgo = new Date(currentTime.getTime() - 5 * 60000); // Subtract 5 minutes
-    let pointsToAdd = 3; // Default points to add
+    const fiveMinutesAgo = new Date(currentTime.getTime() - 5 * 60000);
+    let pointsToAdd = 3;
 
     if (pointsResults.length > 0) {
-      // If user exists, check updated_at timestamp
       const lastUpdated = new Date(pointsResults[0].updated_at);
       if (lastUpdated > fiveMinutesAgo) {
-        // If last update was less than 5 minutes ago, add fewer points
-        pointsToAdd = 3; // Or any number you choose
+        pointsToAdd = 3;
       }
 
-      // Update points and set the updated_at timestamp
       await connection.promise().query(
         'UPDATE user_points SET points = points + ?, updated_at = ? WHERE user_id = ?',
         [pointsToAdd, currentTime, userId]
       );
     } else {
-      // If user does not exist, insert new record with the points
       await connection.promise().query(
         'INSERT INTO user_points (user_id, points, updated_at) VALUES (?, ?, ?)',
         [userId, pointsToAdd, currentTime]
       );
     }
 
-    // Send response with event ID
     res.send({ id: result.insertId });
   } catch (error) {
     console.error('Error adding event:', error);
     res.status(500).send({ message: 'Error adding event' });
   }
 });
-
-
 
 
 // Remove Event
@@ -2200,7 +2193,7 @@ app.post('/api/events/remove', async (req, res) => {
 // Update Event
 app.post('/api/events/update', (req, res) => {
   const { id, title, date, token } = req.body; // Assuming token-based authentication
-  const query = 'UPDATE events SET title = ?, date = ? WHERE id = ?';
+  const query = 'UPDATE events SET title = ?, datetime = ? WHERE id = ?';
   connection.query(query, [title, date, id], err => {
       if (err) throw err;
       res.json({ success: true });
@@ -3664,7 +3657,7 @@ app.post('/api/getUserData/home/box', async (req, res) => {
           [userId]
       );
       const todayEvents = await query(
-          'SELECT * FROM events WHERE user_id = ? AND date = CURDATE()', 
+          'SELECT * FROM events WHERE user_id = ? AND datetime = CURDATE()', 
           [userId]
       );
 
@@ -3674,7 +3667,7 @@ app.post('/api/getUserData/home/box', async (req, res) => {
           [userId]
       );
       const upcomingEvents = await query(
-          'SELECT * FROM events WHERE user_id = ? AND date > CURDATE()', 
+          'SELECT * FROM events WHERE user_id = ? AND datetime > CURDATE()', 
           [userId]
       );
 
@@ -3733,9 +3726,9 @@ app.post('/api/events/today/data/home', async (req, res) => {
 
       // Query for today's events or upcoming events based on the request
       if (upcoming) {
-          sql = 'SELECT * FROM events WHERE user_id = ? AND date > CURDATE() ORDER BY date ASC';
+          sql = 'SELECT * FROM events WHERE user_id = ? AND datetime > CURDATE() ORDER BY datetime ASC';
       } else {
-          sql = 'SELECT * FROM events WHERE user_id = ? AND date = ?';
+          sql = 'SELECT * FROM events WHERE user_id = ? AND datetime = ?';
           params.push(event_date);
       }
 
