@@ -3197,29 +3197,31 @@ app.get('/cancel', (req, res) => {
 });
 
 
-// Function to check and update expired premium accounts
-const checkExpiredPremiums = () => {
+// Function to remove expired premium subscriptions
+const removeExpiredSubscriptions = () => {
   const currentDate = new Date();
 
-  const query = `
-    UPDATE users 
-    SET is_premium = 0 
-    WHERE is_premium = 1 AND premium_expiry_date < ?`;
+  // Delete subscriptions where expiry_date has passed
+  const deleteQuery = `
+    DELETE FROM subscriptions 
+    WHERE expiry_date < ?`;
 
-  connection.query(query, [currentDate], (err, results) => {
+  connection.query(deleteQuery, [currentDate], (err, results) => {
     if (err) {
-      console.error('Error updating expired premium accounts:', err);
+      console.error('Error deleting expired subscriptions:', err);
     } else {
-      console.log(`Updated ${results.affectedRows} expired premium accounts.`);
+      console.log(`Deleted ${results.affectedRows} expired subscriptions.`);
     }
   });
 };
 
-// Schedule the cron job to run every 24 hours (midnight)
-cron.schedule('0 0 * * *', () => {
-  console.log('Running check for expired premium accounts...');
-  checkExpiredPremiums();
+
+// Schedule the cron job to run every day at 6:30 PM UTC (which is 12:00 AM IST)
+cron.schedule('30 18 * * *', () => {
+  console.log('Running cleanup for expired subscriptions...');
+  removeExpiredSubscriptions();
 });
+
 
 
 // Example in Node.js with Express
@@ -8445,10 +8447,9 @@ const razorpay = new Razorpay({
   key_secret: 'ec9nrw9RjbIcvpkufzaYxmr6',
 });
 
-// Create Order
 app.post('/buy-premium', async (req, res) => {
   try {
-    const { amount, currency, subscription_plan, token } = req.body;
+    const { amount, currency, subscription_plan, token, duration } = req.body;
     
     // Extract user ID from token
     const userId = await getUserIdFromToken(token);
@@ -8458,7 +8459,7 @@ app.post('/buy-premium', async (req, res) => {
       amount: amount * 100, // Convert to paise
       currency,
       receipt: `order_rcptid_${Math.floor(Math.random() * 100000)}`,
-      notes: { subscription_plan, userId },
+      notes: { subscription_plan, userId, duration },
     };
 
     razorpay.orders.create(options, (err, order) => {
@@ -8471,9 +8472,10 @@ app.post('/buy-premium', async (req, res) => {
   }
 });
 
+
 app.post('/verify-payment', async (req, res) => {
   try {
-    const { payment_id, order_id, signature, token, subscription_plan } = req.body;
+    const { payment_id, order_id, signature, token, subscription_plan, duration } = req.body;
 
     // Extract user ID from token
     const userId = await getUserIdFromToken(token);
@@ -8484,21 +8486,23 @@ app.post('/verify-payment', async (req, res) => {
 
     const body = `${order_id}|${payment_id}`;
     const expected_signature = crypto
-      .createHmac('sha256', 'ec9nrw9RjbIcvpkufzaYxmr6') // Ensure this is your actual secret key
+      .createHmac('sha256', 'ec9nrw9RjbIcvpkufzaYxmr6') // Use your secret key
       .update(body)
       .digest('hex');
 
     if (expected_signature === signature) {
-      // Store the subscription in the database
+      // Calculate expiry date based on duration
       const expiryDate = new Date();
-      expiryDate.setDate(expiryDate.getDate() + 30); // Set subscription expiry (e.g., 30 days)
+      if (duration === 'weekly') expiryDate.setDate(expiryDate.getDate() + 7);
+      else if (duration === 'monthly') expiryDate.setDate(expiryDate.getDate() + 30);
+      else if (duration === '6months') expiryDate.setDate(expiryDate.getDate() + 180);
 
       const queryText = `
         INSERT INTO subscriptions (user_id, subscription_plan, payment_status, payment_date, expiry_date)
         VALUES (?, ?, ?, NOW(), ?)
       `;
-         // Log when the user is upgraded to premium
-         console.log(`User ${userId} upgraded to premium.`);
+
+      console.log(`User ${userId} upgraded to premium for ${duration}.`);
 
       try {
         await query(queryText, [userId, subscription_plan, 'success', expiryDate]);
@@ -8511,12 +8515,12 @@ app.post('/verify-payment', async (req, res) => {
       console.error('Signature mismatch');
       res.status(400).json({ success: false });
     }
-
   } catch (error) {
     console.error('Error in verify-payment:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
 
 
 // API endpoint to check if the user is premium
