@@ -8285,6 +8285,41 @@ app.post("/api/study-plan", async (req, res) => {
   }
 });
 
+app.post("/api/update-study-plan", async (req, res) => {
+  try {
+    const { token, studyPlan } = req.body; // Get token and updated study plan from the request body
+
+    if (!token || !studyPlan) {
+      return res.status(400).json({ success: false, message: "Token and study plan are required" });
+    }
+
+    // Get userId from token (this function should be defined based on your auth system)
+    const userId = await getUserIdFromToken(token);
+
+    // Convert the study plan to a string (if it's an object) for database storage
+    const studyPlanString = typeof studyPlan === 'object' ? JSON.stringify(studyPlan) : studyPlan;
+
+    // SQL query to update the study plan
+    const sql = `
+      UPDATE study_plans
+      SET study_plan = ?
+      WHERE user_id = ?
+    `;
+
+    const results = await query(sql, [studyPlanString, userId]);
+
+    if (results.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: "Study plan not found or update failed" });
+    }
+
+    // Respond with success
+    res.status(200).json({ success: true, message: "Study plan updated successfully" });
+  } catch (error) {
+    console.error("Error updating study plan:", error);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+});
+
 
 app.post("/api/study-plan-created-date", async (req, res) => {
   try {
