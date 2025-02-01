@@ -8788,7 +8788,111 @@ app.post('/api/flashcard/ai-explanation', async (req, res) => {
   }
 });
 
+const generateWithRetry = async (prompt) => {
+  let attempts = 0;
+  const MAX_RETRIES = 5;
 
+  while (attempts < MAX_RETRIES) {
+    try {
+      const chat = model.startChat({ history: [] });
+      const result = await chat.sendMessage(prompt);
+      const rawResponse = await result.response.text();
+
+      const sanitizedResponse = rawResponse.replace(/```(?:json)?/g, '').trim();
+
+      return sanitizedResponse; 
+    } catch (error) {
+      attempts++;
+      if (attempts === MAX_RETRIES) {
+        throw new Error('Failed to generate AI response after multiple attempts');
+      }
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Retry delay
+    }
+  }
+};
+
+app.post('/api/question-paper/generate', async (req, res) => {
+  try {
+    const { subject, chapters, board, grade, token } = req.body;
+    if (!subject || !chapters || !board || !grade || !token) {
+      return res.status(400).json({ error: 'All fields are required' });
+    }
+
+    const userId = await getUserIdFromToken(token);
+
+    const prompt = `
+      Generate a 15-mark question paper for ${subject}.
+      Chapters: ${chapters.join(', ')}
+      Board: ${board}, Grade: ${grade}
+
+      **Output format:** 
+      - **Use proper HTML tags** instead of Markdown.
+      - **Do NOT use asterisks, underscores, or code blocks.**
+      - **Ensure the content is well-structured and formatted using clean HTML.**
+
+      **Structure:**
+      <h2>Subject: ${subject} (Grade ${grade})</h2>
+      <p><strong>Board:</strong> ${board}</p>
+
+      <h3>Multiple Choice Questions (MCQs) - 5 Marks</h3>
+      <ol>
+        <li>Question 1? <br> (A) Option 1 &nbsp;<br> (B) Option 2 &nbsp;<br> (C) Option 3 &nbsp;<br> (D) Option 4</li>
+        <li>Question 2? ...</li>
+      </ol>
+
+      <h3>Short Answer Questions - 6 Marks</h3>
+      <ol>
+        <li>Question 6: Explain ...</li>
+        <li>Question 7: Describe ...</li>
+      </ol>
+
+      <h3>Long Answer Question - 5 Marks</h3>
+      <p>Question 9: Discuss ...</p>
+
+      <h3>Answers</h3>
+      <ul>
+        <li><strong>MCQ 1:</strong> Answer</li>
+        <li><strong>MCQ 2:</strong> Answer</li>
+        <li><strong>Short Answer 1:</strong> Answer</li>
+        <li><strong>Long Answer:</strong> Answer</li>
+      </ul>
+    `;
+
+    console.log('Generating AI-powered question paper');
+    const questionPaper = await generateWithRetry(prompt);
+
+    // Insert the generated question paper into the database
+    const result = await query('INSERT INTO question_papers (user_id, subject, board, grade, questions) VALUES (?, ?, ?, ?, ?)', 
+      [userId, subject, board, grade, questionPaper]
+    );
+
+    const questionPaperId = result.insertId;
+
+    res.json({ message: 'Question paper generated successfully', questionPaper: { id: questionPaperId, content: questionPaper } });
+
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Failed to generate question paper' });
+  }
+});
+
+
+// **Fetch User's Question Papers**
+app.get('/api/question-paper/user', async (req, res) => {
+  try {
+    const { token } = req.headers;
+    if (!token) return res.status(401).json({ error: 'Unauthorized' });
+
+    const userId = await getUserIdFromToken(token);
+    const papers = await query('SELECT * FROM question_papers WHERE user_id = ?', [userId]);
+
+    res.json({ questionPapers: papers });
+
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Failed to fetch question papers' });
+  }
+});
 
 // Start the server
 app.listen(PORT, () => {
