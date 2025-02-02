@@ -9065,91 +9065,29 @@ app.get('/api/question-paper/user', async (req, res) => {
 });
 
 
+// API Route to get the number of papers a user has created
+app.get('/api/get-user-paper-count', (req, res) => {
+  const { userId } = req.query;  // Get userId from the query parameters
 
-app.post('/api/voice-assistant', async (req, res) => {
-  const { audioData, token } = req.body;
-
-  try {
-    // Validate required inputs
-    if (!audioData || !token) {
-      return res.status(400).json({ error: 'Audio data and token are required.' });
-    }
-
-    // Get user ID from token
-    const userId = await getUserIdFromToken(token);
-    if (!userId) {
-      return res.status(401).json({ error: 'Invalid token or user not authenticated.' });
-    }
-
-    // Assume that speechData is already converted (user's speech to text)
-    const userMessage = audioData;
-    console.log('User asked:', userMessage);
-
-    const chatHistory = [
-      {
-        role: 'user',
-        parts: [{ text: userMessage }],
-      },
-      {
-        role: 'model',
-        parts: [{ text: 'Great to meet you. What would you like to know?' }],
-      },
-    ];
-
-    const chat = model.startChat({
-      history: chatHistory,
-    });
-
-    let aiResponse;
-    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-      try {
-        // Send message to AI
-        const result = await chat.sendMessage(userMessage);
-        aiResponse = result.response.text();
-        console.log(`AI responded on attempt ${attempt}`);
-        break; // Exit loop if successful
-      } catch (error) {
-        console.error(`Attempt ${attempt} failed:`, error.message);
-
-        if (attempt === MAX_RETRIES) {
-          throw new Error('AI service failed after multiple attempts.');
-        }
-
-        // Exponential backoff delay (2^attempt * 100 ms)
-        const delayMs = Math.pow(2, attempt) * 100;
-        console.log(`Retrying in ${delayMs}ms...`);
-        await delay(delayMs);
-      }
-    }
-
-    // Convert AI response text to speech (this could be using some external TTS service)
-    const aiSpeechData = await textToSpeech(aiResponse); // Function that returns speech data
-
-    // Store user message and AI response in the database
-    await query('INSERT INTO ai_history (user_id, user_message, ai_response) VALUES (?, ?, ?)', [
-      userId,
-      userMessage,
-      aiResponse,
-    ]);
-
-    res.json({ response: aiResponse, aiSpeechData });
-  } catch (error) {
-    console.error('Error in /api/voice-assistant endpoint:', error);
-
-    let errorMessage = 'An error occurred while processing your request. Please try again later.';
-    if (error.response) {
-      errorMessage = `Error: ${error.response.status} - ${error.response.data?.message || error.response.statusText}`;
-    } else if (error.message) {
-      errorMessage = `Error: ${error.message}`;
-    }
-
-    console.error('Final error message sent to user:', errorMessage);
-    res.status(500).json({ error: errorMessage });
+  if (!userId) {
+    return res.status(400).json({ message: 'User ID is required' });
   }
+
+  // SQL query to count the number of papers for the given user
+  const query = 'SELECT COUNT(*) AS paperCount FROM question_papers WHERE user_id = ?';
+
+  // Execute the query
+  connection.execute(query, [userId], (err, results) => {
+    if (err) {
+      console.error('Error fetching paper count:', err);
+      return res.status(500).json({ message: 'Server error' });
+    }
+
+    // Send the result back to the frontend
+    const paperCount = results[0].paperCount;
+    res.status(200).json({ paperCount });
+  });
 });
-
-
-
 
 // Start the server
 app.listen(PORT, () => {
