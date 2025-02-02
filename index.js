@@ -8898,53 +8898,112 @@ app.post('/api/question-paper/generate', async (req, res) => {
     } else {
       // 📌 Regular School Board Format
       prompt = `
-Generate a **30-mark advanced school question paper** for **${subject}**.
-**Chapters:** ${chapters.join(', ')}
-**Board:** ${board}, **Grade:** ${grade}
-
-📌 **Guidelines:**
-- **Strictly use HTML tags** for structuring content.
-- **Do NOT use Markdown, asterisks, or plain text formatting.**
-- The difficulty level should align with **${board}** standards.
-- **Use a mix of objective & subjective questions**.
-- **Ensure well-formatted, structured, and readable HTML output**.
-
----
-
-<h2>Subject: ${subject} (Grade ${grade})</h2>
-<p><strong>Board:</strong> ${board}</p>
-<h3>Instructions:</h3>
-<ul>
-  <li>All questions are compulsory.</li>
-  <li>Read the questions carefully before answering.</li>
-</ul>
-
-<h3>🟢 Section A: Objective Questions (10 Marks)</h3>
-<h4>Multiple Choice Questions (MCQs) - (5 Marks)</h4>
-<ol>
-  <li>Question 1? <br> (A) Option 1 &nbsp;<br>  (B) Option 2 &nbsp;<br>  (C) Option 3 &nbsp;<br>  (D) Option 4</li>
-</ol>
-
-<h4>Fill in the Blanks - (3 Marks)</h4>
-<ol>
-  <li>________ is the process of ...</li>
-</ol>
-
-<h3>🔵 Section B: Short Answer Questions (10 Marks)</h3>
-<ol>
-  <li>What is the significance of ...?</li>
-</ol>
-
-<h3>🔴 Section C: Long Answer & Case Study (10 Marks)</h3>
-<ol>
-  <li>Discuss the impact of ...</li>
-</ol>
-
-<h3>✅ Answers Section</h3>
-<ul>
-  <li><strong>MCQ 1:</strong> Answer</li>
-</ul>
-`;
+      Generate a **30-mark advanced school question paper** for **${subject}**.
+      **Chapters:** ${chapters.join(', ')}
+      **Board:** ${board}, **Grade:** ${grade}
+      
+      📌 **Guidelines:**
+      - **Strictly use HTML tags** for structuring content.
+      - **Do NOT use Markdown, asterisks, or plain text formatting.**
+      - The difficulty level should be **extremely high**, suitable for **${board}** standards.
+      - Use **higher-order thinking skills (HOTS)**, and include complex theoretical, analytical, and application-based questions.
+      - Incorporate **tricky problem-solving** and **conceptual questions** that require deep understanding and critical thinking.
+      - Ensure the questions test **all aspects of the subject**, including theory, application, analysis, and synthesis.
+      - Ensure **well-formatted, structured, and readable HTML output**.
+      
+      ---
+      
+      <h2>Subject: ${subject} (Grade ${grade})</h2>
+      <p><strong>Board:</strong> ${board}</p>
+      <h3>Instructions:</h3>
+      <ul>
+        <li>All questions are compulsory. Attempt all sections.</li>
+        <li>Answer the questions carefully, as some require detailed explanations and logical steps.</li>
+        <li>Negative marking applies for incorrect answers in multiple-choice and problem-solving questions.</li>
+      </ul>
+      
+      <h3>🟢 Section A: Objective Questions (10 Marks)</h3>
+      
+      <h4>1. Advanced Multiple Choice Questions (MCQs) - (5 Marks)</h4>
+      <ol>
+        <li>What is the maximum possible error when approximating a complex function using the Taylor series expansion? <br> (A) Linear approximation error &nbsp; (B) Quadratic approximation error &nbsp; (C) Exponential approximation error &nbsp; (D) Logarithmic approximation error</li>
+        <li>Which of the following best explains the principle behind Schrödinger's cat paradox? <br> (A) Quantum superposition &nbsp; (B) Entanglement &nbsp; (C) The uncertainty principle &nbsp; (D) Classical mechanics</li>
+        <li>In economics, which of the following best describes the effect of increasing government spending during a recession? <br> (A) Inflationary pressure &nbsp; (B) Increase in unemployment &nbsp; (C) Aggregate demand shifts right &nbsp; (D) Supply-side restrictions</li>
+        <li>Which is the most accurate method to measure the energy consumption in a multi-phase electrical system under non-linear load conditions? <br> (A) Direct current method &nbsp; (B) Power factor method &nbsp; (C) True power measurement &nbsp; (D) Virtual energy conversion</li>
+        <li>How does increasing the pressure affect the boiling point of a liquid at a constant temperature? <br> (A) No change &nbsp; (B) Decreases the boiling point &nbsp; (C) Increases the boiling point &nbsp; (D) Causes freezing point to increase</li>
+      </ol>
+      
+      <h4>2. Fill in the Blanks - (3 Marks)</h4>
+      <ol>
+        <li>________ is the phenomenon where light changes its frequency due to the motion of the source, and is used to measure the velocity of distant galaxies.</li>
+        <li>The ________ theorem in statistics allows us to infer the population mean from a sample, provided the sample is sufficiently large.</li>
+        <li>In a chemical reaction, the rate of change of concentration of reactants is often governed by the ________ law.</li>
+      </ol>
+      
+      <h4>3. Match the Following - (2 Marks)</h4>
+      <table border="1">
+        <tr><th>Column A</th><th>Column B</th></tr>
+        <tr><td>Laplace Transform</td><td>Used to solve differential equations</td></tr>
+        <tr><td>Neumann Boundary Condition</td><td>Used in solving partial differential equations</td></tr>
+        <tr><td>Euler’s Method</td><td>Numerical solution of ordinary differential equations</td></tr>
+        <tr><td>First Law of Thermodynamics</td><td>Conservation of energy</td></tr>
+      </table>
+      
+      ---
+      
+      <h3>🔵 Section B: Short Answer Questions (10 Marks)</h3>
+      
+      <h4>1. Short Answer Type - (5 Marks)</h4>
+      <ol>
+        <li>Explain the process of nuclear fusion and discuss the conditions necessary for it to occur in stars.</li>
+        <li>Using the laws of thermodynamics, explain why a heat engine cannot be 100% efficient. Illustrate with a real-world example.</li>
+      </ol>
+      
+      <h4>2. Assertion-Reason Questions - (5 Marks)</h4>
+      <p><strong>For the following questions, choose:</strong><br>
+      (A) Both A and R are true, and R explains A.<br>
+      (B) Both A and R are true, but R does not explain A.<br>
+      (C) A is true, but R is false.<br>
+      (D) A is false, but R is true.</p>
+      <ol>
+        <li><strong>Assertion (A):</strong> The speed of light in a vacuum is constant.<br>
+            <strong>Reason (R):</strong> The speed of light in any medium depends on the wavelength of the light.</li>
+        <li><strong>Assertion (A):</strong> The economic principle of diminishing marginal returns applies only in the short run.<br>
+            <strong>Reason (R):</strong> The law of variable proportions explains the principle of diminishing returns.</li>
+      </ol>
+      
+      ---
+      
+      <h3>🔴 Section C: Long Answer & Case Study (10 Marks)</h3>
+      
+      <h4>1. Long Answer Questions - (6 Marks)</h4>
+      <ol>
+        <li>Discuss the theory of relativity. Explain both special and general relativity, providing real-world applications such as GPS technology.</li>
+        <li>Describe the process of photosynthesis in detail. Explain the role of light energy and how it is converted into chemical energy in plants.</li>
+      </ol>
+      
+      <h4>2. Case-Based Questions - (4 Marks)</h4>
+      <p><strong>Read the passage below and answer the questions:</strong></p>
+      <p>In the year 2023, a major city in the world faced a severe power shortage due to the imbalance between demand and supply of energy. The government proposed a drastic shift toward renewable energy sources to combat the issue. However, critics argue that this might not solve the underlying infrastructure problems. They suggest an increase in nuclear energy usage as a cleaner and more efficient alternative.</p>
+      <ol>
+        <li>What can be inferred about the implications of nuclear energy use in the given context?</li>
+        <li>Propose an alternative solution to the energy crisis, considering the advantages and disadvantages of nuclear power.</li>
+      </ol>
+      
+      ---
+      
+      <h3>✅ Answers Section</h3>
+      <ul>
+        <li><strong>MCQ 1:</strong> Answer</li>
+        <li><strong>Fill-up 1:</strong> Answer</li>
+        <li><strong>Match the Following:</strong> Answer</li>
+        <li><strong>Short Answer 1:</strong> Answer</li>
+        <li><strong>Assertion-Reason 1:</strong> Answer</li>
+        <li><strong>Long Answer 1:</strong> Answer</li>
+        <li><strong>Case Study 1:</strong> Answer</li>
+      </ul>
+      `;
+      
     }
 
     console.log(`Generating AI-powered question paper for ${board}`);
