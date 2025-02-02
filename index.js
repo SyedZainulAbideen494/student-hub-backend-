@@ -8812,6 +8812,8 @@ const generateWithRetry = async (prompt) => {
   }
 };
 
+
+
 app.post('/api/question-paper/generate', async (req, res) => {
   try {
     const { subject, chapters, board, grade, token } = req.body;
@@ -8821,68 +8823,163 @@ app.post('/api/question-paper/generate', async (req, res) => {
 
     const userId = await getUserIdFromToken(token);
 
-    const prompt = `
-      Generate a 15-mark question paper for ${subject}.
-      Chapters: ${chapters.join(', ')}
-      Board: ${board}, Grade: ${grade}
+    let prompt = '';
 
-      **Output format:** 
-      - **Use proper HTML tags** instead of Markdown.
-      - **Do NOT use asterisks, underscores, or code blocks.**
-      - **Ensure the content is well-structured and formatted using clean HTML.**
+    // 📌 Define competitive exams
+    const competitiveExams = ['JEE Mains', 'JEE Advanced', 'NEET', 'CUET', 'GATE', 'UPSC', 'CAT', 'SAT', 'GRE', 'GMAT'];
 
-      **Structure:**
-      <h2>Subject: ${subject} (Grade ${grade})</h2>
-      <p><strong>Board:</strong> ${board}</p>
-
-      <h3>Multiple Choice Questions (MCQs) - 5 Marks</h3>
-      <ol>
-        <li>Question 1? <br> (A) Option 1 &nbsp;<br> (B) Option 2 &nbsp;<br> (C) Option 3 &nbsp;<br> (D) Option 4</li>
-        <li>Question 2? ...</li>
-      </ol>
-
-      <h3>Fill in the Blanks - 4 Marks</h3>
-      <ol>
-        <li>________ is the process of ...</li>
-        <li>The capital of France is ________.</li>
-      </ol>
-
-      <h3>Short Answer Questions - 4 Marks</h3>
-      <ol>
-        <li>Question 6: Explain ...</li>
-        <li>Question 7: Describe ...</li>
-      </ol>
-
-      <h3>Long Answer Questions - 6 Marks</h3>
-      <ol>
-        <li>Question 9: Discuss ...</li>
-        <li>Question 10: Elaborate on ...</li>
-      </ol>
-
-      <h3>Answers</h3>
+    if (competitiveExams.includes(board)) {
+      // 📌 Competitive Exam Format
+      prompt = `
+      Generate a **30-mark competitive exam question paper** for **${subject}**.
+      **Exam:** ${board}
+      **Chapters:** ${chapters.join(', ')}
+      **Grade:** ${grade}
+      
+      📌 **Guidelines:**
+      - **Strictly use HTML tags** for structuring content.
+      - **Do NOT use Markdown, asterisks, or plain text formatting.**
+      - Questions should match the **difficulty level of ${board}**.
+      - Use **higher-order thinking skills (HOTS), conceptual & tricky questions**.
+      - Ensure **structured and well-formatted HTML output**.
+      
+      ---
+      
+      <h2>${board} - ${subject} (Grade ${grade})</h2>
+      <p><strong>Exam:</strong> ${board}</p>
+      <h3>Instructions:</h3>
       <ul>
-        <li><strong>MCQ 1:</strong> Answer</li>
-        <li><strong>MCQ 2:</strong> Answer</li>
-        <li><strong>Fill-up 1:</strong> Answer</li>
-        <li><strong>Fill-up 2:</strong> Answer</li>
-        <li><strong>Short Answer 1:</strong> Answer</li>
-        <li><strong>Short Answer 2:</strong> Answer</li>
-        <li><strong>Long Answer 1:</strong> Answer</li>
-        <li><strong>Long Answer 2:</strong> Answer</li>
+        <li>Each question has negative marking as per ${board} rules.</li>
+        <li>Read questions carefully before answering.</li>
       </ul>
-    `;
+      
+      <h3>🟢 Section A: Multiple Choice Questions (MCQs) - 15 Marks</h3>
+      <ol>
+        <li>Conceptual MCQ 1? <br> (A) Option 1 &nbsp;<br>  (B) Option 2 &nbsp;<br>  (C) Option 3 &nbsp;<br>  (D) Option 4</li>
+        <li>Numerical-based MCQ 2? ...</li>
+      </ol>
+      
+      <h3>🔵 Section B: Assertion-Reasoning & Match the Following (5 Marks)</h3>
+      <h4>Assertion-Reason:</h4>
+      <p><strong>For the following questions, choose:</strong><br>
+      (A) Both A and R are true, and R explains A.<br>
+      (B) Both A and R are true, but R does not explain A.<br>
+      (C) A is true, but R is false.<br>
+      (D) A is false, but R is true.</p>
+      <ol>
+        <li><strong>Assertion (A):</strong> Statement 1<br>
+            <strong>Reason (R):</strong> Statement 2</li>
+      </ol>
+      
+      <h4>Match the Following:</h4>
+      <table border="1">
+        <tr><th>Column A</th><th>Column B</th></tr>
+        <tr><td>Concept 1</td><td>Definition 1</td></tr>
+        <tr><td>Concept 2</td><td>Definition 2</td></tr>
+      </table>
+      
+      <h3>🔴 Section C: Case Study & Numerical (10 Marks)</h3>
+      <h4>Case Study:</h4>
+      <p><strong>Read the passage and answer the questions:</strong></p>
+      <p>[Insert real-world scenario related to ${subject}]</p>
+      <ol>
+        <li>What can be inferred from the passage?</li>
+        <li>Suggest a possible solution.</li>
+      </ol>
+      
+      <h4>Numerical Problem:</h4>
+      <p>[A complex numerical problem related to ${subject}]</p>
+      <ol>
+        <li>Find the value of ...</li>
+        <li>Explain the concept behind your solution.</li>
+      </ol>
+      
+      `;
+    } else {
+      // 📌 Regular School Board Format
+      prompt = `
+Generate a **30-mark advanced school question paper** for **${subject}**.
+**Chapters:** ${chapters.join(', ')}
+**Board:** ${board}, **Grade:** ${grade}
 
-    console.log('Generating AI-powered question paper');
+📌 **Guidelines:**
+- **Strictly use HTML tags** for structuring content.
+- **Do NOT use Markdown, asterisks, or plain text formatting.**
+- The difficulty level should align with **${board}** standards.
+- **Use a mix of objective & subjective questions**.
+- **Ensure well-formatted, structured, and readable HTML output**.
+
+---
+
+<h2>Subject: ${subject} (Grade ${grade})</h2>
+<p><strong>Board:</strong> ${board}</p>
+<h3>Instructions:</h3>
+<ul>
+  <li>All questions are compulsory.</li>
+  <li>Read the questions carefully before answering.</li>
+</ul>
+
+<h3>🟢 Section A: Objective Questions (10 Marks)</h3>
+<h4>Multiple Choice Questions (MCQs) - (5 Marks)</h4>
+<ol>
+  <li>Question 1? <br> (A) Option 1 &nbsp;<br>  (B) Option 2 &nbsp;<br>  (C) Option 3 &nbsp;<br>  (D) Option 4</li>
+</ol>
+
+<h4>Fill in the Blanks - (3 Marks)</h4>
+<ol>
+  <li>________ is the process of ...</li>
+</ol>
+
+<h3>🔵 Section B: Short Answer Questions (10 Marks)</h3>
+<ol>
+  <li>What is the significance of ...?</li>
+</ol>
+
+<h3>🔴 Section C: Long Answer & Case Study (10 Marks)</h3>
+<ol>
+  <li>Discuss the impact of ...</li>
+</ol>
+
+<h3>✅ Answers Section</h3>
+<ul>
+  <li><strong>MCQ 1:</strong> Answer</li>
+</ul>
+`;
+    }
+
+    console.log(`Generating AI-powered question paper for ${board}`);
     const questionPaper = await generateWithRetry(prompt);
 
-    // Insert the generated question paper into the database
-    const result = await query('INSERT INTO question_papers (user_id, subject, board, grade, questions) VALUES (?, ?, ?, ?, ?)', 
-      [userId, subject, board, grade, questionPaper]
+    // 📌 Now Generate Answers Separately
+    const answerPrompt = `
+    Generate **detailed answers** for the following question paper in **HTML format**:
+    
+    - **Use HTML tags** for formatting answers (no Markdown, asterisks, or plain text).
+    - Make sure the answers are clear and detailed, formatted with appropriate HTML tags like <p>, <ol>, <ul>, <li>, <strong>, <em>, <h2>, etc.
+    - Ensure proper structuring and readability.
+    
+    ### Question Paper:
+    ${questionPaper}
+    
+    Ensure that the answers are structured properly in **HTML**.
+    `;
+    
+    console.log('Generating answers for the question paper');
+    const answers = await generateWithRetry(answerPrompt);
+    
+
+    // 📌 Insert into Database with Answers
+    const result = await query(
+      'INSERT INTO question_papers (user_id, subject, board, grade, questions, answers) VALUES (?, ?, ?, ?, ?, ?)', 
+      [userId, subject, board, grade, questionPaper, answers]
     );
 
     const questionPaperId = result.insertId;
 
-    res.json({ message: 'Question paper generated successfully', questionPaper: { id: questionPaperId, content: questionPaper } });
+    res.json({ 
+      message: 'Question paper generated successfully', 
+      questionPaper: { id: questionPaperId, content: questionPaper, answers: answers } 
+    });
 
   } catch (error) {
     console.error('Error:', error);
