@@ -9064,30 +9064,36 @@ app.get('/api/question-paper/user', async (req, res) => {
   }
 });
 
+app.post('/api/get-user-paper-count', async (req, res) => {  // Change GET to POST
+  try {
+    const { token } = req.body;  // Extract token from the request body
 
-// API Route to get the number of papers a user has created
-app.get('/api/get-user-paper-count', (req, res) => {
-  const { userId } = req.query;  // Get userId from the query parameters
-
-  if (!userId) {
-    return res.status(400).json({ message: 'User ID is required' });
-  }
-
-  // SQL query to count the number of papers for the given user
-  const query = 'SELECT COUNT(*) AS paperCount FROM question_papers WHERE user_id = ?';
-
-  // Execute the query
-  connection.execute(query, [userId], (err, results) => {
-    if (err) {
-      console.error('Error fetching paper count:', err);
-      return res.status(500).json({ message: 'Server error' });
+    if (!token) {
+      return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    // Send the result back to the frontend
-    const paperCount = results[0].paperCount;
-    res.status(200).json({ paperCount });
-  });
+    const userId = await getUserIdFromToken(token);  // Get userId from the token
+
+    // SQL query to count the number of papers for the given user
+    const query = 'SELECT COUNT(*) AS paperCount FROM question_papers WHERE user_id = ?';
+
+    // Execute the query
+    connection.execute(query, [userId], (err, results) => {
+      if (err) {
+        console.error('Error fetching paper count:', err);
+        return res.status(500).json({ message: 'Server error' });
+      }
+
+      // Send the result back to the frontend
+      const paperCount = results[0].paperCount;
+      res.status(200).json({ paperCount });
+    });
+  } catch (error) {
+    console.error('Error processing request:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
 });
+
 
 // Start the server
 app.listen(PORT, () => {
