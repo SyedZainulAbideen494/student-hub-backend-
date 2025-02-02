@@ -26,6 +26,7 @@ const schedule = require("node-schedule");
 const pdfParse = require('pdf-parse');
 const fs = require('fs');
 const webPush = require('web-push');
+const { speechToText, textToSpeech } = require('./speechService'); // Speech service (speech-to-text and text-to-speech)
 const moment = require('moment');
 const Razorpay = require('razorpay');
 // Initialize Google Generative AI
@@ -8840,21 +8841,34 @@ app.post('/api/question-paper/generate', async (req, res) => {
         <li>Question 2? ...</li>
       </ol>
 
-      <h3>Short Answer Questions - 6 Marks</h3>
+      <h3>Fill in the Blanks - 4 Marks</h3>
+      <ol>
+        <li>________ is the process of ...</li>
+        <li>The capital of France is ________.</li>
+      </ol>
+
+      <h3>Short Answer Questions - 4 Marks</h3>
       <ol>
         <li>Question 6: Explain ...</li>
         <li>Question 7: Describe ...</li>
       </ol>
 
-      <h3>Long Answer Question - 5 Marks</h3>
-      <p>Question 9: Discuss ...</p>
+      <h3>Long Answer Questions - 6 Marks</h3>
+      <ol>
+        <li>Question 9: Discuss ...</li>
+        <li>Question 10: Elaborate on ...</li>
+      </ol>
 
       <h3>Answers</h3>
       <ul>
         <li><strong>MCQ 1:</strong> Answer</li>
         <li><strong>MCQ 2:</strong> Answer</li>
+        <li><strong>Fill-up 1:</strong> Answer</li>
+        <li><strong>Fill-up 2:</strong> Answer</li>
         <li><strong>Short Answer 1:</strong> Answer</li>
-        <li><strong>Long Answer:</strong> Answer</li>
+        <li><strong>Short Answer 2:</strong> Answer</li>
+        <li><strong>Long Answer 1:</strong> Answer</li>
+        <li><strong>Long Answer 2:</strong> Answer</li>
       </ul>
     `;
 
@@ -8893,6 +8907,93 @@ app.get('/api/question-paper/user', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch question papers' });
   }
 });
+
+
+
+app.post('/api/voice-assistant', async (req, res) => {
+  const { audioData, token } = req.body;
+
+  try {
+    // Validate required inputs
+    if (!audioData || !token) {
+      return res.status(400).json({ error: 'Audio data and token are required.' });
+    }
+
+    // Get user ID from token
+    const userId = await getUserIdFromToken(token);
+    if (!userId) {
+      return res.status(401).json({ error: 'Invalid token or user not authenticated.' });
+    }
+
+    // Assume that speechData is already converted (user's speech to text)
+    const userMessage = audioData;
+    console.log('User asked:', userMessage);
+
+    const chatHistory = [
+      {
+        role: 'user',
+        parts: [{ text: userMessage }],
+      },
+      {
+        role: 'model',
+        parts: [{ text: 'Great to meet you. What would you like to know?' }],
+      },
+    ];
+
+    const chat = model.startChat({
+      history: chatHistory,
+    });
+
+    let aiResponse;
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        // Send message to AI
+        const result = await chat.sendMessage(userMessage);
+        aiResponse = result.response.text();
+        console.log(`AI responded on attempt ${attempt}`);
+        break; // Exit loop if successful
+      } catch (error) {
+        console.error(`Attempt ${attempt} failed:`, error.message);
+
+        if (attempt === MAX_RETRIES) {
+          throw new Error('AI service failed after multiple attempts.');
+        }
+
+        // Exponential backoff delay (2^attempt * 100 ms)
+        const delayMs = Math.pow(2, attempt) * 100;
+        console.log(`Retrying in ${delayMs}ms...`);
+        await delay(delayMs);
+      }
+    }
+
+    // Convert AI response text to speech (this could be using some external TTS service)
+    const aiSpeechData = await textToSpeech(aiResponse); // Function that returns speech data
+
+    // Store user message and AI response in the database
+    await query('INSERT INTO ai_history (user_id, user_message, ai_response) VALUES (?, ?, ?)', [
+      userId,
+      userMessage,
+      aiResponse,
+    ]);
+
+    res.json({ response: aiResponse, aiSpeechData });
+  } catch (error) {
+    console.error('Error in /api/voice-assistant endpoint:', error);
+
+    let errorMessage = 'An error occurred while processing your request. Please try again later.';
+    if (error.response) {
+      errorMessage = `Error: ${error.response.status} - ${error.response.data?.message || error.response.statusText}`;
+    } else if (error.message) {
+      errorMessage = `Error: ${error.message}`;
+    }
+
+    console.error('Final error message sent to user:', errorMessage);
+    res.status(500).json({ error: errorMessage });
+  }
+});
+
+
+
 
 // Start the server
 app.listen(PORT, () => {
