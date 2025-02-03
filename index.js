@@ -8926,11 +8926,11 @@ app.post('/api/question-paper/generate', async (req, res) => {
       
       <h4>1. Advanced Multiple Choice Questions (MCQs) - (5 Marks)</h4>
       <ol>
-        <li>What is the maximum possible error when approximating a complex function using the Taylor series expansion? <br> (A) Linear approximation error &nbsp; (B) Quadratic approximation error &nbsp; (C) Exponential approximation error &nbsp; (D) Logarithmic approximation error</li>
-        <li>Which of the following best explains the principle behind Schrödinger's cat paradox? <br> (A) Quantum superposition &nbsp; (B) Entanglement &nbsp; (C) The uncertainty principle &nbsp; (D) Classical mechanics</li>
-        <li>In economics, which of the following best describes the effect of increasing government spending during a recession? <br> (A) Inflationary pressure &nbsp; (B) Increase in unemployment &nbsp; (C) Aggregate demand shifts right &nbsp; (D) Supply-side restrictions</li>
-        <li>Which is the most accurate method to measure the energy consumption in a multi-phase electrical system under non-linear load conditions? <br> (A) Direct current method &nbsp; (B) Power factor method &nbsp; (C) True power measurement &nbsp; (D) Virtual energy conversion</li>
-        <li>How does increasing the pressure affect the boiling point of a liquid at a constant temperature? <br> (A) No change &nbsp; (B) Decreases the boiling point &nbsp; (C) Increases the boiling point &nbsp; (D) Causes freezing point to increase</li>
+        <li>What is the maximum possible error when approximating a complex function using the Taylor series expansion? <br> (A) Linear approximation error &nbsp;<br> (B) Quadratic approximation error &nbsp;<br> (C) Exponential approximation error &nbsp;<br> (D) Logarithmic approximation error</li>
+        <li>Which of the following best explains the principle behind Schrödinger's cat paradox? <br> (A) Quantum superposition &nbsp;<br> (B) Entanglement &nbsp;<br> (C) The uncertainty principle &nbsp;<br> (D) Classical mechanics</li>
+        <li>In economics, which of the following best describes the effect of increasing government spending during a recession? <br> (A) Inflationary pressure &nbsp;<br> (B) Increase in unemployment &nbsp;<br> (C) Aggregate demand shifts right &nbsp;<br> (D) Supply-side restrictions</li>
+        <li>Which is the most accurate method to measure the energy consumption in a multi-phase electrical system under non-linear load conditions? <br> (A) Direct current method &nbsp;<br> (B) Power factor method &nbsp; (C) True power measurement &nbsp;<br> (D) Virtual energy conversion</li>
+        <li>How does increasing the pressure affect the boiling point of a liquid at a constant temperature? <br> (A) No change &nbsp;<br> (B) Decreases the boiling point &nbsp;<br> (C) Increases the boiling point &nbsp;<br> (D) Causes freezing point to increase</li>
       </ol>
       
       <h4>2. Fill in the Blanks - (3 Marks)</h4>
