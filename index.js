@@ -30,7 +30,7 @@ const { speechToText, textToSpeech } = require('./speechService'); // Speech ser
 const moment = require('moment');
 const Razorpay = require('razorpay');
 // Initialize Google Generative AI
-const genAI = new GoogleGenerativeAI('AIzaSyCvmpjZRi7GGS9TcPQeVCnSDJLFPchYZ38');
+const genAI = new GoogleGenerativeAI('AIzaSyDSHH9Oy1T4zfw1-cM8O2n-Yxew_8WFnyA');
 
 const safetySettings = [
   {
@@ -9093,6 +9093,179 @@ app.post('/api/get-user-paper-count', async (req, res) => {  // Change GET to PO
     res.status(500).json({ message: 'Internal server error' });
   }
 });
+
+app.post('/api/test/generate', async (req, res) => {
+  const { subject, chapters, numQuestions, difficulty, timeLimit, token } = req.body;
+
+  try {
+      const userId = await getUserIdFromToken(token);
+      if (!userId) return res.status(401).json({ error: 'Invalid token' });
+
+      const limitedQuestions = Math.min(numQuestions, 25);
+      
+      const prompt = `
+      Generate ${limitedQuestions} test questions on:
+      - Subject: ${subject}
+      - Chapters: ${chapters}
+      - Difficulty: ${difficulty}
+      - Include MCQs & typing questions.
+      - Use JSON format.
+
+      Format:
+      [
+          {
+              "question": "string",
+              "type": "mcq" | "typing",
+              "options": ["option1", "option2", "option3", "option4"], // Only for MCQs
+              "correct_answer": "string"
+          }
+      ]
+      `;
+
+      console.log('Generating test with AI...');
+
+      const generateTestWithRetry = async () => {
+          let attempts = 0;
+          while (attempts < MAX_RETRIES) {
+              try {
+                  const chat = model.startChat({ history: [] });
+                  const result = await chat.sendMessage(prompt);
+                  const rawResponse = await result.response.text();
+                  const sanitizedResponse = rawResponse.replace(/```(?:json)?/g, '').trim();
+                  return JSON.parse(sanitizedResponse);
+              } catch (error) {
+                  attempts++;
+                  if (attempts === MAX_RETRIES) throw new Error('Failed to generate test');
+              }
+          }
+      };
+
+      const testQuestions = await generateTestWithRetry();
+
+      const testResult = await query(
+          'INSERT INTO tests (subject, chapters, user_id, difficulty, time_limit) VALUES (?, ?, ?, ?, ?)',
+          [subject, chapters, userId, difficulty, timeLimit]
+      );
+
+      const testId = testResult.insertId;
+
+      for (const question of testQuestions) {
+          const questionResult = await query(
+              'INSERT INTO test_questions (test_id, question_text, question_type, correct_answer) VALUES (?, ?, ?, ?)',
+              [testId, question.question, question.type, question.correct_answer]
+          );
+
+          const questionId = questionResult.insertId;
+
+          if (question.type === 'mcq') {
+              for (const option of question.options) {
+                  await query(
+                      'INSERT INTO test_options (question_id, option_text) VALUES (?, ?)',
+                      [questionId, option]
+                  );
+              }
+          }
+      }
+
+      res.json({ message: 'Test generated successfully', testId, testQuestions });
+  } catch (error) {
+      console.error('Error generating test:', error);
+      res.status(500).json({ error: 'Error generating test' });
+  }
+});
+
+
+app.post('/api/test/submit', async (req, res) => {
+  const { testId, answers, token } = req.body;
+
+  console.log('Received request:', { testId, answers, token });
+
+  try {
+      const userId = await getUserIdFromToken(token);
+      if (!userId) return res.status(401).json({ error: 'Invalid token' });
+
+      if (!Array.isArray(answers) || answers.length === 0) {
+          return res.status(400).json({ error: 'Answers must be a non-empty array' });
+      }
+
+      let totalQuestions = answers.length;
+      let totalCorrectAnswers = 0;
+
+      // Prepare the prompt for AI evaluation
+      const evaluationPrompt = answers.map(answer => ({
+          questionId: answer.questionId,
+          userAnswer: answer.userAnswer
+      }));
+
+      // Generate the AI evaluation prompt
+      const prompt = `
+      Evaluate the following answers for the test:
+      Questions: 
+      ${JSON.stringify(evaluationPrompt)}
+
+      For each answer, provide the following:
+      - Correctness: Is the answer correct? (Yes/No)
+      - Explanation: Explain why the answer is correct or incorrect.
+      - Tips: Provide any additional tips to improve the user's understanding.
+      
+      Format the response as a JSON array:
+      [
+          {
+              "questionId": "string",
+              "isCorrect": "Yes" | "No",
+              "explanation": "string",
+              "tips": "string"
+          }
+      ]
+      `;
+
+      console.log('Evaluating answers with AI...');
+
+      // AI call to evaluate answers
+      const evaluateAnswersWithRetry = async () => {
+          let attempts = 0;
+          while (attempts < MAX_RETRIES) {
+              try {
+                  const chat = model.startChat({ history: [] });
+                  const result = await chat.sendMessage(prompt);
+                  const rawResponse = await result.response.text();
+                  const sanitizedResponse = rawResponse.replace(/```(?:json)?/g, '').trim();
+                  return JSON.parse(sanitizedResponse);
+              } catch (error) {
+                  attempts++;
+                  if (attempts === MAX_RETRIES) throw new Error('Failed to evaluate answers');
+              }
+          }
+      };
+
+      const evaluationResults = await evaluateAnswersWithRetry();
+
+      // Store the evaluation results and score in the database
+      let totalCorrect = 0;
+      for (const result of evaluationResults) {
+          const { questionId, isCorrect, explanation, tips } = result;
+
+          // Save the evaluation details (correctness, explanation, tips) using promisified query
+          await query(
+              'INSERT INTO test_answers (test_id, question_id, is_correct, explanation, tips) VALUES (?, ?, ?, ?, ?)',
+              [testId, questionId, isCorrect === "Yes", explanation, tips]
+          );
+
+          if (isCorrect === "Yes") totalCorrect++;
+      }
+
+      const score = (totalCorrect / totalQuestions) * 100;
+
+      // Update the test score using promisified query
+      await query('UPDATE tests SET score = ? WHERE id = ?', [score, testId]);
+
+      res.json({ message: 'Test submitted and evaluated successfully', score, evaluationResults });
+  } catch (error) {
+      console.error('Error submitting and evaluating test:', error);
+      res.status(500).json({ error: 'Error submitting and evaluating test' });
+  }
+});
+
 
 
 // Start the server
