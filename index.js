@@ -8809,6 +8809,77 @@ app.post('/api/flashcard/ai-explanation', async (req, res) => {
   }
 });
 
+app.post('/api/quiz/ai-analysis', async (req, res) => {
+  try {
+    // Get the quiz performance data from the request body
+    const { score, userAnswers, correctAnswers, questions, topic } = req.body;
+
+    // Prepare the AI prompt based on the quiz data
+    let prompt = `You are an AI tutor analyzing a student's quiz performance. Below is the student's performance on a quiz about ${topic}. Please provide feedback on their weak points and suggest areas to focus on for improvement based on the student's answers and score.
+
+    Score: ${score}%
+    
+    User's Answers: 
+    `;
+
+    questions.forEach(question => {
+      const userAnswerId = userAnswers[question.id];
+      const correctAnswer = correctAnswers[question.id];
+      const isCorrect = userAnswerId === correctAnswer?.id;
+
+      prompt += `\n- Question: ${question.question_text}
+      Your Answer: ${question.answers.find(ans => ans.id === userAnswerId)?.answer_text || 'Not Answered'}
+      Correct Answer: ${correctAnswer?.text || 'N/A'}
+      ${isCorrect ? 'Correct' : 'Incorrect'}`;
+    });
+
+    prompt += `\n\nBased on this data, provide a detailed analysis of the student's performance. Highlight the areas where the student struggled and offer suggestions for improvement.`;
+
+    console.log('Generating AI analysis for quiz performance');
+
+    // AI Integration & Retry Logic
+    const generateAnalysisWithRetry = async () => {
+      let attempts = 0;
+      const MAX_RETRIES = 5;
+
+      while (attempts < MAX_RETRIES) {
+        try {
+          const chat = model.startChat({ history: [] });
+          const result = await chat.sendMessage(prompt);
+          const rawResponse = await result.response.text();
+
+          const sanitizedResponse = rawResponse.replace(/```(?:json)?/g, '').trim();
+          let analysis;
+
+          try {
+            analysis = sanitizedResponse;
+          } catch (parseError) {
+            throw new Error('Invalid response from AI');
+          }
+
+          return analysis;
+        } catch (error) {
+          attempts++;
+          if (attempts === MAX_RETRIES) {
+            throw new Error('Failed to generate AI analysis after multiple attempts');
+          }
+          await new Promise(resolve => setTimeout(resolve, 2000)); // Retry delay
+        }
+      }
+    };
+
+    // Get AI-generated analysis
+    const aiAnalysis = await generateAnalysisWithRetry();
+    console.log('AI Analysis generated');
+
+    res.json({ analysis: aiAnalysis }); // Return analysis to frontend
+  } catch (error) {
+    console.error('Error processing request:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+
 const generateWithRetry = async (prompt) => {
   let attempts = 0;
   const MAX_RETRIES = 5;
