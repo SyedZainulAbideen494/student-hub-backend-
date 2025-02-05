@@ -30,7 +30,7 @@ const { speechToText, textToSpeech } = require('./speechService'); // Speech ser
 const moment = require('moment');
 const Razorpay = require('razorpay');
 // Initialize Google Generative AI
-const genAI = new GoogleGenerativeAI('AIzaSyDSHH9Oy1T4zfw1-cM8O2n-Yxew_8WFnyA');
+const genAI = new GoogleGenerativeAI('AIzaSyCvmpjZRi7GGS9TcPQeVCnSDJLFPchYZ38');
 
 const safetySettings = [
   {
