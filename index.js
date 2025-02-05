@@ -3906,13 +3906,33 @@ app.get('/api/leaderboard', (req, res) => {
       JOIN user_points p ON u.id = p.user_id
       ORDER BY p.points DESC
   `;
-
+  
   connection.query(sql, (err, results) => {
       if (err) {
           console.error('Error fetching leaderboard data:', err);
           return res.status(500).json({ error: 'Failed to fetch leaderboard data' });
       }
-      res.json(results); // Return the leaderboard data as JSON
+
+      // Now check for premium users by fetching subscription data
+      const subscriptionSql = `
+          SELECT user_id FROM subscriptions`;
+      connection.query(subscriptionSql, (err, subscriptionResults) => {
+          if (err) {
+              console.error('Error fetching subscription data:', err);
+              return res.status(500).json({ error: 'Failed to fetch subscription data' });
+          }
+
+          // Create a set of premium user IDs
+          const premiumUserIds = new Set(subscriptionResults.map(sub => sub.user_id));
+
+          // Add an isPremium flag to each leaderboard user
+          const leaderboardWithPremium = results.map(user => ({
+              ...user,
+              isPremium: premiumUserIds.has(user.id) // Check if the user is premium
+          }));
+
+          res.json(leaderboardWithPremium); // Return the leaderboard data along with the premium status
+      });
   });
 });
 
