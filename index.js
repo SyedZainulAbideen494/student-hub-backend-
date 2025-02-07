@@ -3486,10 +3486,7 @@ app.post('/api/chat/ai', async (req, res) => {
   const { message, chatHistory, token } = req.body;
 
   try {
-    // Validate required inputs
-    if (!message || typeof message !== 'string' || message.trim() === '') {
-      return res.status(400).json({ error: 'Message cannot be empty.' });
-    }
+
 
     if (!token) {
       return res.status(400).json({ error: 'Token is required.' });
