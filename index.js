@@ -8393,23 +8393,21 @@ app.post('/api/today-pomodoro-study-plan', async (req, res) => {
     }
 
 
-    const todayStart = moment().startOf('day').format('YYYY-MM-DD HH:mm:ss');
-    const todayEnd = moment().endOf('day').format('YYYY-MM-DD HH:mm:ss');
+    const todayDate = moment().format('YYYY-MM-DD'); // Only date
 
     const sql = `
-      SELECT duration FROM pomodoro_date
-      WHERE user_id = ? AND end_time BETWEEN ? AND ?
-    `;
-    
-    const results = await query(sql, [userId, todayStart, todayEnd]);
-
+    SELECT duration FROM pomodoro_date
+    WHERE user_id = ? AND DATE(end_time) = ?
+  `;
+  const results = await query(sql, [userId, todayDate]);
+  
     if (results.length === 0) {
       return res.status(404).json({ message: 'No Pomodoro data for today' });
     }
 
     const durationInSeconds = results[0].duration;
     res.json({ durationInSeconds });
-    
+    console.log(durationInSeconds)
   } catch (err) {
     console.error('Error:', err);  // Log the full error
     res.status(500).json({ error: 'Server Error', message: err.message });
