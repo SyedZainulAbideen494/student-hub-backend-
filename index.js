@@ -8407,7 +8407,7 @@ app.post('/api/today-pomodoro-study-plan', async (req, res) => {
     const totalDurationInSeconds = results[0].totalDuration;
     res.json({ durationInSeconds: totalDurationInSeconds });
 
-    console.log(totalDurationInSeconds);
+
   } catch (err) {
     console.error('Error:', err);
     res.status(500).json({ error: 'Server Error', message: err.message });
