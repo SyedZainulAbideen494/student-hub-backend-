@@ -8381,39 +8381,38 @@ app.post("/api/study-plan-created-date", async (req, res) => {
 
 
 app.post('/api/today-pomodoro-study-plan', async (req, res) => {
-
   const token = req.body.token;
 
   try {
-    const userId = await getUserIdFromToken(token);  // Await the promise here
+    const userId = await getUserIdFromToken(token);
 
     if (!userId) {
       console.log('Unauthorized: No user ID found in token');
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-
     const todayDate = moment().format('YYYY-MM-DD'); // Only date
 
     const sql = `
-    SELECT duration FROM pomodoro_date
-    WHERE user_id = ? AND DATE(end_time) = ?
-  `;
-  const results = await query(sql, [userId, todayDate]);
-  
-    if (results.length === 0) {
+      SELECT SUM(duration) AS totalDuration FROM pomodoro_date
+      WHERE user_id = ? AND DATE(end_time) = ?
+    `;
+
+    const results = await query(sql, [userId, todayDate]);
+
+    if (!results[0].totalDuration) {
       return res.status(404).json({ message: 'No Pomodoro data for today' });
     }
 
-    const durationInSeconds = results[0].duration;
-    res.json({ durationInSeconds });
-    console.log(durationInSeconds)
+    const totalDurationInSeconds = results[0].totalDuration;
+    res.json({ durationInSeconds: totalDurationInSeconds });
+
+    console.log(totalDurationInSeconds);
   } catch (err) {
-    console.error('Error:', err);  // Log the full error
+    console.error('Error:', err);
     res.status(500).json({ error: 'Server Error', message: err.message });
   }
 });
-
 
 
 app.post("/api/study-plan/dashboard", async (req, res) => {
