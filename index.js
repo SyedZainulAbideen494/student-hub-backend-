@@ -3487,8 +3487,12 @@ app.post('/api/chat/ai', async (req, res) => {
 
   try {
     // Validate required inputs
-    if (!message || !token) {
-      return res.status(400).json({ error: 'Message and token are required.' });
+    if (!message || typeof message !== 'string' || message.trim() === '') {
+      return res.status(400).json({ error: 'Message cannot be empty.' });
+    }
+
+    if (!token) {
+      return res.status(400).json({ error: 'Token is required.' });
     }
 
     // Get user ID from token
@@ -3498,28 +3502,21 @@ app.post('/api/chat/ai', async (req, res) => {
     }
 
     const initialChatHistory = [
-      {
-        role: 'user',
-        parts: [{ text: 'Hello' }],
-      },
-      {
-        role: 'model',
-        parts: [{ text: 'Great to meet you. What would you like to know?' }],
-      },
+      { role: 'user', parts: [{ text: 'Hello' }] },
+      { role: 'model', parts: [{ text: 'Great to meet you. What would you like to know?' }] },
     ];
 
-    const chat = model.startChat({
-      history: chatHistory || initialChatHistory,
-    });
+    const chat = model.startChat({ history: chatHistory || initialChatHistory });
 
-    console.log('User asked:', message);
+    console.log('User asked:', message, userId);
 
-    let aiResponse;
+    let aiResponse = '';
+
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
         // Attempt to send message to AI
         const result = await chat.sendMessage(message);
-        aiResponse = result.response.text();
+        aiResponse = result.response?.text?.() || 'No response from AI.';
         console.log(`AI responded on attempt ${attempt}`);
         break; // Exit loop if successful
       } catch (error) {
@@ -3536,6 +3533,10 @@ app.post('/api/chat/ai', async (req, res) => {
       }
     }
 
+    if (!aiResponse || aiResponse === 'No response from AI.') {
+      return res.status(500).json({ error: 'AI service did not return a response.' });
+    }
+
     // Store user message and AI response in the database
     await query('INSERT INTO ai_history (user_id, user_message, ai_response) VALUES (?, ?, ?)', [
       userId,
@@ -3547,17 +3548,10 @@ app.post('/api/chat/ai', async (req, res) => {
   } catch (error) {
     console.error('Error in /api/chat/ai endpoint:', error);
 
-    let errorMessage = 'An error occurred while processing your request. Please try again later.';
-    if (error.response) {
-      errorMessage = `Error: ${error.response.status} - ${error.response.data?.message || error.response.statusText}`;
-    } else if (error.message) {
-      errorMessage = `Error: ${error.message}`;
-    }
-
-    console.error('Final error message sent to user:', errorMessage);
-    res.status(500).json({ error: errorMessage });
+    res.status(500).json({ error: 'An error occurred while processing your request. Please try again later.' });
   }
 });
+
 
 
 app.post('/api/chat/ai/demo', async (req, res) => {
