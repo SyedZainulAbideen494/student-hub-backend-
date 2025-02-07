@@ -8904,7 +8904,6 @@ const generateWithRetry = async (prompt) => {
 };
 
 
-
 app.post('/api/question-paper/generate', async (req, res) => {
   try {
     const { subject, chapters, board, grade, token } = req.body;
@@ -8915,203 +8914,115 @@ app.post('/api/question-paper/generate', async (req, res) => {
     const userId = await getUserIdFromToken(token);
 
     let prompt = '';
-
-    // 📌 Define competitive exams
     const competitiveExams = ['JEE Mains', 'JEE Advanced', 'NEET', 'CUET', 'GATE', 'UPSC', 'CAT', 'SAT', 'GRE', 'GMAT'];
 
+    // Adjust difficulty level based on board
+    const difficultyLevel = competitiveExams.includes(board) ? 'very hard' : 'moderate';
+
+    // Generate prompt based on board
     if (competitiveExams.includes(board)) {
-      // 📌 Competitive Exam Format
+      // Competitive Exam Format (e.g., NEET, JEE)
       prompt = `
-      Generate a **30-mark competitive exam question paper** for **${subject}**.
+      Generate a **competitive exam question paper** for **${subject}**.
       **Exam:** ${board}
       **Chapters:** ${chapters.join(', ')}
       **Grade:** ${grade}
       
-      📌 **Guidelines:**
-      - **Strictly use HTML tags** for structuring content.
-      - **Do NOT use Markdown, asterisks, or plain text formatting.**
-      - Questions should match the **difficulty level of ${board}**.
-      - Use **higher-order thinking skills (HOTS), conceptual & tricky questions**.
-      - Ensure **structured and well-formatted HTML output**.
+      **Difficulty Level:** ${difficultyLevel} (Please ensure the questions are challenging enough for ${board})
       
-      ---
-      
+      Generate 6 questions in total with 4 main sections:
+      - Section 1: 2 MCQs (multiple-choice questions)
+      - Section 2: 2 short-answer questions
+      - Section 3: 1 long-answer question
+      - Section 4: 1 reasoning-based question
+
+      Please ensure all questions are of appropriate difficulty for the ${board} exam. Questions should be in-depth and require critical thinking. Do not include answers or any extra text, formatting, or instructions. Just the questions.
+
+      --- 
+
       <h2>${board} - ${subject} (Grade ${grade})</h2>
-      <p><strong>Exam:</strong> ${board}</p>
-      <h3>Instructions:</h3>
-      <ul>
-        <li>Each question has negative marking as per ${board} rules.</li>
-        <li>Read questions carefully before answering.</li>
-      </ul>
-      
-      <h3>🟢 Section A: Multiple Choice Questions (MCQs) - 15 Marks</h3>
+
+      <h3>Section 1: Multiple-Choice Questions (MCQs)</h3>
       <ol>
-        <li>Conceptual MCQ 1? <br> (A) Option 1 &nbsp;<br>  (B) Option 2 &nbsp;<br>  (C) Option 3 &nbsp;<br>  (D) Option 4</li>
-        <li>Numerical-based MCQ 2? ...</li>
+        <li>MCQ 1 for ${subject}</li>
+        <li>MCQ 2 for ${subject}</li>
       </ol>
-      
-      <h3>🔵 Section B: Assertion-Reasoning & Match the Following (5 Marks)</h3>
-      <h4>Assertion-Reason:</h4>
-      <p><strong>For the following questions, choose:</strong><br>
-      (A) Both A and R are true, and R explains A.<br>
-      (B) Both A and R are true, but R does not explain A.<br>
-      (C) A is true, but R is false.<br>
-      (D) A is false, but R is true.</p>
+
+      <h3>Section 2: Short Answer Questions</h3>
       <ol>
-        <li><strong>Assertion (A):</strong> Statement 1<br>
-            <strong>Reason (R):</strong> Statement 2</li>
+        <li>Short Answer 1 for ${subject}</li>
+        <li>Short Answer 2 for ${subject}</li>
       </ol>
-      
-      <h4>Match the Following:</h4>
-      <table border="1">
-        <tr><th>Column A</th><th>Column B</th></tr>
-        <tr><td>Concept 1</td><td>Definition 1</td></tr>
-        <tr><td>Concept 2</td><td>Definition 2</td></tr>
-      </table>
-      
-      <h3>🔴 Section C: Case Study & Numerical (10 Marks)</h3>
-      <h4>Case Study:</h4>
-      <p><strong>Read the passage and answer the questions:</strong></p>
-      <p>[Insert real-world scenario related to ${subject}]</p>
+
+      <h3>Section 3: Long Answer Question</h3>
       <ol>
-        <li>What can be inferred from the passage?</li>
-        <li>Suggest a possible solution.</li>
+        <li>Long Answer Question for ${subject}</li>
       </ol>
-      
-      <h4>Numerical Problem:</h4>
-      <p>[A complex numerical problem related to ${subject}]</p>
+
+      <h3>Section 4: Reasoning-Based Question</h3>
       <ol>
-        <li>Find the value of ...</li>
-        <li>Explain the concept behind your solution.</li>
+        <li>Reasoning Question for ${subject}</li>
       </ol>
-      
       `;
     } else {
-      // 📌 Regular School Board Format
+      // School Board Format (e.g., CBSE, ICSE)
       prompt = `
-      Generate a **30-mark advanced school question paper** for **${subject}**.
+      Generate a **school board question paper** for **${subject}**.
       **Chapters:** ${chapters.join(', ')}
       **Board:** ${board}, **Grade:** ${grade}
       
-      📌 **Guidelines:**
-      - **Strictly use HTML tags** for structuring content.
-      - **Do NOT use Markdown, asterisks, or plain text formatting.**
-      - The difficulty level should be **extremely high**, suitable for **${board}** standards.
-      - Use **higher-order thinking skills (HOTS)**, and include complex theoretical, analytical, and application-based questions.
-      - Incorporate **tricky problem-solving** and **conceptual questions** that require deep understanding and critical thinking.
-      - Ensure the questions test **all aspects of the subject**, including theory, application, analysis, and synthesis.
-      - Ensure **well-formatted, structured, and readable HTML output**.
+      **Difficulty Level:** ${difficultyLevel} (Please ensure the questions are appropriately challenging for ${board})
       
-      ---
-      
-      <h2>Subject: ${subject} (Grade ${grade})</h2>
-      <p><strong>Board:</strong> ${board}</p>
-      <h3>Instructions:</h3>
-      <ul>
-        <li>All questions are compulsory. Attempt all sections.</li>
-        <li>Answer the questions carefully, as some require detailed explanations and logical steps.</li>
-        <li>Negative marking applies for incorrect answers in multiple-choice and problem-solving questions.</li>
-      </ul>
-      
-      <h3>🟢 Section A: Objective Questions (10 Marks)</h3>
-      
-      <h4>1. Advanced Multiple Choice Questions (MCQs) - (5 Marks)</h4>
+      Generate 6 questions in total with 4 main sections:
+      - Section 1: 2 MCQs
+      - Section 2: 2 short-answer questions
+      - Section 3: 1 long-answer question
+      - Section 4: 1 reasoning-based question
+
+      Do not include answers or any extra text, formatting, or instructions. Just the questions.
+
+      --- 
+
+      <h2>${board} - ${subject} (Grade ${grade})</h2>
+
+      <h3>Section 1: Multiple-Choice Questions (MCQs)</h3>
       <ol>
-        <li>What is the maximum possible error when approximating a complex function using the Taylor series expansion? <br> (A) Linear approximation error &nbsp;<br> (B) Quadratic approximation error &nbsp;<br> (C) Exponential approximation error &nbsp;<br> (D) Logarithmic approximation error</li>
-        <li>Which of the following best explains the principle behind Schrödinger's cat paradox? <br> (A) Quantum superposition &nbsp;<br> (B) Entanglement &nbsp;<br> (C) The uncertainty principle &nbsp;<br> (D) Classical mechanics</li>
-        <li>In economics, which of the following best describes the effect of increasing government spending during a recession? <br> (A) Inflationary pressure &nbsp;<br> (B) Increase in unemployment &nbsp;<br> (C) Aggregate demand shifts right &nbsp;<br> (D) Supply-side restrictions</li>
-        <li>Which is the most accurate method to measure the energy consumption in a multi-phase electrical system under non-linear load conditions? <br> (A) Direct current method &nbsp;<br> (B) Power factor method &nbsp; (C) True power measurement &nbsp;<br> (D) Virtual energy conversion</li>
-        <li>How does increasing the pressure affect the boiling point of a liquid at a constant temperature? <br> (A) No change &nbsp;<br> (B) Decreases the boiling point &nbsp;<br> (C) Increases the boiling point &nbsp;<br> (D) Causes freezing point to increase</li>
+        <li>MCQ 1 for ${subject}</li>
+        <li>MCQ 2 for ${subject}</li>
       </ol>
-      
-      <h4>2. Fill in the Blanks - (3 Marks)</h4>
+
+      <h3>Section 2: Short Answer Questions</h3>
       <ol>
-        <li>________ is the phenomenon where light changes its frequency due to the motion of the source, and is used to measure the velocity of distant galaxies.</li>
-        <li>The ________ theorem in statistics allows us to infer the population mean from a sample, provided the sample is sufficiently large.</li>
-        <li>In a chemical reaction, the rate of change of concentration of reactants is often governed by the ________ law.</li>
+        <li>Short Answer 1 for ${subject}</li>
+        <li>Short Answer 2 for ${subject}</li>
       </ol>
-      
-      <h4>3. Match the Following - (2 Marks)</h4>
-      <table border="1">
-        <tr><th>Column A</th><th>Column B</th></tr>
-        <tr><td>Laplace Transform</td><td>Used to solve differential equations</td></tr>
-        <tr><td>Neumann Boundary Condition</td><td>Used in solving partial differential equations</td></tr>
-        <tr><td>Euler’s Method</td><td>Numerical solution of ordinary differential equations</td></tr>
-        <tr><td>First Law of Thermodynamics</td><td>Conservation of energy</td></tr>
-      </table>
-      
-      ---
-      
-      <h3>🔵 Section B: Short Answer Questions (10 Marks)</h3>
-      
-      <h4>1. Short Answer Type - (5 Marks)</h4>
+
+      <h3>Section 3: Long Answer Question</h3>
       <ol>
-        <li>Explain the process of nuclear fusion and discuss the conditions necessary for it to occur in stars.</li>
-        <li>Using the laws of thermodynamics, explain why a heat engine cannot be 100% efficient. Illustrate with a real-world example.</li>
+        <li>Long Answer Question for ${subject}</li>
       </ol>
-      
-      <h4>2. Assertion-Reason Questions - (5 Marks)</h4>
-      <p><strong>For the following questions, choose:</strong><br>
-      (A) Both A and R are true, and R explains A.<br>
-      (B) Both A and R are true, but R does not explain A.<br>
-      (C) A is true, but R is false.<br>
-      (D) A is false, but R is true.</p>
+
+      <h3>Section 4: Reasoning-Based Question</h3>
       <ol>
-        <li><strong>Assertion (A):</strong> The speed of light in a vacuum is constant.<br>
-            <strong>Reason (R):</strong> The speed of light in any medium depends on the wavelength of the light.</li>
-        <li><strong>Assertion (A):</strong> The economic principle of diminishing marginal returns applies only in the short run.<br>
-            <strong>Reason (R):</strong> The law of variable proportions explains the principle of diminishing returns.</li>
+        <li>Reasoning Question for ${subject}</li>
       </ol>
-      
-      ---
-      
-      <h3>🔴 Section C: Long Answer & Case Study (10 Marks)</h3>
-      
-      <h4>1. Long Answer Questions - (6 Marks)</h4>
-      <ol>
-        <li>Discuss the theory of relativity. Explain both special and general relativity, providing real-world applications such as GPS technology.</li>
-        <li>Describe the process of photosynthesis in detail. Explain the role of light energy and how it is converted into chemical energy in plants.</li>
-      </ol>
-      
-      <h4>2. Case-Based Questions - (4 Marks)</h4>
-      <p><strong>Read the passage below and answer the questions:</strong></p>
-      <p>In the year 2023, a major city in the world faced a severe power shortage due to the imbalance between demand and supply of energy. The government proposed a drastic shift toward renewable energy sources to combat the issue. However, critics argue that this might not solve the underlying infrastructure problems. They suggest an increase in nuclear energy usage as a cleaner and more efficient alternative.</p>
-      <ol>
-        <li>What can be inferred about the implications of nuclear energy use in the given context?</li>
-        <li>Propose an alternative solution to the energy crisis, considering the advantages and disadvantages of nuclear power.</li>
-      </ol>
-      
-      ---
-      
-      <h3>✅ Answers Section</h3>
-      <ul>
-        <li><strong>MCQ 1:</strong> Answer</li>
-        <li><strong>Fill-up 1:</strong> Answer</li>
-        <li><strong>Match the Following:</strong> Answer</li>
-        <li><strong>Short Answer 1:</strong> Answer</li>
-        <li><strong>Assertion-Reason 1:</strong> Answer</li>
-        <li><strong>Long Answer 1:</strong> Answer</li>
-        <li><strong>Case Study 1:</strong> Answer</li>
-      </ul>
       `;
-      
     }
 
-    console.log(`Generating AI-powered question paper for ${board}`);
+    console.log('Generating question paper');
     const questionPaper = await generateWithRetry(prompt);
 
-    // 📌 Now Generate Answers Separately
     const answerPrompt = `
     Generate **detailed answers** for the following question paper in **HTML format**:
-    
-    - **Use HTML tags** for formatting answers (no Markdown, asterisks, or plain text).
-    - Make sure the answers are clear and detailed, formatted with appropriate HTML tags like <p>, <ol>, <ul>, <li>, <strong>, <em>, <h2>, etc.
-    - Ensure proper structuring and readability.
+    - **Use HTML tags** to properly format answers. Do not use markdown, asterisks, or plain text.
+    - Make sure to clearly show all steps and reasoning, including explanations for formulas and any necessary units.
+    - Format each question and answer separately with proper use of HTML elements like <h3>, <p>, <ol>, <li>, <strong>, and <em> for clarity.
+    - Keep explanations educational, concise, and focused on step-by-step reasoning.
     
     ### Question Paper:
     ${questionPaper}
     
-    Ensure that the answers are structured properly in **HTML**.
+    Ensure each answer is clearly explained and formatted with proper HTML structure.
     `;
     
     console.log('Generating answers for the question paper');
@@ -9136,6 +9047,7 @@ app.post('/api/question-paper/generate', async (req, res) => {
     res.status(500).json({ error: 'Failed to generate question paper' });
   }
 });
+
 
 
 // **Fetch User's Question Papers**
