@@ -3486,7 +3486,10 @@ app.post('/api/chat/ai', async (req, res) => {
   const { message, chatHistory, token } = req.body;
 
   try {
-
+    // Validate required inputs
+    if (!message || typeof message !== 'string' || message.trim() === '') {
+      return res.status(400).json({ error: 'Message cannot be empty.' });
+    }
 
     if (!token) {
       return res.status(400).json({ error: 'Token is required.' });
@@ -7963,6 +7966,131 @@ app.post('/api/notes/generate', async (req, res) => {
     
     // Add the id to notesData and send it back in the response
     res.json({ notes: { ...notesData, id: noteId } });
+
+  } catch (error) {
+    console.error('Error generating notes:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
+// **Elite Notes Generation API**
+app.post('/api/notes/generate/elite/premium', async (req, res) => {
+  const { topic, token } = req.body;
+
+  try {
+    const userId = await getUserIdFromToken(token);
+    if (!userId) {
+      return res.status(401).json({ error: 'Invalid token or user not found' });
+    }
+
+    // **Dynamic AI prompt including the topic**
+    const prompt = `
+    You are an advanced AI designed to generate **elite-level study notes** exclusively for Edusify users. Your purpose is to create **detailed, structured, and comprehensive notes** that help students with **exams, revisions, and in-depth learning**.
+
+    Generate high-quality, well-structured study notes for the topic: **"${topic}"**.
+
+    ## **Instructions for Generating Notes:**
+    - The notes should be **highly detailed**, covering "${topic}" thoroughly with deep insights.
+    - Use a **structured format** with clear sections, subtopics, and explanations.
+    - Maintain **clarity and ease of understanding** while ensuring academic rigor.
+    - **Break down complex concepts step by step**, making them easy to grasp.
+    - Integrate **real-world applications** and at least **three practical examples** to enhance understanding.
+    - Use **proper HTML structure** to make the notes visually appealing:
+      - Main topic as the heading
+      - Subtopics and key concepts as subheadings
+      - Paragraphs for detailed explanations
+      - Lists for key points and important steps
+      - Bold important terms
+      - Italics for emphasis
+      - Blockquotes for significant insights or key definitions
+      - Code blocks if needed for mathematical or programming topics
+    
+    ## **Enhancements to Improve Learning:**
+    1. **Key Takeaways & Summary:**  
+       - After every major section, summarize the most important points concisely.
+       
+    2. **Common Mistakes & Misconceptions:**  
+       - Highlight **frequent student errors** and provide corrections with explanations.
+    
+    3. **Formulas & Diagrams:**  
+       - For mathematical or science-related topics, include **important formulas**.
+       - Describe how these formulas are derived or used in problem-solving.
+    
+    4. **Exam-Oriented Questions:**  
+       - Provide **at least five** potential exam questions for "${topic}".
+       - Include **step-by-step solutions** where applicable.
+    
+    5. **Memory Aids & Mnemonics:**  
+       - Offer **study hacks**, acronyms, or mnemonics where possible.
+    
+    6. **Connections to Other Topics:**  
+       - Explain how "${topic}" relates to other subjects or real-world applications.
+    
+    ## **Final Goal:**  
+    These notes should **not be short or superficial**. They should be **thorough, structured, and high-quality**, providing everything a student needs to **master "${topic}"** for exams, revision, and deep understanding.
+    
+    Ensure the notes **look premium, feel exclusive, and deliver an elite study experience** for Edusify users.
+    `;
+
+    console.log('Generating elite notes on:', topic);
+
+    // Function to attempt generating notes and retry on failure
+    const generateNotesWithRetry = async () => {
+      let attempts = 0;
+
+      while (attempts < MAX_RETRIES) {
+        try {
+          // Call the AI model with the prompt
+          const chat = model.startChat({
+            history: [
+              { role: 'user', parts: [{ text: 'Hello' }] },
+              { role: 'model', parts: [{ text: 'I can help generate notes on your topic!' }] },
+            ],
+          });
+
+          const result = await chat.sendMessage(prompt);
+
+          // Extract only the HTML part from the AI response
+          const responseText = result.response.text();
+          const htmlResponse = responseText.match(/<p[\s\S]*?<\/p>/g);
+          if (!htmlResponse || htmlResponse.length === 0) {
+            throw new Error('Could not extract valid HTML from AI response');
+          }
+
+          // Join the extracted HTML notes
+          const notesContent = htmlResponse.join(' ');
+
+          return notesContent; // Return the successfully generated notes content
+        } catch (error) {
+          attempts++;
+          console.log(`Attempt ${attempts} failed, retrying...`);
+
+          if (attempts === MAX_RETRIES) {
+            throw new Error('Failed to generate notes after multiple attempts');
+          }
+
+          // Delay before retrying
+          await delay(2000); // Delay for 2 seconds before the next attempt
+        }
+      }
+    };
+
+    // Try to generate notes with retries
+    const notesContent = await generateNotesWithRetry();
+
+    // **Save generated notes to the database**
+    const result = await query(
+      `INSERT INTO flashcards (user_id, title, description, headings, is_ai) VALUES (?, ?, ?, ?, ?)`,
+      [userId, topic, `Notes on ${topic}`, notesContent, 1]
+    );
+
+    const noteId = result.insertId;
+
+    res.json({
+      message: 'Notes generated successfully!',
+      notes: { id: noteId, title: topic, content: notesContent },
+    });
 
   } catch (error) {
     console.error('Error generating notes:', error);
