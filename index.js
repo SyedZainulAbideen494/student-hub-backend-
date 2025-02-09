@@ -9701,7 +9701,6 @@ app.get("/api/resources/search", (req, res) => {
 });
 
 // Submit a New Resource (User Suggestion)
-// Submit a New Resource (User Suggestion)
 app.post("/api/resources/add", async (req, res) => {
   const token = req.headers.authorization?.split(" ")[1]; // Extract token from header
   if (!token) {
@@ -9714,14 +9713,19 @@ app.post("/api/resources/add", async (req, res) => {
           return res.status(401).json({ error: "Invalid or expired token." });
       }
 
-      const { title, description, link } = req.body;
-      const query = "INSERT INTO resources (title, description, link, user_id) VALUES (?, ?, ?, ?)";
-      
-      connection.query(query, [title, description, link, userId], (err, result) => {
+      const { title, description, link, category } = req.body; // Added category field
+
+      if (!category) {
+          return res.status(400).json({ error: "Category is required." });
+      }
+
+      const query = "INSERT INTO resources (title, description, link, category, user_id) VALUES (?, ?, ?, ?, ?)";
+
+      connection.query(query, [title, description, link, category, userId], (err, result) => {
           if (err) return res.status(500).json({ error: err.message });
 
-          // Log the review pending message
-          console.log(`Review pending for a resource: "${title}" by User ID: ${userId}`);
+          // Log the review pending message with category
+          console.log(`Review pending for a resource: "${title}" (Category: "${category}") by User ID: ${userId}`);
 
           res.json({ message: "Resource submitted for review!" });
       });
@@ -9729,6 +9733,7 @@ app.post("/api/resources/add", async (req, res) => {
       res.status(500).json({ error: "Internal server error" });
   }
 });
+
 
 app.get("/api/resources/pending", (req, res) => {
   const query = "SELECT * FROM resources WHERE status = 'pending'";
