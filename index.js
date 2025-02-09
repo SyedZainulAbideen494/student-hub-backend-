@@ -1934,6 +1934,8 @@ app.get('/getQuiz/:id', async (req, res) => {
   }
 });
 
+
+
 app.post('/submitQuiz', async (req, res) => {
   const { token, quizId, answers } = req.body;
 
@@ -9393,6 +9395,286 @@ app.post('/api/test/submit', async (req, res) => {
   }
 });
 
+app.post('/api/quiz/generate/exam', async (req, res) => {
+  const { examType, subjects, chapters, token } = req.body;
+
+  try {
+    // Step 1: Retrieve userId from the token
+    const userId = await getUserIdFromToken(token);
+
+    const difficultyMapping = {
+      NEET: "High conceptual + medical-level reasoning",
+      JEE: "Math-intensive + logical thinking",
+      UPSC: "Analytical + fact-based reasoning",
+      CAT: "Quantitative Aptitude + Logical Reasoning",
+      GATE: "Engineering-level conceptual questions",
+      GMAT: "Verbal reasoning + Data Interpretation",
+      GRE: "Analytical Writing + Logical Reasoning",
+      SAT: "High-school level critical thinking",
+      CLAT: "Legal aptitude + Logical reasoning",
+      Banking: "Quantitative Aptitude + Financial Awareness",
+      SSC: "General Knowledge + Numerical Ability",
+      CUET: "University entrance level subject-based reasoning"
+    };
+    
+    const difficulty = difficultyMapping[examType] || "General competitive level";
+
+    // Function to generate a batch of 10 questions
+    const generateQuizBatch = async (batchSize) => {
+      const prompt = `
+      Generate exactly **${batchSize}** high-quality **MCQs, Assertion-Reasoning, Fill-in-the-Blanks, and Numerical** questions in **valid JSON format**.
+      
+      ### Exam Details:
+      - **Exam Type**: ${examType}
+      - **Subjects**: ${subjects.join(", ")}
+      - **Chapters**: ${chapters.join(", ")}
+      - **Difficulty Level**: ${difficulty}
+
+      ### **JSON Format (Strictly return only the array)**:
+    [
+  {
+    "type": "MCQ",
+    "question": "What is the acceleration due to gravity on Earth?",
+    "options": ["8.9 m/s²", "9.8 m/s²", "10.2 m/s²", "7.5 m/s²"],
+    "correct_answer": "9.8 m/s²",
+    "difficulty": "Easy",
+    "time_limit": "30"
+  },
+  {
+    "type": "Assertion-Reasoning",
+    "question": "Assertion: The boiling point of water decreases at higher altitudes. Reason: Atmospheric pressure decreases as altitude increases.",
+    "options": [
+      "Both are true, and reason explains assertion",
+      "Both are true, but reason does not explain assertion",
+      "Assertion is true, but reason is false",
+      "Both are false"
+    ],
+    "correct_answer": "Both are true, and reason explains assertion",
+    "difficulty": "Medium",
+    "time_limit": "40"
+  },
+  {
+    "type": "Fill-in-the-blank",
+    "question": "The chemical formula of water is ____.",
+    "options": ["H2O", "CO2", "O2", "H2O2"],
+    "correct_answer": "H2O",
+    "difficulty": "Easy",
+    "time_limit": "30"
+  },
+  {
+    "type": "Numerical",
+    "question": "A car starts from rest and accelerates at 5 m/s² for 4 seconds. What is its final velocity?",
+    "options": ["10 m/s", "15 m/s", "20 m/s", "25 m/s"],
+    "correct_answer": "20 m/s",
+    "difficulty": "Medium",
+    "time_limit": "50"
+  },
+       // ${batchSize - 1} more questions
+]
+
+      ### **Rules**:
+      1. **Return exactly ${batchSize} questions—no more, no less.**
+      2. **Mix of 40% MCQs, 20% Assertion-Reasoning, 20% Fill-in-the-Blanks, 20% Numerical.**
+      3. **All questions must have exactly 4 answer choices, including numerical ones.**
+      4. **No explanations, comments, or extra text—only valid JSON.**
+      `.trim();
+
+      let attempts = 0;
+      const MAX_RETRIES = 3;
+
+      while (attempts < MAX_RETRIES) {
+        try {
+          // Call AI model
+          const chat = model.startChat({
+            history: [
+              { role: 'user', parts: [{ text: 'Hello' }] },
+              { role: 'model', parts: [{ text: 'I can generate high-quality quizzes for competitive exams!' }] },
+            ],
+          });
+
+          const result = await chat.sendMessage(prompt);
+          const rawResponse = await result.response.text();
+
+          // Sanitize JSON
+          const sanitizedResponse = rawResponse
+            .replace(/```(?:json)?/g, '')  // Remove markdown code blocks
+            .replace(/\,[\s\r\n]*\]/g, ']') // Fix trailing commas
+            .trim();
+
+          // Parse and validate JSON
+          let quizQuestions = JSON.parse(sanitizedResponse);
+          if (Array.isArray(quizQuestions) && quizQuestions.length === batchSize) {
+            return quizQuestions;
+          } else {
+            console.error(`AI returned incorrect number of questions. Retrying...`);
+            attempts++;
+          }
+        } catch (error) {
+          console.error(`Attempt ${attempts + 1} failed:`, error);
+          attempts++;
+          await delay(2000); // Wait 2 seconds before retrying
+        }
+      }
+      
+      throw new Error('Failed to generate quiz batch after multiple attempts');
+    };
+
+    // Step 4: Generate quiz in 3 batches of 10 questions each
+    let quizQuestions = [];
+    for (let i = 0; i < 5; i++) {
+      const batch = await generateQuizBatch(10);
+      quizQuestions = quizQuestions.concat(batch);
+    }
+
+    // Step 5: Insert quiz details into the database
+    const title = `${examType} Quiz`;
+    const description = `Quiz for ${examType} covering ${subjects.join(", ")} - ${chapters.join(", ")}`;
+    const [quizResult] = await connection.promise().query(
+      'INSERT INTO quizzes (title, description, creator_id, is_competive, type) VALUES (?, ?, ?, ?, ?)',
+      [title, description, userId, 1, examType]
+    );
+    
+    const quizId = quizResult.insertId;
+
+    // Step 6: Insert questions and answers into the database
+    for (const question of quizQuestions) {
+      const [questionResult] = await connection.promise().query(
+        'INSERT INTO questions (quiz_id, question_text) VALUES (?, ?)',
+        [quizId, question.question]
+      );
+      const questionId = questionResult.insertId;
+
+      for (const option of question.options) {
+        const isCorrect = option === question.correct_answer;
+        await connection.promise().query(
+          'INSERT INTO answers (question_id, answer_text, is_correct) VALUES (?, ?, ?)',
+          [questionId, option, isCorrect]
+        );
+      }
+    }
+
+    // Step 7: Return the quiz details
+    res.json({ message: 'Competitive exam quiz generated successfully', quizId });
+  } catch (error) {
+    console.error('Error generating quiz:', error);
+    res.status(500).json({ error: 'Error generating quiz' });
+  }
+});
+
+app.post('/submitCompetitiveQuiz', async (req, res) => {
+  const { token, quizId, type, answers } = req.body;
+
+  // Validate input
+  if (!token || typeof token !== 'string' || !quizId || typeof quizId !== 'number' || !Array.isArray(answers) || !type) {
+    console.error('Invalid input data:', req.body);
+    return res.status(400).json({ message: 'Invalid input data' });
+  }
+
+  try {
+    const userId = await getUserIdFromToken(token);
+    let correctCount = 0;
+    let incorrectCount = 0;
+    let answerResults = [];
+
+    // Step 1: Check answers and collect results
+    for (const answer of answers) {
+      if (typeof answer.answerId !== 'number' || typeof answer.questionId !== 'number') {
+        console.error('Invalid answer format:', answer);
+        return res.status(400).json({ message: 'Invalid answer format' });
+      }
+
+      const [result] = await connection.promise().query(
+        'SELECT id FROM answers WHERE question_id = ? AND is_correct = TRUE',
+        [answer.questionId]
+      );
+
+      if (result.length) {
+        const correctAnswerId = result[0].id;
+        const isCorrect = correctAnswerId === answer.answerId;
+
+        answerResults.push({
+          questionId: answer.questionId,
+          userAnswerId: answer.answerId,
+          correctAnswerId: correctAnswerId,
+          isCorrect: isCorrect,
+        });
+
+        if (isCorrect) correctCount++;
+        else incorrectCount++;
+      }
+    }
+
+    // Step 2: Get total questions
+    const [questions] = await connection.promise().query(
+      'SELECT COUNT(*) AS count FROM questions WHERE quiz_id = ?',
+      [quizId]
+    );
+
+    const totalQuestions = questions[0].count;
+    if (totalQuestions === 0) {
+      return res.status(400).json({ message: 'No questions found for this quiz' });
+    }
+
+    // Step 3: Apply scoring system based on `type`
+    let score = 0;
+
+    switch (type) {
+      case 'NEET':
+      case 'JEE':
+        score = correctCount * 4 - incorrectCount * 1;
+        break;
+      case 'UPSC':
+      case 'SSC':
+      case 'Banking':
+        score = correctCount * 2 - incorrectCount * 0.66;
+        break;
+      case 'CAT':
+      case 'CUET':
+        score = correctCount * 3 - incorrectCount * 1;
+        break;
+      case 'GATE':
+        score = correctCount * 2 - incorrectCount * 0.33;
+        break;
+      case 'GMAT':
+      case 'GRE':
+      case 'SAT':
+        score = correctCount * 1 - incorrectCount * 0.25;
+        break;
+      case 'CLAT':
+        score = correctCount * 1 - incorrectCount * 0.5;
+        break;
+      default:
+        score = (correctCount / totalQuestions) * 100; // Default percentage score
+    }
+
+    // **No longer preventing negative scores**
+    
+    // Step 4: Save score to `user_quizzes`
+    await connection.promise().query(
+      'INSERT INTO user_quizzes (user_id, quiz_id, score) VALUES (?, ?, ?)',
+      [userId, quizId, score]
+    );
+
+    // Step 5: Update Points System (only if score is positive)
+    if (score > 0) {
+      const pointsEarned = correctCount * 5; // 5 points per correct answer
+      const pointsQuery = 'SELECT * FROM user_points WHERE user_id = ?';
+      const [pointsResults] = await connection.promise().query(pointsQuery, [userId]);
+
+      if (pointsResults.length > 0) {
+        await connection.promise().query('UPDATE user_points SET points = points + ? WHERE user_id = ?', [pointsEarned, userId]);
+      } else {
+        await connection.promise().query('INSERT INTO user_points (user_id, points) VALUES (?, ?)', [userId, pointsEarned]);
+      }
+    }
+
+    res.json({ score, answerResults });
+
+  } catch (error) {
+    console.error('Error submitting competitive quiz:', error.message);
+    res.status(500).json({ message: 'Error submitting competitive quiz' });
+  }
+});
 
 
 // Start the server
