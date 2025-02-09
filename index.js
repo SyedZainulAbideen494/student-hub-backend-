@@ -9725,7 +9725,7 @@ app.post("/api/resources/add", async (req, res) => {
           if (err) return res.status(500).json({ error: err.message });
 
           // Log the review pending message with category
-        //  console.log(`Review pending for a resource: "${title}" (Category: "${category}") by User ID: ${userId}`);
+         console.log(`Review pending for a resource: "${title}" (Category: "${category}") by User ID: ${userId}`);
 
           res.json({ message: "Resource submitted for review!" });
       });
