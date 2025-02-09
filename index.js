@@ -9398,9 +9398,11 @@ app.post('/api/test/submit', async (req, res) => {
 app.post('/api/quiz/generate/exam', async (req, res) => {
   const { examType, subjects, chapters, token } = req.body;
 
+
   try {
     // Step 1: Retrieve userId from the token
     const userId = await getUserIdFromToken(token);
+    console.log(`Generating Mock Quiz for ${examType}...`);
 
     const difficultyMapping = {
       NEET: "High conceptual + medical-level reasoning",
@@ -9552,6 +9554,7 @@ app.post('/api/quiz/generate/exam', async (req, res) => {
         );
       }
     }
+    console.log('Competitive exam quiz generated successfully!');
 
     // Step 7: Return the quiz details
     res.json({ message: 'Competitive exam quiz generated successfully', quizId });
