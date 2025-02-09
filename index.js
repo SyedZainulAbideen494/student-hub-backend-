@@ -9679,6 +9679,90 @@ app.post('/submitCompetitiveQuiz', async (req, res) => {
   }
 });
 
+// Fetch Approved Resources
+app.get("/api/resources", (req, res) => {
+  const query = `SELECT * FROM resources WHERE status = 'approved' ORDER BY created_at DESC`;
+  connection.query(query, (err, results) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json(results);
+  });
+});
+
+// Smart Search
+app.get("/api/resources/search", (req, res) => {
+  const { query } = req.query;
+  const searchQuery = `SELECT * FROM resources WHERE status = 'approved' 
+      AND (title LIKE ? OR description LIKE ?)`;
+  const searchTerm = `%${query}%`;
+  connection.query(searchQuery, [searchTerm, searchTerm], (err, results) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json(results);
+  });
+});
+
+// Submit a New Resource (User Suggestion)
+// Submit a New Resource (User Suggestion)
+app.post("/api/resources/add", async (req, res) => {
+  const token = req.headers.authorization?.split(" ")[1]; // Extract token from header
+  if (!token) {
+      return res.status(401).json({ error: "Unauthorized. Token missing." });
+  }
+
+  try {
+      const userId = await getUserIdFromToken(token); // Get user_id from token
+      if (!userId) {
+          return res.status(401).json({ error: "Invalid or expired token." });
+      }
+
+      const { title, description, link } = req.body;
+      const query = "INSERT INTO resources (title, description, link, user_id) VALUES (?, ?, ?, ?)";
+      
+      connection.query(query, [title, description, link, userId], (err, result) => {
+          if (err) return res.status(500).json({ error: err.message });
+
+          // Log the review pending message
+          console.log(`Review pending for a resource: "${title}" by User ID: ${userId}`);
+
+          res.json({ message: "Resource submitted for review!" });
+      });
+  } catch (error) {
+      res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+app.get("/api/resources/pending", (req, res) => {
+  const query = "SELECT * FROM resources WHERE status = 'pending'";
+  
+  connection.query(query, (err, results) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json(results);
+  });
+});
+
+app.post("/api/resources/review", (req, res) => {
+  const { resourceId, action } = req.body; // action = "approve" or "delete"
+
+  if (action === "approve") {
+      const query = "UPDATE resources SET status = 'approved' WHERE id = ?";
+      
+      connection.query(query, [resourceId], (err) => {
+          if (err) return res.status(500).json({ error: err.message });
+          res.json({ message: "Resource approved successfully!" });
+      });
+
+  } else if (action === "delete") {
+      const query = "DELETE FROM resources WHERE id = ?";
+      
+      connection.query(query, [resourceId], (err) => {
+          if (err) return res.status(500).json({ error: err.message });
+          res.json({ message: "Resource deleted successfully!" });
+      });
+
+  } else {
+      res.status(400).json({ error: "Invalid action" });
+  }
+});
+
 
 // Start the server
 app.listen(PORT, () => {
