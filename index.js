@@ -7986,51 +7986,59 @@ app.post('/api/notes/generate/elite/premium', async (req, res) => {
 
     // **Dynamic AI prompt including the topic**
     const prompt = `
-    You are an advanced AI designed to generate **elite-level study notes** exclusively for Edusify users. Your purpose is to create **detailed, structured, and comprehensive notes** that help students with **exams, revisions, and in-depth learning**.
+   You are an advanced AI designed to generate **elite-level study notes** exclusively for Edusify users.  
+Your goal is to create **highly detailed, structured, and well-formatted notes** to help students excel in **exams, revisions, and in-depth learning**.  
 
-    Generate high-quality, well-structured study notes for the topic: **"${topic}"**.
+## **Instructions for Generating Notes on: "${topic}"**  
 
-    ## **Instructions for Generating Notes:**
-    - The notes should be **highly detailed**, covering "${topic}" thoroughly with deep insights.
-    - Use a **structured format** with clear sections, subtopics, and explanations.
-    - Maintain **clarity and ease of understanding** while ensuring academic rigor.
-    - **Break down complex concepts step by step**, making them easy to grasp.
-    - Integrate **real-world applications** and at least **three practical examples** to enhance understanding.
-    - Use **proper HTML structure** to make the notes visually appealing:
-      - Main topic as the heading
-      - Subtopics and key concepts as subheadings
-      - Paragraphs for detailed explanations
-      - Lists for key points and important steps
-      - Bold important terms
-      - Italics for emphasis
-      - Blockquotes for significant insights or key definitions
-      - Code blocks if needed for mathematical or programming topics
-    
-    ## **Enhancements to Improve Learning:**
-    1. **Key Takeaways & Summary:**  
-       - After every major section, summarize the most important points concisely.
-       
-    2. **Common Mistakes & Misconceptions:**  
-       - Highlight **frequent student errors** and provide corrections with explanations.
-    
-    3. **Formulas & Diagrams:**  
-       - For mathematical or science-related topics, include **important formulas**.
-       - Describe how these formulas are derived or used in problem-solving.
-    
-    4. **Exam-Oriented Questions:**  
-       - Provide **at least five** potential exam questions for "${topic}".
-       - Include **step-by-step solutions** where applicable.
-    
-    5. **Memory Aids & Mnemonics:**  
-       - Offer **study hacks**, acronyms, or mnemonics where possible.
-    
-    6. **Connections to Other Topics:**  
-       - Explain how "${topic}" relates to other subjects or real-world applications.
-    
-    ## **Final Goal:**  
-    These notes should **not be short or superficial**. They should be **thorough, structured, and high-quality**, providing everything a student needs to **master "${topic}"** for exams, revision, and deep understanding.
-    
-    Ensure the notes **look premium, feel exclusive, and deliver an elite study experience** for Edusify users.
+### **1. Content Depth & Clarity**  
+- The notes should be **highly detailed**, covering all key concepts of "${topic}" with **deep insights and clear explanations**.  
+- Break down **complex ideas step by step**, making them easy to grasp.  
+- Include **real-world applications** and at least **three practical examples** to enhance understanding.  
+- Use **accurate definitions** and well-explained terms.  
+
+### **2. Structured Formatting for Maximum Readability**  
+Use **proper HTML structure** to ensure visually appealing and organized notes:  
+- **Main Topic** → Use a large heading.  
+- **Subtopics & Key Concepts** → Use subheadings for better clarity.  
+- **Detailed Explanations** → Write in paragraph form for in-depth understanding.  
+- **Key Takeaways & Important Points** → Highlight with bullet points.  
+- **Bold** important terms and **italicize** key emphasis points.  
+- **Blockquotes** → Use for significant insights, key definitions, or expert explanations.  
+- **Code Blocks** → Include for mathematical, scientific, or programming-related topics.  
+
+### **3. Enhancements to Improve Learning**  
+
+✅ **Key Takeaways & Summaries**  
+- At the end of **every major section**, provide a summary of the most important points.  
+- Ensure summaries are concise and focus on **exam-relevant information**.  
+
+✅ **Common Mistakes & Misconceptions**  
+- Highlight **frequent student errors** related to "${topic}".  
+- Provide **corrections and explanations** to help students avoid mistakes.  
+
+✅ **Formulas & Diagrams** *(if applicable)*  
+- Include **all essential formulas** related to "${topic}".  
+- Explain **how these formulas are derived and used** in problem-solving.  
+
+✅ **Exam-Oriented Practice Questions**  
+- Provide at least **5 potential exam questions** for "${topic}".  
+- Where applicable, include **step-by-step solutions**.  
+
+✅ **Memory Aids & Mnemonics**  
+- Offer **study hacks, acronyms, or mnemonics** to improve retention.  
+
+✅ **Connections to Other Topics**  
+- Explain how "${topic}" is related to **other subjects or real-world applications**.  
+
+### **4. Final Goal**  
+The notes should:  
+✔️ Be **comprehensive, structured, and exam-focused**.  
+✔️ **Not be short or superficial**—ensure deep coverage.  
+✔️ Deliver a **premium, exclusive, and high-end study experience** for Edusify users.  
+
+Ensure the notes **look premium, feel exclusive, and provide everything needed to master "${topic}"**.
+
     `;
 
     console.log('Generating elite notes on:', topic);
