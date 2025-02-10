@@ -9865,6 +9865,81 @@ app.post("/api/resources/click", async (req, res) => {
 });
 
 
+app.post("/api/resources/ai-finder", async (req, res) => {
+  try {
+      const { query } = req.body;
+      if (!query) {
+          return res.status(400).json({ error: "Query is required" });
+      }
+
+      // Fetch all resources with save count
+      const fetchQuery = `
+          SELECT r.*, 
+                 (SELECT COUNT(*) FROM saved_resources WHERE resource_id = r.id) AS save_count
+          FROM resources r
+      `;
+
+      connection.query(fetchQuery, async (err, results) => {
+          if (err) {
+              console.error("❌ Database error:", err);
+              return res.status(500).json({ error: "Database error" });
+          }
+
+          // Rank resources based on keyword relevance & saves
+          const rankedResources = results
+              .map(resource => {
+                  let score = (resource.save_count || 0) * 10; // Boost by saves
+                  const keywords = query.toLowerCase().split(" ");
+
+                  keywords.forEach(word => {
+                      if (resource.title.toLowerCase().includes(word)) score += 5;
+                      if (resource.description.toLowerCase().includes(word)) score += 3;
+                      if (resource.category.toLowerCase().includes(word)) score += 2;
+                  });
+
+                  return { ...resource, score };
+              })
+              .sort((a, b) => b.score - a.score)
+              .slice(0, 5);
+
+          // AI Prompt
+          let prompt = `You are an AI study assistant helping students find the best resources.\nStudent's query: "${query}"\n\nBest resources found:\n`;
+
+          rankedResources.forEach((res, index) => {
+              prompt += `${index + 1}. ${res.title}\nCategory: ${res.category}\nDescription: ${res.description}\nLink: ${res.link}\nSaves: ${res.save_count}\n\n`;
+          });
+
+          prompt += "Summarize these resources and explain their relevance in simple, clear text. Do not use markdown symbols like *, **, or ```.";
+
+          console.log("Generating AI response...");
+
+          // AI Integration with Retry Logic
+          const generateResponse = async () => {
+              for (let attempts = 0; attempts < 5; attempts++) {
+                  try {
+                      const chat = model.startChat({ history: [] });
+                      const result = await chat.sendMessage(prompt);
+                      return result.response.text().replace(/```(?:json)?/g, "").trim();
+                  } catch (error) {
+                      if (attempts === 4) throw new Error("AI response generation failed");
+                      await new Promise(resolve => setTimeout(resolve, 2000));
+                  }
+              }
+          };
+
+          const aiResponse = await generateResponse();
+          console.log("✅ AI response generated!");
+
+          res.json({ recommendations: aiResponse, resources: rankedResources });
+      });
+  } catch (error) {
+      console.error("❌ Internal server error:", error);
+      res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+
+
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
