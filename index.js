@@ -9783,13 +9783,19 @@ app.post("/api/resources/toggle-save", async (req, res) => {
 
       if (existing.length > 0) {
           // Resource is already saved, so unsave it
+          console.log(`UNSAVING resource: ${resourceId} for user: ${userId}`);
+          
           const deleteQuery = "DELETE FROM saved_resources WHERE user_id = ? AND resource_id = ?";
           await query(deleteQuery, [userId, resourceId]);
+
           return res.json({ message: "Resource unsaved successfully", saved: false });
       } else {
           // Resource is not saved, so save it
+          console.log(`SAVING resource: ${resourceId} for user: ${userId}`);
+          
           const insertQuery = "INSERT INTO saved_resources (user_id, resource_id) VALUES (?, ?)";
           await query(insertQuery, [userId, resourceId]);
+
           return res.json({ message: "Resource saved successfully", saved: true });
       }
   } catch (error) {
