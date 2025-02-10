@@ -9825,6 +9825,44 @@ app.get("/api/resources/saved", async (req, res) => {
 });
 
 
+app.post("/api/resources/click", async (req, res) => {
+  const { resourceId } = req.body;
+
+  if (!resourceId) {
+      return res.status(400).json({ error: "Resource ID is required" });
+  }
+
+  try {
+      // Increment the click count
+      const updateQuery = "UPDATE resources SET click_count = click_count + 1 WHERE id = ?";
+      connection.query(updateQuery, [resourceId], (err, result) => {
+          if (err) {
+              return res.status(500).json({ error: "Database error" });
+          }
+
+          if (result.affectedRows > 0) {
+              // Fetch the updated click count
+              const fetchQuery = "SELECT click_count FROM resources WHERE id = ?";
+              connection.query(fetchQuery, [resourceId], (fetchErr, fetchResult) => {
+                  if (fetchErr) {
+                      console.error("❌ Error fetching updated click count:", fetchErr);
+                      return res.status(500).json({ error: "Database error" });
+                  }
+
+                  const newClickCount = fetchResult[0]?.click_count || 0;
+                  console.log(`Click count updated for Resource ID: ${resourceId}. New count: ${newClickCount}`);
+
+                  res.json({ message: "Click counted successfully!", click_count: newClickCount });
+              });
+          } else {
+              res.status(404).json({ error: "Resource not found" });
+          }
+      });
+  } catch (error) {
+      console.error("❌ Internal server error:", error);
+      res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 
 // Start the server
