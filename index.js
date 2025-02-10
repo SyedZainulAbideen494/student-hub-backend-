@@ -9768,6 +9768,58 @@ app.post("/api/resources/review", (req, res) => {
   }
 });
 
+app.post("/api/resources/toggle-save", async (req, res) => {
+  try {
+      const { resourceId } = req.body;
+      const token = req.headers.authorization?.split(" ")[1];
+      if (!token) return res.status(401).json({ message: "Unauthorized" });
+
+      const userId = await getUserIdFromToken(token);
+      if (!userId) return res.status(403).json({ message: "Invalid token" });
+
+      // Check if the resource is already saved
+      const checkQuery = "SELECT * FROM saved_resources WHERE user_id = ? AND resource_id = ?";
+      const existing = await query(checkQuery, [userId, resourceId]);
+
+      if (existing.length > 0) {
+          // Resource is already saved, so unsave it
+          const deleteQuery = "DELETE FROM saved_resources WHERE user_id = ? AND resource_id = ?";
+          await query(deleteQuery, [userId, resourceId]);
+          return res.json({ message: "Resource unsaved successfully", saved: false });
+      } else {
+          // Resource is not saved, so save it
+          const insertQuery = "INSERT INTO saved_resources (user_id, resource_id) VALUES (?, ?)";
+          await query(insertQuery, [userId, resourceId]);
+          return res.json({ message: "Resource saved successfully", saved: true });
+      }
+  } catch (error) {
+      console.error("Error toggling saved resource:", error);
+      res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+app.get("/api/resources/saved", async (req, res) => {
+  try {
+      const token = req.headers.authorization?.split(" ")[1];
+      if (!token) return res.status(401).json({ message: "Unauthorized" });
+
+      const userId = await getUserIdFromToken(token);
+      if (!userId) return res.status(403).json({ message: "Invalid token" });
+
+      const savedResources = await query(
+          "SELECT resource_id FROM saved_resources WHERE user_id = ?",
+          [userId]
+      );
+
+      res.json(savedResources);
+  } catch (error) {
+      console.error("Error fetching saved resources:", error);
+      res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+
+
 
 // Start the server
 app.listen(PORT, () => {
