@@ -8761,7 +8761,7 @@ app.post('/api/magic/usage', async (req, res) => {
     );
 
     const usageCount = usageResult[0].usage_count;
-    const maxFreeMagicUsage = 2; // Max allowed magic usage per day for free users
+    const maxFreeMagicUsage = 1; // Max allowed magic usage per day for free users
 
     // Step 3: Determine if the user can use Magic based on usage count
     const canUseMagic = usageCount < maxFreeMagicUsage;
@@ -9911,7 +9911,7 @@ app.post("/api/resources/ai-finder", async (req, res) => {
 
           prompt += "Summarize these resources and explain their relevance in simple, clear text. Do not use markdown symbols like *, **, or ```.";
 
-          console.log("Generating AI response...");
+          console.log("Generating AI resources ...", query);
 
           // AI Integration with Retry Logic
           const generateResponse = async () => {
