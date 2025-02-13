@@ -8754,16 +8754,16 @@ app.post('/api/magic/usage', async (req, res) => {
       return res.status(401).json({ error: 'Invalid token' });
     }
 
-    // Step 2: Check user's magic usage count for today
+    // Step 2: Check user's magic usage count for the past 7 days
     const [usageResult] = await connection.promise().query(
-      'SELECT COUNT(*) AS usage_count FROM magic_usage WHERE user_id = ? AND DATE(created_at) = CURDATE()',
+      'SELECT COUNT(*) AS usage_count FROM magic_usage WHERE user_id = ? AND created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)',
       [userId]
     );
 
     const usageCount = usageResult[0].usage_count;
-    const maxFreeMagicUsage = 1; // Max allowed magic usage per day for free users
+    const maxFreeMagicUsage = 3; // Max allowed Magic usage per week for free users
 
-    // Step 3: Determine if the user can use Magic based on usage count
+    // Step 3: Determine if the user can use Magic based on weekly limit
     const canUseMagic = usageCount < maxFreeMagicUsage;
 
     // Step 4: Return the result
