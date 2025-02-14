@@ -8704,6 +8704,214 @@ app.post('/verify-payment', async (req, res) => {
 });
 
 
+// Function to generate a unique gift card code
+const generateGiftCardCode = () => {
+  return 'EDU-' + crypto.randomBytes(4).toString('hex').toUpperCase();
+};
+
+// Buy Gift Card
+app.post('/buy-gift-card', async (req, res) => {
+  try {
+    const { amount, currency, token } = req.body;
+    const userId = await getUserIdFromToken(token);
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const options = {
+      amount: amount * 100, // Convert to paise
+      currency,
+      receipt: `giftcard_${Math.floor(Math.random() * 100000)}`,
+      notes: { userId },
+    };
+
+    razorpay.orders.create(options, async (err, order) => {
+      if (err) return res.status(500).json({ error: err });
+
+      const giftCardCode = generateGiftCardCode();
+
+      const queryText = `
+        INSERT INTO gift_cards (user_id, code, amount, status, created_at)
+        VALUES (?, ?, ?, 'unused', NOW())
+      `;
+      await query(queryText, [userId, giftCardCode, amount]);
+
+      res.json({ order, giftCardCode });
+    });
+
+  } catch (error) {
+    console.error('Error in buy-gift-card:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Verify Payment for Gift Card
+app.post('/verify-gift-card-payment', async (req, res) => {
+  try {
+    const { payment_id, order_id, signature, token, giftCardCode } = req.body;
+    const userId = await getUserIdFromToken(token);
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const body = `${order_id}|${payment_id}`;
+    const expected_signature = crypto
+      .createHmac('sha256', 'ec9nrw9RjbIcvpkufzaYxmr6')
+      .update(body)
+      .digest('hex');
+
+    if (expected_signature === signature) {
+      await query('UPDATE gift_cards SET status = "valid" WHERE code = ?', [giftCardCode]);
+      res.json({ success: true, message: 'Gift card activated successfully' });
+    } else {
+      res.status(400).json({ success: false, message: 'Signature mismatch' });
+    }
+  } catch (error) {
+    console.error('Error in verify-gift-card-payment:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post('/redeem-gift-card', async (req, res) => {
+  try {
+    const { giftCardCode, token } = req.body;
+
+    // Extract user ID from token
+    const userId = await getUserIdFromToken(token);
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    // Check if the gift card exists and is valid
+    const giftCard = await query('SELECT * FROM gift_cards WHERE code = ? AND status = "valid"', [giftCardCode]);
+
+    if (giftCard.length === 0) {
+      return res.status(400).json({ error: 'Invalid or already redeemed gift card' });
+    }
+
+    const amount = giftCard[0].amount;
+
+    // Determine subscription duration based on gift card amount
+    let duration;
+    if (amount === 39) duration = 'weekly';
+    else if (amount === 99) duration = 'monthly';
+    else if (amount === 499) duration = '6months';
+    else return res.status(400).json({ error: 'Invalid gift card amount' });
+
+    // Calculate expiry date
+    const expiryDate = new Date();
+    if (duration === 'weekly') expiryDate.setDate(expiryDate.getDate() + 7);
+    else if (duration === 'monthly') expiryDate.setDate(expiryDate.getDate() + 30);
+    else if (duration === '6months') expiryDate.setDate(expiryDate.getDate() + 180);
+
+    // Mark the gift card as used
+    await query('UPDATE gift_cards SET status = "used", redeemed_by = ?, redeemed_at = NOW() WHERE code = ?', [userId, giftCardCode]);
+
+    // Add premium subscription
+    const queryText = `
+      INSERT INTO subscriptions (user_id, subscription_plan, payment_status, payment_date, expiry_date)
+      VALUES (?, ?, ?, NOW(), ?)
+    `;
+    await query(queryText, [userId, duration, 'success', expiryDate]);
+
+    res.json({ success: true, message: `Gift card redeemed! Premium activated for ${duration}.` });
+  } catch (error) {
+    console.error('Error in redeem-gift-card:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+
+// Get all gift cards for the logged-in user
+app.get('/get-gift-cards', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1]; // Extract token from "Bearer token"
+    const userId = await getUserIdFromToken(token);
+    
+    if (!userId) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+    const query = `
+      SELECT code, amount, status
+      FROM gift_cards 
+      WHERE user_id = ? 
+    `;
+
+    connection.query(query, [userId], (err, results) => {
+      if (err) {
+        console.error('Database error:', err);
+        return res.status(500).json({ success: false, message: 'Database error' });
+      }
+
+      res.json({ success: true, giftCards: results });
+    });
+
+  } catch (error) {
+    console.error('Error fetching gift cards:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
+app.get('/get-friends-gift', async (req, res) => {
+  try {
+    const token = req.headers.authorization.split(' ')[1];
+    const userId = await getUserIdFromToken(token);
+
+    const friendsQuery = `
+      SELECT DISTINCT u.id, u.unique_id FROM users u
+      JOIN friends f ON (f.user_id_1 = u.id OR f.user_id_2 = u.id)
+      WHERE (f.user_id_1 = ? OR f.user_id_2 = ?) AND u.id != ?
+    `;
+    const friends = await query(friendsQuery, [userId, userId, userId]);
+
+    res.json({ friends });
+  } catch (error) {
+    console.error('Error fetching friends:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+
+app.post('/gift-gift-card', async (req, res) => {
+  try {
+    const { token, friendId, giftCardCode } = req.body;
+    const userId = await getUserIdFromToken(token);
+
+    // Check if the friend already has premium
+    const existingSubscription = await query(
+      'SELECT user_id FROM subscriptions WHERE user_id = ? AND expiry_date > NOW()',
+      [friendId]
+    );
+
+    if (existingSubscription.length > 0) {
+      return res.status(400).json({ message: 'This user already has an active premium subscription.' });
+    }
+
+    // Check if the gift card is valid
+    const validGiftCard = await query(
+      'SELECT code FROM gift_cards WHERE code = ? AND status = "valid"',
+      [giftCardCode]
+    );
+
+    if (validGiftCard.length === 0) {
+      return res.status(400).json({ message: 'Invalid or already used gift card.' });
+    }
+
+    // Mark gift card as used
+    await query(
+      'UPDATE gift_cards SET status = "used", redeemed_by = ?, redeemed_at = NOW() WHERE code = ?',
+      [friendId, giftCardCode]
+    );
+
+    // Add subscription
+    const expiryDate = new Date();
+    expiryDate.setMonth(expiryDate.getMonth() + 1); // 1-month premium
+
+    await query(
+      'INSERT INTO subscriptions (user_id, subscription_plan, payment_status, payment_date, expiry_date) VALUES (?, ?, ?, NOW(), ?)',
+      [friendId, '1 Month Premium', 'gifted', expiryDate]
+    );
+
+    res.json({ message: 'Gift card successfully gifted!' });
+  } catch (error) {
+    console.error('Error gifting card:', error);
+    res.status(500).json({ message: 'Failed to gift card.' });
+  }
+});
+
 
 // API endpoint to check if the user is premium
 app.post('/check-premium', async (req, res) => {
@@ -8761,7 +8969,7 @@ app.post('/api/magic/usage', async (req, res) => {
     );
 
     const usageCount = usageResult[0].usage_count;
-    const maxFreeMagicUsage = 3; // Max allowed Magic usage per week for free users
+    const maxFreeMagicUsage = 2; // Max allowed Magic usage per week for free users
 
     // Step 3: Determine if the user can use Magic based on weekly limit
     const canUseMagic = usageCount < maxFreeMagicUsage;
