@@ -9826,37 +9826,49 @@ app.post('/submitCompetitiveQuiz', async (req, res) => {
       return res.status(400).json({ message: 'No questions found for this quiz' });
     }
 
-    // Step 3: Apply scoring system based on `type`
-    let score = 0;
+   // Step 3: Apply scoring system based on `type`
+let score = 0;
+let maxMarksPerQuestion = 1; // Default max marks per question
 
-    switch (type) {
-      case 'NEET':
-      case 'JEE':
-        score = correctCount * 4 - incorrectCount * 1;
-        break;
-      case 'UPSC':
-      case 'SSC':
-      case 'Banking':
-        score = correctCount * 2 - incorrectCount * 0.66;
-        break;
-      case 'CAT':
-      case 'CUET':
-        score = correctCount * 3 - incorrectCount * 1;
-        break;
-      case 'GATE':
-        score = correctCount * 2 - incorrectCount * 0.33;
-        break;
-      case 'GMAT':
-      case 'GRE':
-      case 'SAT':
-        score = correctCount * 1 - incorrectCount * 0.25;
-        break;
-      case 'CLAT':
-        score = correctCount * 1 - incorrectCount * 0.5;
-        break;
-      default:
-        score = (correctCount / totalQuestions) * 100; // Default percentage score
-    }
+switch (type) {
+  case 'NEET':
+  case 'JEE':
+    score = correctCount * 4 - incorrectCount * 1;
+    maxMarksPerQuestion = 4;
+    break;
+  case 'UPSC':
+  case 'SSC':
+  case 'Banking':
+    score = correctCount * 2 - incorrectCount * 0.66;
+    maxMarksPerQuestion = 2;
+    break;
+  case 'CAT':
+  case 'CUET':
+    score = correctCount * 3 - incorrectCount * 1;
+    maxMarksPerQuestion = 3;
+    break;
+  case 'GATE':
+    score = correctCount * 2 - incorrectCount * 0.33;
+    maxMarksPerQuestion = 2;
+    break;
+  case 'GMAT':
+  case 'GRE':
+  case 'SAT':
+    score = correctCount * 1 - incorrectCount * 0.25;
+    maxMarksPerQuestion = 1;
+    break;
+  case 'CLAT':
+    score = correctCount * 1 - incorrectCount * 0.5;
+    maxMarksPerQuestion = 1;
+    break;
+  default:
+    score = (correctCount / totalQuestions) * 100; // Default percentage score
+}
+
+// Ensure score never exceeds 100% of total possible marks
+const maxPossibleScore = totalQuestions * maxMarksPerQuestion;
+score = Math.min(score, maxPossibleScore);
+
 
     // **No longer preventing negative scores**
     
