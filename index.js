@@ -221,7 +221,6 @@ app.post("/subscribe/notification", (req, res) => {
           return res.status(500).json({ error: "Database error" });
         }
 
-        console.log("🔄 Subscription updated successfully");
         return res.status(200).json({ message: "Subscription updated!" });
       });
     } else {
@@ -236,7 +235,7 @@ app.post("/subscribe/notification", (req, res) => {
           return res.status(500).json({ error: "Database error" });
         }
 
-        console.log("✅ New subscription saved successfully");
+        console.log("New subscription saved successfully");
         return res.status(201).json({ message: "Subscribed successfully!" });
       });
     }
