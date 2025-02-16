@@ -10159,6 +10159,45 @@ app.post("/api/resources/ai-finder", async (req, res) => {
 });
 
 
+// API to update user's location
+app.post("/update-location", async (req, res) => {
+  const token = req.headers.authorization?.split(" ")[1]; // Extract token
+
+  if (!token) {
+    return res.status(401).send({ error: "No token provided" });
+  }
+
+  try {
+    const userId = await getUserIdFromToken(token);
+    const { latitude, longitude } = req.body;
+
+    if (!latitude || !longitude) {
+      return res.status(400).send({ error: "Missing required fields" });
+    }
+
+    // Create location string
+    const location = `${latitude},${longitude}`;
+
+    // Update user's location in the database
+    const query = "UPDATE users SET location = ? WHERE id = ?";
+    connection.query(query, [location, userId], (err, result) => {
+      if (err) {
+        return res.status(500).send({ error: "Database error" });
+      }
+
+      if (result.affectedRows === 0) {
+        return res.status(404).send({ error: "User not found" });
+      }
+
+      console.log(`Location updated for user ${userId}: ${latitude}, ${longitude}`)
+      res.status(200).send({ message: "Location updated successfully" });
+    });
+  } catch (error) {
+    res.status(401).send({ error: "Invalid token" });
+  }
+});
+
+
 
 // Start the server
 app.listen(PORT, () => {
