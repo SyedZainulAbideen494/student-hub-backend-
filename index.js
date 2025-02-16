@@ -210,7 +210,7 @@ app.post("/subscribe/notification", (req, res) => {
       return res.status(500).json({ error: "Database error" });
     }
     
-    console.log("✅ Subscription saved successfully for:", endpoint);
+    console.log("✅ Subscription saved successfully");
     res.status(201).json({ message: "Subscribed successfully!" });
   });
 });
@@ -261,7 +261,6 @@ app.post("/send-notification", async (req, res) => {
         validSubscriptions.push(sub);
       } catch (error) {
         if (error.statusCode === 410) {
-          console.log("⚠️ Subscription expired, removing from DB:", sub.endpoint);
           connection.query(`DELETE FROM subscriptions_noti_key WHERE endpoint = ?`, [sub.endpoint]);
         } else {
           console.error("❌ Error sending push:", error);
