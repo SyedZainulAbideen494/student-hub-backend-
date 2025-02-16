@@ -190,8 +190,7 @@ const privateVapidKey = 'm5wPuyP581Ndto1uRBwGufADT7shUIbfUyV6YQcv88Q';
 
 webPush.setVapidDetails('mailto:zainkaleem27@gmail.com', publicVapidKey, privateVapidKey);
 
-
-// ✅ **1. Save Subscription to Database**
+// ✅ **Save or Update Subscription in Database**
 app.post("/subscribe/notification", (req, res) => {
   const { endpoint, expirationTime, keys } = req.body;
 
@@ -200,18 +199,47 @@ app.post("/subscribe/notification", (req, res) => {
     return res.status(400).json({ error: "Missing required fields" });
   }
 
-  const sql = `INSERT INTO subscriptions_noti_key (endpoint, expirationTime, subscription_keys)
-               VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE expirationTime=?, subscription_keys=?`;
-  const values = [endpoint, expirationTime, JSON.stringify(keys), expirationTime, JSON.stringify(keys)];
-
-  connection.query(sql, values, (err) => {
+  // First, check if the subscription already exists
+  const checkSql = `SELECT * FROM subscriptions_noti_key WHERE endpoint = ?`;
+  
+  connection.query(checkSql, [endpoint], (err, results) => {
     if (err) {
-      console.error("❌ Error saving subscription:", err);
+      console.error("❌ Database error while checking subscription:", err);
       return res.status(500).json({ error: "Database error" });
     }
-    
-    console.log("✅ Subscription saved successfully");
-    res.status(201).json({ message: "Subscribed successfully!" });
+
+    if (results.length > 0) {
+      // Subscription already exists, update it
+      const updateSql = `UPDATE subscriptions_noti_key 
+                         SET expirationTime = ?, subscription_keys = ? 
+                         WHERE endpoint = ?`;
+      const updateValues = [expirationTime, JSON.stringify(keys), endpoint];
+
+      connection.query(updateSql, updateValues, (updateErr) => {
+        if (updateErr) {
+          console.error("❌ Error updating subscription:", updateErr);
+          return res.status(500).json({ error: "Database error" });
+        }
+
+        console.log("🔄 Subscription updated successfully");
+        return res.status(200).json({ message: "Subscription updated!" });
+      });
+    } else {
+      // Subscription does not exist, insert a new one
+      const insertSql = `INSERT INTO subscriptions_noti_key (endpoint, expirationTime, subscription_keys)
+                         VALUES (?, ?, ?)`;
+      const insertValues = [endpoint, expirationTime, JSON.stringify(keys)];
+
+      connection.query(insertSql, insertValues, (insertErr) => {
+        if (insertErr) {
+          console.error("❌ Error saving subscription:", insertErr);
+          return res.status(500).json({ error: "Database error" });
+        }
+
+        console.log("✅ New subscription saved successfully");
+        return res.status(201).json({ message: "Subscribed successfully!" });
+      });
+    }
   });
 });
 
