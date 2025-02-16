@@ -191,29 +191,32 @@ const privateVapidKey = 'm5wPuyP581Ndto1uRBwGufADT7shUIbfUyV6YQcv88Q';
 webPush.setVapidDetails('mailto:zainkaleem27@gmail.com', publicVapidKey, privateVapidKey);
 
 let subscriptions = [];
-
-// Route to handle subscription
-app.post('/subscribe/noti', (req, res) => {
+app.post("/subscribe", (req, res) => {
   const subscription = req.body;
-  subscriptions.push(subscription);
-  res.status(201).json({});
+  subscriptions.push(subscription); // Save subscription in database
+  res.status(201).json({ message: "Subscribed!" });
 });
 
-// Route to send notifications
-app.post('/send-notification', (req, res) => {
-  const { title, message, icon } = req.body;
-  const payload = JSON.stringify({ title, message, icon });
+app.post("/send-notification", async (req, res) => {
+  const payload = JSON.stringify({ title: "Test Notification", body: "Hello, this is a test!" });
 
-  subscriptions.forEach((subscription, index) => {
-    webPush
-      .sendNotification(subscription, payload)
-      .catch((err) => {
-        console.error('Push Error:', err);
-        subscriptions.splice(index, 1); // Remove invalid subscriptions
-      });
-  });
+  const validSubscriptions = [];
 
-  res.status(200).send('Notifications sent.');
+  for (const sub of subscriptions) {
+    try {
+      await webpush.sendNotification(sub, payload);
+      validSubscriptions.push(sub); // Keep valid ones
+    } catch (error) {
+      if (error.statusCode === 410) {
+        console.log("Subscription expired, removing from DB:", sub.endpoint);
+      } else {
+        console.error("Error sending push:", error);
+      }
+    }
+  }
+
+  subscriptions = validSubscriptions; // Update the database without expired subscriptions
+  res.json({ message: "Notifications sent!" });
 });
 
 
@@ -10189,7 +10192,7 @@ app.post("/update-location", async (req, res) => {
         return res.status(404).send({ error: "User not found" });
       }
 
-      console.log(`Location updated for user ${userId}: ${latitude}, ${longitude}`)
+      console.log(`Location updated for user ${userId}: ${latitude}, ${longitude}`);
       res.status(200).send({ message: "Location updated successfully" });
     });
   } catch (error) {
