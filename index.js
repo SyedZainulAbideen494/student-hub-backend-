@@ -190,35 +190,105 @@ const privateVapidKey = 'm5wPuyP581Ndto1uRBwGufADT7shUIbfUyV6YQcv88Q';
 
 webPush.setVapidDetails('mailto:zainkaleem27@gmail.com', publicVapidKey, privateVapidKey);
 
-let subscriptions = [];
-app.post("/subscribe", (req, res) => {
-  const subscription = req.body;
-  subscriptions.push(subscription); // Save subscription in database
-  res.status(201).json({ message: "Subscribed!" });
-});
 
-app.post("/send-notification", async (req, res) => {
-  const payload = JSON.stringify({ title: "Test Notification", body: "Hello, this is a test!" });
+// ✅ **1. Save Subscription to Database**
+app.post("/subscribe/notification", (req, res) => {
+  const { endpoint, expirationTime, keys } = req.body;
 
-  const validSubscriptions = [];
-
-  for (const sub of subscriptions) {
-    try {
-      await webpush.sendNotification(sub, payload);
-      validSubscriptions.push(sub); // Keep valid ones
-    } catch (error) {
-      if (error.statusCode === 410) {
-        console.log("Subscription expired, removing from DB:", sub.endpoint);
-      } else {
-        console.error("Error sending push:", error);
-      }
-    }
+  if (!endpoint || !keys) {
+    console.warn("⚠️ Missing required subscription fields.");
+    return res.status(400).json({ error: "Missing required fields" });
   }
 
-  subscriptions = validSubscriptions; // Update the database without expired subscriptions
-  res.json({ message: "Notifications sent!" });
+  const sql = `INSERT INTO subscriptions_noti_key (endpoint, expirationTime, subscription_keys)
+               VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE expirationTime=?, subscription_keys=?`;
+  const values = [endpoint, expirationTime, JSON.stringify(keys), expirationTime, JSON.stringify(keys)];
+
+  connection.query(sql, values, (err) => {
+    if (err) {
+      console.error("❌ Error saving subscription:", err);
+      return res.status(500).json({ error: "Database error" });
+    }
+    
+    console.log("✅ Subscription saved successfully for:", endpoint);
+    res.status(201).json({ message: "Subscribed successfully!" });
+  });
 });
 
+
+// ✅ **2. Get All Subscriptions**
+app.get("/get-subscriptions", (req, res) => {
+  const sql = `SELECT * FROM subscriptions_noti_key`;
+  connection.query(sql, (err, results) => {
+    if (err) {
+      console.error("Error fetching subscriptions:", err);
+      return res.status(500).json({ error: "Database error" });
+    }
+    res.json(results);
+  });
+});
+
+// ✅ **3. Send Push Notification to All Subscribed Users (Dynamic Content)**
+app.post("/send-notification", async (req, res) => {
+  const { title, body, image } = req.body; // Get data from frontend
+
+  if (!title || !body) {
+    return res.status(400).json({ error: "Title and body are required" });
+  }
+
+  const payload = JSON.stringify({
+    title,
+    body,
+    icon: image || "https://edusify-download.vercel.app/static/media/1722866972968-removebg-preview.7e58008fdb08fcfb6a92.png", // Fallback image
+  });
+
+  const sql = `SELECT * FROM subscriptions_noti_key`;
+  connection.query(sql, async (err, subscriptions) => {
+    if (err) {
+      console.error("❌ Error fetching subscriptions:", err);
+      return res.status(500).json({ error: "Database error" });
+    }
+
+    const validSubscriptions = [];
+
+    for (const sub of subscriptions) {
+      try {
+        const subscription = {
+          endpoint: sub.endpoint,
+          keys: JSON.parse(sub.subscription_keys),
+        };
+        await webPush.sendNotification(subscription, payload);
+        validSubscriptions.push(sub);
+      } catch (error) {
+        if (error.statusCode === 410) {
+          console.log("⚠️ Subscription expired, removing from DB:", sub.endpoint);
+          connection.query(`DELETE FROM subscriptions_noti_key WHERE endpoint = ?`, [sub.endpoint]);
+        } else {
+          console.error("❌ Error sending push:", error);
+        }
+      }
+    }
+
+    res.json({ message: "✅ Notifications sent successfully!" });
+  });
+});
+
+// ✅ **4. Delete Subscription (If User Unsubscribes)**
+app.post("/delete-subscription", (req, res) => {
+  const { endpoint } = req.body;
+  if (!endpoint) {
+    return res.status(400).json({ error: "Missing endpoint" });
+  }
+
+  const sql = `DELETE FROM subscriptions_noti_key WHERE endpoint = ?`;
+  connection.query(sql, [endpoint], (err) => {
+    if (err) {
+      console.error("Error deleting subscription:", err);
+      return res.status(500).json({ error: "Database error" });
+    }
+    res.json({ message: "Subscription deleted successfully" });
+  });
+});
 
 // Promisify query function
 const query = (sql, params) => {
