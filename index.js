@@ -183,6 +183,24 @@ app.get('/', (req, res) => {
 
 });
 
+// Utility function to extract user ID from token
+const getUserIdFromToken = (token) => {
+  return new Promise((resolve, reject) => {
+    connection.query('SELECT user_id FROM session WHERE jwt = ?', [token], (err, results) => {
+      if (err) {
+        console.error(`Error fetching user_id for token: ${token}`, err);
+        reject(new Error('Failed to authenticate user.'));
+      }
+
+      if (results.length === 0) {
+        console.error(`Invalid or expired token: ${token}`);
+        reject(new Error('Invalid or expired token.'));
+      } else {
+        resolve(results[0].user_id);
+      }
+    });
+  });
+};
 
 // Generate VAPID keys once and keep them secure
 const publicVapidKey = 'BLDWVHPzXRA9ZOFhSyCet2trdRuvErMUBKuUPNzDsffj-b3-yvd7z58UEhpQAu-MA3DREuu4LwQhspUKBD1yngs';
@@ -191,56 +209,72 @@ const privateVapidKey = 'm5wPuyP581Ndto1uRBwGufADT7shUIbfUyV6YQcv88Q';
 webPush.setVapidDetails('mailto:zainkaleem27@gmail.com', publicVapidKey, privateVapidKey);
 
 // ✅ **Save or Update Subscription in Database**
-app.post("/subscribe/notification", (req, res) => {
-  const { endpoint, expirationTime, keys } = req.body;
+app.post("/subscribe/notification", async (req, res) => {
+  const { subscription, userToken } = req.body;
 
-  if (!endpoint || !keys) {
+  if (!subscription) {
     console.warn("⚠️ Missing required subscription fields.");
     return res.status(400).json({ error: "Missing required fields" });
   }
 
-  // First, check if the subscription already exists
-  const checkSql = `SELECT * FROM subscriptions_noti_key WHERE endpoint = ?`;
-  
-  connection.query(checkSql, [endpoint], (err, results) => {
-    if (err) {
-      console.error("❌ Database error while checking subscription:", err);
-      return res.status(500).json({ error: "Database error" });
+  try {
+    // Check if userToken exists. If not, set 'not_sign_up' as user_id.
+    let userId = 'not_sign_up'; // Default to 'not_sign_up' if no token is provided.
+    
+    if (userToken && userToken !== 'not_sign_up') {
+      // If token exists, extract user_id from the token
+      userId = await getUserIdFromToken(userToken); // Utility function to extract user_id from token
     }
 
-    if (results.length > 0) {
-      // Subscription already exists, update it
-      const updateSql = `UPDATE subscriptions_noti_key 
-                         SET expirationTime = ?, subscription_keys = ? 
-                         WHERE endpoint = ?`;
-      const updateValues = [expirationTime, JSON.stringify(keys), endpoint];
+    const { endpoint, expirationTime, keys } = subscription;
 
-      connection.query(updateSql, updateValues, (updateErr) => {
-        if (updateErr) {
-          console.error("❌ Error updating subscription:", updateErr);
-          return res.status(500).json({ error: "Database error" });
-        }
+    // First, check if the subscription already exists
+    const checkSql = `SELECT * FROM subscriptions_noti_key WHERE endpoint = ?`;
+    
+    connection.query(checkSql, [endpoint], (err, results) => {
+      if (err) {
+        console.error("❌ Database error while checking subscription:", err);
+        return res.status(500).json({ error: "Database error" });
+      }
 
-        return res.status(200).json({ message: "Subscription updated!" });
-      });
-    } else {
-      // Subscription does not exist, insert a new one
-      const insertSql = `INSERT INTO subscriptions_noti_key (endpoint, expirationTime, subscription_keys)
-                         VALUES (?, ?, ?)`;
-      const insertValues = [endpoint, expirationTime, JSON.stringify(keys)];
+      if (results.length > 0) {
+        // Subscription already exists, update it
+        const updateSql = `UPDATE subscriptions_noti_key 
+                           SET expirationTime = ?, subscription_keys = ?, user_id = ? 
+                           WHERE endpoint = ?`;
+        const updateValues = [expirationTime, JSON.stringify(keys), userId, endpoint];
 
-      connection.query(insertSql, insertValues, (insertErr) => {
-        if (insertErr) {
-          console.error("❌ Error saving subscription:", insertErr);
-          return res.status(500).json({ error: "Database error" });
-        }
+        connection.query(updateSql, updateValues, (updateErr) => {
+          if (updateErr) {
+            console.error("❌ Error updating subscription:", updateErr);
+            return res.status(500).json({ error: "Database error" });
+          }
 
-        console.log("New subscription saved successfully");
-        return res.status(201).json({ message: "Subscribed successfully!" });
-      });
-    }
-  });
+          return res.status(200).json({ message: "Subscription updated!" });
+        });
+      } else {
+        // Subscription does not exist, insert a new one
+        const insertSql = `INSERT INTO subscriptions_noti_key (endpoint, expirationTime, subscription_keys, user_id)
+                           VALUES (?, ?, ?, ?)`;
+        const insertValues = [endpoint, expirationTime, JSON.stringify(keys), userId];
+
+        connection.query(insertSql, insertValues, (insertErr) => {
+          if (insertErr) {
+            console.error("❌ Error saving subscription:", insertErr);
+            return res.status(500).json({ error: "Database error" });
+          }
+
+          console.log("New subscription saved successfully");
+          return res.status(201).json({ message: "Subscribed successfully!" });
+        });
+      }
+    });
+  } catch (error) {
+    console.error("❌ Error extracting user_id from token:", error);
+    return res.status(500).json({ error: "Failed to authenticate user." });
+  }
 });
+
 
 
 // ✅ **2. Get All Subscriptions**
@@ -255,9 +289,9 @@ app.get("/get-subscriptions", (req, res) => {
   });
 });
 
-// ✅ **3. Send Push Notification to All Subscribed Users (Dynamic Content)**
+
 app.post("/send-notification", async (req, res) => {
-  const { title, body, image } = req.body; // Get data from frontend
+  const { title, body, image, user_ids } = req.body; // Get data from frontend, including user_ids
 
   if (!title || !body) {
     return res.status(400).json({ error: "Title and body are required" });
@@ -269,8 +303,16 @@ app.post("/send-notification", async (req, res) => {
     icon: image || "https://edusify-download.vercel.app/static/media/1722866972968-removebg-preview.7e58008fdb08fcfb6a92.png", // Fallback image
   });
 
-  const sql = `SELECT * FROM subscriptions_noti_key`;
-  connection.query(sql, async (err, subscriptions) => {
+  let sql = `SELECT * FROM subscriptions_noti_key`;
+  let queryParams = [];
+
+  // Handle sending notifications based on user_ids
+  if (user_ids && user_ids.length > 0) {
+    sql += ` WHERE user_id IN (?)`; // Select subscriptions for specific users
+    queryParams = [user_ids];
+  }
+
+  connection.query(sql, queryParams, async (err, subscriptions) => {
     if (err) {
       console.error("❌ Error fetching subscriptions:", err);
       return res.status(500).json({ error: "Database error" });
@@ -298,6 +340,7 @@ app.post("/send-notification", async (req, res) => {
     res.json({ message: "✅ Notifications sent successfully!" });
   });
 });
+
 
 // ✅ **4. Delete Subscription (If User Unsubscribes)**
 app.post("/delete-subscription", (req, res) => {
@@ -781,19 +824,18 @@ app.post('/delete/task', (req, res) => {
   });
 });
 
-
-
 async function sendTaskReminders() {
   try {
     // Step 1: Fetch tasks with email reminders
     const tasks = await query(`
-      SELECT t.id, t.title, t.description, t.due_date, t.user_id, u.unique_id, u.email
+      SELECT t.id, t.title, t.description, t.due_date, t.user_id, u.unique_id, u.email, s.subscription_keys, s.endpoint
       FROM tasks t
       JOIN users u ON t.user_id = u.id
+      JOIN subscriptions_noti_key s ON u.id = s.user_id  -- Join with subscriptions_noti_key table
       WHERE t.completed = 0 AND t.email_reminder = 1
     `);
 
-    // Step 2: Filter out tasks with passed due dates and check if the due date is 1 day away
+    // Step 2: Filter out tasks with passed due dates and check if the due date is either 1 day away or today
     const currentDateTime = new Date();
     const targetDate = new Date(currentDateTime);
     targetDate.setHours(0, 0, 0, 0); // Reset time for a clear comparison
@@ -803,14 +845,14 @@ async function sendTaskReminders() {
 
     const validTasks = tasks.filter((task) => {
       const dueDate = new Date(task.due_date);
-      return dueDate > currentDateTime && dueDate <= oneDayLater;
+      return dueDate >= targetDate && dueDate <= oneDayLater; // Tasks due today or one day later
     });
 
     // Step 3: Group valid tasks by user
     const userTasks = validTasks.reduce((acc, task) => {
       const userKey = task.user_id;
       if (!acc[userKey]) {
-        acc[userKey] = { unique_id: task.unique_id, email: task.email, tasks: [] };
+        acc[userKey] = { unique_id: task.unique_id, subscription_keys: task.subscription_keys, endpoint: task.endpoint, tasks: [] };
       }
       acc[userKey].tasks.push({
         title: task.title,
@@ -820,9 +862,10 @@ async function sendTaskReminders() {
       return acc;
     }, {});
 
-    // Step 4: Send emails to each user
+    // Step 4: Send notifications to each user
     for (const userId in userTasks) {
-      const { unique_id, email, tasks } = userTasks[userId];
+      const { unique_id, subscription_keys, tasks } = userTasks[userId];
+
       const taskList = tasks
         .map(
           (task) =>
@@ -834,83 +877,37 @@ async function sendTaskReminders() {
         )
         .join("");
 
-      const emailBody = `
-        <div style="
-          font-family: 'Helvetica Neue', Arial, sans-serif; 
-          background-color: #f9f9f9; 
-          padding: 20px; 
-          border-radius: 10px; 
-          max-width: 600px; 
-          margin: auto; 
-          box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1); 
-          color: #333;
-        ">
-          <h2 style="
-            color: #000; 
-            text-align: center; 
-            margin-bottom: 20px; 
-            font-weight: bold;
-          ">
-            Hello ${unique_id},
-          </h2>
-          <p style="font-size: 16px; line-height: 1.5; margin-bottom: 20px; text-align: center;">
-            We hope you're doing great! Here's a summary of your pending tasks:
-          </p>
-          <ul style="
-            background-color: #fff; 
-            padding: 20px; 
-            border-radius: 10px; 
-            list-style: none; 
-            margin: 0 auto 20px; 
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-          ">
-            ${taskList}
-          </ul>
-          <p style="font-size: 16px; line-height: 1.5; text-align: center; margin-bottom: 20px;">
-            Don't forget to stay on top of your tasks and keep making progress. Visit your planner to review and update your tasks:
-          </p>
-          <p style="text-align: center; margin-bottom: 20px;">
-            <a 
-              href="https://edusify.vercel.app/planner" 
-              style="
-                color: #fff; 
-                background-color: #000; 
-                padding: 12px 20px; 
-                text-decoration: none; 
-                border-radius: 25px; 
-                font-weight: bold; 
-                display: inline-block;
-              "
-            >
-              Open Planner
-            </a>
-          </p>
-          <p style="font-size: 14px; color: #555; text-align: center;">
-            Stay productive! 😊
-          </p>
-          <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
-          <p style="font-size: 12px; color: #aaa; text-align: center;">
-            This email was sent by Edusify Task Reminder System. 
-            <br>Visit <a href="https://edusify.vercel.app" style="color: #000; text-decoration: none;">edusify.vercel.app</a> for more.
-          </p>
-        </div>
-      `;
-
-      await transporter.sendMail({
-        from: "edusify@gmail.com",
-        to: email,
-        subject: "Your Pending Tasks Reminder - Edusify",
-        html: emailBody,
+      const payload = JSON.stringify({
+        title: `Task Reminder for ${unique_id}`,
+        body: `You have tasks due in the next day or today:`,
+        icon: "https://edusify-download.vercel.app/static/media/1722866972968-removebg-preview.7e58008fdb08fcfb6a92.png",
+        data: { taskList },
       });
 
-      console.log(`Email sent to ${unique_id} (${email})`);
+      const subscription = {
+        endpoint: userTasks[userId].endpoint,
+        keys: JSON.parse(subscription_keys), // Assuming subscription_keys are stored as JSON
+      };
+
+      try {
+        await webPush.sendNotification(subscription, payload);
+        console.log(`Notification sent to ${unique_id}`);
+      } catch (error) {
+        if (error.statusCode === 410) {
+          console.log(`Subscription expired for ${unique_id}, removing from database.`);
+          // Remove expired subscription from the database
+          await query(`DELETE FROM subscriptions_noti_key WHERE endpoint = ?`, [subscription.endpoint]);
+        } else {
+          console.error("Error sending push notification:", error);
+        }
+      }
     }
   } catch (error) {
     console.error("Error sending task reminders:", error);
   }
 }
 
-// Schedule tasks
+// Schedule tasks to send reminders at 7 AM, 3 PM, and 8 PM (local time)
 schedule.scheduleJob("0 7,15,20 * * *", async () => {
   console.log("Running task reminders at", new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }));
   await sendTaskReminders();
@@ -1121,24 +1118,7 @@ app.delete('/api/delete/note/:note_id', (req, res) => {
   });
 });
 
-// Utility function to extract user ID from token
-const getUserIdFromToken = (token) => {
-  return new Promise((resolve, reject) => {
-    connection.query('SELECT user_id FROM session WHERE jwt = ?', [token], (err, results) => {
-      if (err) {
-        console.error(`Error fetching user_id for token: ${token}`, err);
-        reject(new Error('Failed to authenticate user.'));
-      }
 
-      if (results.length === 0) {
-        console.error(`Invalid or expired token: ${token}`);
-        reject(new Error('Invalid or expired token.'));
-      } else {
-        resolve(results[0].user_id);
-      }
-    });
-  });
-};
 
 // Route to fetch joined groups
 app.get('/api/groups/joined', async (req, res) => {
