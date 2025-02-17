@@ -913,7 +913,7 @@ async function sendTaskReminders() {
 }
 
 /// Schedule tasks to send reminders at 7 AM, 12:35 PM, 3 PM, and 8 PM (local time)
-schedule.scheduleJob("0 7,15,20,35 12 * * *", async () => {
+schedule.scheduleJob("0 7,15,20,34 12 * * *", async () => {
   console.log("Running task reminders at", new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }));
   await sendTaskReminders();
 });
