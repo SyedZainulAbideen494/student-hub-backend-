@@ -827,13 +827,13 @@ app.post('/delete/task', (req, res) => {
 async function sendTaskReminders() {
   try {
     // Step 1: Fetch tasks with email reminders
-    const tasks = await query(`
-      SELECT t.id, t.title, t.description, t.due_date, t.user_id, u.unique_id, u.email, s.subscription_keys, s.endpoint
-      FROM tasks t
-      JOIN users u ON t.user_id = u.id
-      JOIN subscriptions_noti_key s ON u.id = s.user_id  -- Join with subscriptions_noti_key table
-      WHERE t.completed = 0 AND t.email_reminder = 1
-    `);
+    const tasks = await query(
+      `SELECT t.id, t.title, t.description, t.due_date, t.user_id, u.unique_id, u.email, s.subscription_keys, s.endpoint
+       FROM tasks t
+       JOIN users u ON t.user_id = u.id
+       JOIN subscriptions_noti_key s ON u.id = s.user_id  
+       WHERE t.completed = 0 AND t.email_reminder = 1`
+    );
 
     // Step 2: Filter out tasks with passed due dates and check if the due date is either 1 day away or today
     const currentDateTime = new Date();
@@ -884,26 +884,21 @@ async function sendTaskReminders() {
         data: { taskList },
       });
 
-      // Assuming subscription_keys is an array of subscription keys
-      const subscriptions = JSON.parse(subscription_keys); // Parse the subscription keys (ensure it is an array)
+      const subscription = {
+        endpoint: userTasks[userId].endpoint,
+        keys: JSON.parse(subscription_keys), // Assuming subscription_keys are stored as JSON
+      };
 
-      for (const subscriptionKey of subscriptions) {
-        const subscription = {
-          endpoint: subscriptionKey.endpoint, // Each subscription's endpoint
-          keys: JSON.parse(subscriptionKey.keys), // Each subscription's keys
-        };
-
-        try {
-          await webPush.sendNotification(subscription, payload);
-          console.log(`Notification sent to ${unique_id}`);
-        } catch (error) {
-          if (error.statusCode === 410) {
-            console.log(`Subscription expired for ${unique_id}, removing from database.`);
-            // Remove expired subscription from the database
-            await query(`DELETE FROM subscriptions_noti_key WHERE endpoint = ?`, [subscription.endpoint]);
-          } else {
-            console.error("Error sending push notification:", error);
-          }
+      try {
+        await webPush.sendNotification(subscription, payload);
+        console.log(`Notification sent to ${unique_id}`);
+      } catch (error) {
+        if (error.statusCode === 410) {
+          console.log(`Subscription expired for ${unique_id}, removing from database.`);
+          // Remove expired subscription from the database
+          await query('DELETE FROM subscriptions_noti_key WHERE endpoint = ?', [subscription.endpoint]);
+        } else {
+          console.error("Error sending push notification:", error);
         }
       }
     }
@@ -912,8 +907,8 @@ async function sendTaskReminders() {
   }
 }
 
-/// Schedule tasks to send reminders at 7 AM, 12:35 PM, 3 PM, and 8 PM (local time)
-schedule.scheduleJob("0 7,15,20,34 12 * * *", async () => {
+// Schedule tasks to send reminders at 7 AM, 3 PM, and 8 PM (local time)
+schedule.scheduleJob("0 7,15,20 * * *", async () => {
   console.log("Running task reminders at", new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }));
   await sendTaskReminders();
 });
