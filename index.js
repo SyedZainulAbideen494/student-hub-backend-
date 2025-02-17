@@ -208,6 +208,7 @@ const privateVapidKey = 'm5wPuyP581Ndto1uRBwGufADT7shUIbfUyV6YQcv88Q';
 
 webPush.setVapidDetails('mailto:zainkaleem27@gmail.com', publicVapidKey, privateVapidKey);
 
+
 // ✅ **Save or Update Subscription in Database**
 app.post("/subscribe/notification", async (req, res) => {
   const { subscription, userToken } = req.body;
@@ -823,7 +824,6 @@ app.post('/delete/task', (req, res) => {
       });
   });
 });
-
 async function sendTaskReminders() {
   try {
     // Step 1: Fetch tasks with email reminders
@@ -884,21 +884,26 @@ async function sendTaskReminders() {
         data: { taskList },
       });
 
-      const subscription = {
-        endpoint: userTasks[userId].endpoint,
-        keys: JSON.parse(subscription_keys), // Assuming subscription_keys are stored as JSON
-      };
+      // Assuming subscription_keys is an array of subscription keys
+      const subscriptions = JSON.parse(subscription_keys); // Parse the subscription keys (ensure it is an array)
 
-      try {
-        await webPush.sendNotification(subscription, payload);
-        console.log(`Notification sent to ${unique_id}`);
-      } catch (error) {
-        if (error.statusCode === 410) {
-          console.log(`Subscription expired for ${unique_id}, removing from database.`);
-          // Remove expired subscription from the database
-          await query(`DELETE FROM subscriptions_noti_key WHERE endpoint = ?`, [subscription.endpoint]);
-        } else {
-          console.error("Error sending push notification:", error);
+      for (const subscriptionKey of subscriptions) {
+        const subscription = {
+          endpoint: subscriptionKey.endpoint, // Each subscription's endpoint
+          keys: JSON.parse(subscriptionKey.keys), // Each subscription's keys
+        };
+
+        try {
+          await webPush.sendNotification(subscription, payload);
+          console.log(`Notification sent to ${unique_id}`);
+        } catch (error) {
+          if (error.statusCode === 410) {
+            console.log(`Subscription expired for ${unique_id}, removing from database.`);
+            // Remove expired subscription from the database
+            await query(`DELETE FROM subscriptions_noti_key WHERE endpoint = ?`, [subscription.endpoint]);
+          } else {
+            console.error("Error sending push notification:", error);
+          }
         }
       }
     }
@@ -907,8 +912,8 @@ async function sendTaskReminders() {
   }
 }
 
-// Schedule tasks to send reminders at 7 AM, 3 PM, and 8 PM (local time)
-schedule.scheduleJob("0 7,15,20 * * *", async () => {
+/// Schedule tasks to send reminders at 7 AM, 12:35 PM, 3 PM, and 8 PM (local time)
+schedule.scheduleJob("0 7,15,20,35 12 * * *", async () => {
   console.log("Running task reminders at", new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }));
   await sendTaskReminders();
 });
