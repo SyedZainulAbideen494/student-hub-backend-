@@ -9684,95 +9684,91 @@ app.post('/api/test/submit', async (req, res) => {
 app.post('/api/quiz/generate/exam', async (req, res) => {
   const { examType, subjects, chapters, token } = req.body;
 
-
   try {
-    // Step 1: Retrieve userId from the token
     const userId = await getUserIdFromToken(token);
-    console.log(`Generating Mock Quiz for ${examType}...`);
+    console.log(`Generating Hardcore MCQ Quiz for ${examType}...`);
 
     const difficultyMapping = {
-      NEET: "High conceptual + medical-level reasoning",
-      JEE: "Math-intensive + logical thinking",
-      UPSC: "Analytical + fact-based reasoning",
-      CAT: "Quantitative Aptitude + Logical Reasoning",
-      GATE: "Engineering-level conceptual questions",
-      GMAT: "Verbal reasoning + Data Interpretation",
-      GRE: "Analytical Writing + Logical Reasoning",
-      SAT: "High-school level critical thinking",
-      CLAT: "Legal aptitude + Logical reasoning",
-      Banking: "Quantitative Aptitude + Financial Awareness",
-      SSC: "General Knowledge + Numerical Ability",
-      CUET: "University entrance level subject-based reasoning"
+      NEET: "Medical-level conceptual MCQs, multi-step application, assertion-trap questions",
+      JEE: "Advanced problem-solving MCQs, physics/math-heavy, tricky conceptual traps",
+      UPSC: "Deep analytical MCQs, historical case studies, multiple-correct logic-based questions",
+      GATE: "Engineering-level conceptual MCQs with applied numerical problem-solving",
+      CAT: "Toughest Quantitative Aptitude, tricky Logical Reasoning, high-stakes Data Interpretation",
+      GMAT: "Advanced Verbal Reasoning, Quant traps, logic-heavy decision-making MCQs",
+      GRE: "Tricky Analytical Reasoning, deep vocabulary MCQs, passage-based inference MCQs",
+      SAT: "High-school level logical & conceptual MCQs with complex wording",
+      CLAT: "Legal MCQs with case-law reasoning, logical argumentation",
+      Banking: "Financial Aptitude MCQs, heavy numerical-based reasoning",
+      SSC: "Toughest General Knowledge MCQs, historical traps, multiple-correct logic",
+      CUET: "University entrance-level hardcore subject-based reasoning MCQs"
     };
     
-    const difficulty = difficultyMapping[examType] || "General competitive level";
+    const difficulty = difficultyMapping[examType] || "High-level competitive MCQs with multi-step reasoning";
 
-    // Function to generate a batch of 10 questions
+    // Store all generated questions to avoid duplication
+    const generatedQuestions = new Set();
+
     const generateQuizBatch = async (batchSize) => {
       const prompt = `
-      Generate exactly **${batchSize}** high-quality **MCQs, Assertion-Reasoning, Fill-in-the-Blanks, and Numerical** questions in **valid JSON format**.
+      Generate exactly **${batchSize}** extremely **HARDCORE** **MCQs** with **tricky traps, multi-step reasoning, and highest difficulty level** for a **${examType}** student.
       
       ### Exam Details:
       - **Exam Type**: ${examType}
-      - **Subjects**: ${subjects.join(", ")}
-      - **Chapters**: ${chapters.join(", ")}
       - **Difficulty Level**: ${difficulty}
-
+      
+      ### **Subjects and Chapters**:
+      - Based on the **${examType}** exam, please list the subjects and corresponding chapters that are typically covered. Ensure that these reflect the structure and focus of the exam type accurately.
+      
+      ### **MCQs**:
+      Generate MCQs covering the identified subjects and chapters, with each question requiring deep conceptual understanding, multi-step calculations, or tricky logic.
+      
       ### **JSON Format (Strictly return only the array)**:
-    [
-  {
-    "type": "MCQ",
-    "question": "What is the acceleration due to gravity on Earth?",
-    "options": ["8.9 m/s²", "9.8 m/s²", "10.2 m/s²", "7.5 m/s²"],
-    "correct_answer": "9.8 m/s²",
-    "difficulty": "Easy",
-    "time_limit": "30"
-  },
-  {
-    "type": "Assertion-Reasoning",
-    "question": "Assertion: The boiling point of water decreases at higher altitudes. Reason: Atmospheric pressure decreases as altitude increases.",
-    "options": [
-      "Both are true, and reason explains assertion",
-      "Both are true, but reason does not explain assertion",
-      "Assertion is true, but reason is false",
-      "Both are false"
-    ],
-    "correct_answer": "Both are true, and reason explains assertion",
-    "difficulty": "Medium",
-    "time_limit": "40"
-  },
-  {
-    "type": "Fill-in-the-blank",
-    "question": "The chemical formula of water is ____.",
-    "options": ["H2O", "CO2", "O2", "H2O2"],
-    "correct_answer": "H2O",
-    "difficulty": "Easy",
-    "time_limit": "30"
-  },
-  {
-    "type": "Numerical",
-    "question": "A car starts from rest and accelerates at 5 m/s² for 4 seconds. What is its final velocity?",
-    "options": ["10 m/s", "15 m/s", "20 m/s", "25 m/s"],
-    "correct_answer": "20 m/s",
-    "difficulty": "Medium",
-    "time_limit": "50"
-  },
-       // ${batchSize - 1} more questions
-]
-
+      [
+        {
+          "question": "A ball is thrown vertically upwards with a speed of 30 m/s. Ignoring air resistance, after how much time will it return to the thrower’s hand?",
+          "options": ["3s", "6s", "9s", "12s"],
+          "correct_answer": "6s",
+          "difficulty": "Hard",
+          "time_limit": "45"
+        },
+        {
+          "question": "Which of the following compounds exhibits tautomerism?",
+          "options": ["Ethyl acetate", "Phenol", "Acetylacetone", "Ethanal"],
+          "correct_answer": "Acetylacetone",
+          "difficulty": "Hard",
+          "time_limit": "50"
+        },
+        {
+          "question": "A student weighs 600 N on Earth. If they travel to a planet with twice the Earth's radius but the same mass, their weight would be:",
+          "options": ["150 N", "300 N", "600 N", "1200 N"],
+          "correct_answer": "150 N",
+          "difficulty": "Hard",
+          "time_limit": "45"
+        },
+        {
+          "question": "Which of the following is NOT a fundamental right under the Indian Constitution?",
+          "options": ["Right to Equality", "Right to Property", "Right to Freedom", "Right against Exploitation"],
+          "correct_answer": "Right to Property",
+          "difficulty": "Hard",
+          "time_limit": "40"
+        },
+        // ${batchSize - 1} more HARD questions
+      ]
+      
       ### **Rules**:
       1. **Return exactly ${batchSize} questions—no more, no less.**
-      2. **Mix of 40% MCQs, 20% Assertion-Reasoning, 20% Fill-in-the-Blanks, 20% Numerical.**
-      3. **All questions must have exactly 4 answer choices, including numerical ones.**
-      4. **No explanations, comments, or extra text—only valid JSON.**
+      2. **Each MCQ must require deep conceptual understanding, multi-step calculations, or tricky logic.**
+      3. **All questions must have exactly 4 answer choices.**
+      4. **No direct fact-based recall, every question must require thinking.**
+      5. **No explanations, comments, or extra text—only valid JSON.**
       `.trim();
+      
 
       let attempts = 0;
       const MAX_RETRIES = 3;
 
       while (attempts < MAX_RETRIES) {
         try {
-          // Call AI model
           const chat = model.startChat({
             history: [
               { role: 'user', parts: [{ text: 'Hello' }] },
@@ -9783,15 +9779,18 @@ app.post('/api/quiz/generate/exam', async (req, res) => {
           const result = await chat.sendMessage(prompt);
           const rawResponse = await result.response.text();
 
-          // Sanitize JSON
           const sanitizedResponse = rawResponse
-            .replace(/```(?:json)?/g, '')  // Remove markdown code blocks
-            .replace(/\,[\s\r\n]*\]/g, ']') // Fix trailing commas
+            .replace(/```(?:json)?/g, '')  
+            .replace(/\,[\s\r\n]*\]/g, ']') 
             .trim();
 
-          // Parse and validate JSON
           let quizQuestions = JSON.parse(sanitizedResponse);
+
           if (Array.isArray(quizQuestions) && quizQuestions.length === batchSize) {
+            // Filter out duplicates
+            quizQuestions = quizQuestions.filter(q => !generatedQuestions.has(q.question));
+            quizQuestions.forEach(q => generatedQuestions.add(q.question));
+
             return quizQuestions;
           } else {
             console.error(`AI returned incorrect number of questions. Retrying...`);
@@ -9800,23 +9799,22 @@ app.post('/api/quiz/generate/exam', async (req, res) => {
         } catch (error) {
           console.error(`Attempt ${attempts + 1} failed:`, error);
           attempts++;
-          await delay(2000); // Wait 2 seconds before retrying
+          await delay(2000);
         }
       }
       
       throw new Error('Failed to generate quiz batch after multiple attempts');
     };
 
-    // Step 4: Generate quiz in 3 batches of 10 questions each
+    // Generate quiz in 5 batches of 10 questions each
     let quizQuestions = [];
     for (let i = 0; i < 5; i++) {
       const batch = await generateQuizBatch(10);
       quizQuestions = quizQuestions.concat(batch);
     }
 
-    // Step 5: Insert quiz details into the database
-    const title = `${examType} Quiz`;
-    const description = `Quiz for ${examType} covering ${subjects.join(", ")} - ${chapters.join(", ")}`;
+    const title = `${examType} Hardcore MCQ Quiz`;
+    const description = `Hardest MCQs for ${examType} covering ${subjects.join(", ")} - ${chapters.join(", ")}`;
     const [quizResult] = await connection.promise().query(
       'INSERT INTO quizzes (title, description, creator_id, is_competive, type) VALUES (?, ?, ?, ?, ?)',
       [title, description, userId, 1, examType]
@@ -9824,7 +9822,6 @@ app.post('/api/quiz/generate/exam', async (req, res) => {
     
     const quizId = quizResult.insertId;
 
-    // Step 6: Insert questions and answers into the database
     for (const question of quizQuestions) {
       const [questionResult] = await connection.promise().query(
         'INSERT INTO questions (quiz_id, question_text) VALUES (?, ?)',
@@ -9840,15 +9837,15 @@ app.post('/api/quiz/generate/exam', async (req, res) => {
         );
       }
     }
-    console.log('Competitive exam quiz generated successfully!');
+    console.log('Hardcore Competitive MCQ Quiz generated successfully!');
 
-    // Step 7: Return the quiz details
-    res.json({ message: 'Competitive exam quiz generated successfully', quizId });
+    res.json({ message: 'Hardcore Competitive MCQ Quiz generated successfully', quizId });
   } catch (error) {
     console.error('Error generating quiz:', error);
     res.status(500).json({ error: 'Error generating quiz' });
   }
 });
+
 
 app.post('/submitCompetitiveQuiz', async (req, res) => {
   const { token, quizId, type, answers } = req.body;
