@@ -9814,7 +9814,7 @@ app.post('/api/quiz/generate/exam', async (req, res) => {
     }
 
     const title = `${examType} Hardcore MCQ Quiz`;
-    const description = `Hardest MCQs for ${examType} covering ${subjects.join(", ")} - ${chapters.join(", ")}`;
+    const description = `Hardest MCQs for ${examType}`;
     const [quizResult] = await connection.promise().query(
       'INSERT INTO quizzes (title, description, creator_id, is_competive, type) VALUES (?, ?, ?, ?, ?)',
       [title, description, userId, 1, examType]
