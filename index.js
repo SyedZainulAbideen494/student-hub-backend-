@@ -28,6 +28,7 @@ const fs = require('fs');
 const webPush = require('web-push');
 const { speechToText, textToSpeech } = require('./speechService'); // Speech service (speech-to-text and text-to-speech)
 const moment = require('moment');
+const archiver = require("archiver");
 const Razorpay = require('razorpay');
 // Initialize Google Generative AI
 const genAI = new GoogleGenerativeAI('AIzaSyCvmpjZRi7GGS9TcPQeVCnSDJLFPchYZ38');
@@ -10466,6 +10467,44 @@ app.post('/api/quiz/generate/from-neet-guide', upload.none(), async (req, res) =
     res.status(500).json({ error: 'Error generating quiz' });
   }
 });
+
+
+app.get("/download-neet-pyqs", (req, res) => {
+  const pdfFolderPath = path.join(__dirname, "public"); // PDFs are directly in public
+
+  if (!fs.existsSync(pdfFolderPath)) {
+    return res.status(404).send("Public folder not found.");
+  }
+
+  const pdfFiles = fs.readdirSync(pdfFolderPath).filter(file => file.endsWith(".pdf")); // Only PDFs
+  if (pdfFiles.length === 0) {
+    return res.status(404).send("No PDFs available for download.");
+  }
+
+  const zipFileName = "NEET_2025_PYQs_Edusify.zip";
+  res.setHeader("Content-Type", "application/zip");
+  res.setHeader("Content-Disposition", `attachment; filename=${zipFileName}`);
+
+  const archive = archiver("zip", { zlib: { level: 9 } });
+  archive.pipe(res);
+
+  // Add all PDFs from public folder to the ZIP archive
+  pdfFiles.forEach((file) => {
+    const filePath = path.join(pdfFolderPath, file);
+    archive.file(filePath, { name: file });
+  });
+
+  archive.finalize().catch((err) => {
+    console.error("Error finalizing archive:", err);
+    res.status(500).send("Failed to create ZIP file.");
+  });
+
+  archive.on("error", (err) => {
+    console.error("Archive error:", err);
+    res.status(500).send("Failed to create ZIP file.");
+  });
+});
+
 
 // Start the server
 app.listen(PORT, () => {
