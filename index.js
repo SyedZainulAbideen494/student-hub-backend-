@@ -10313,6 +10313,159 @@ app.post('/api/flashcards/check-ai-usage', async (req, res) => {
   }
 });
 
+app.post('/api/topic/ai-explanation', async (req, res) => {
+  try {
+    // Extract the topic name from the request
+    const { topic } = req.body;
+
+    if (!topic) {
+      return res.status(400).json({ error: "Topic is required" });
+    }
+
+    // AI Prompt to generate an explanation
+    const prompt = `You are an expert AI tutor. Please explain the following topic in simple, easy-to-understand terms as if teaching a beginner student. Keep the explanation structured and include key concepts and real-world analogies:
+
+    Topic: ${topic}
+
+    Explanation: `;
+
+    console.log('Generating AI explanation for topic:', topic);
+
+    // AI Integration & Retry Logic
+    const generateExplanationWithRetry = async () => {
+      let attempts = 0;
+      const MAX_RETRIES = 5;
+
+      while (attempts < MAX_RETRIES) {
+        try {
+          const chat = model.startChat({ history: [] });
+          const result = await chat.sendMessage(prompt);
+          const rawResponse = await result.response.text();
+
+          const sanitizedResponse = rawResponse.replace(/```(?:json)?/g, '').trim();
+          let explanation;
+
+          try {
+            explanation = sanitizedResponse;
+          } catch (parseError) {
+            throw new Error('Invalid response from AI');
+          }
+
+          return explanation;
+        } catch (error) {
+          attempts++;
+          if (attempts === MAX_RETRIES) {
+            throw new Error('Failed to generate AI explanation after multiple attempts');
+          }
+          await new Promise(resolve => setTimeout(resolve, 2000)); // Retry delay
+        }
+      }
+    };
+
+    // Get AI-generated explanation
+    const aiExplanation = await generateExplanationWithRetry();
+    console.log('AI Explanation provided for:', topic);
+    res.json({ explanation: aiExplanation }); // Send response to frontend
+  } catch (error) {
+    console.error('Error processing request:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post('/api/quiz/generate/from-neet-guide', upload.none(), async (req, res) => {
+  const { subject, notes, token } = req.body;
+
+  try {
+    // Step 1: Retrieve userId from the token
+    const userId = await getUserIdFromToken(token);
+
+    // Step 2: Define a refined prompt to ensure proper quiz generation based on the notes
+    const prompt = `Generate a valid JSON array of 16 multiple-choice questions based on the following notes:
+      - Notes: ${notes}
+      
+      
+      Each question must strictly follow this format:
+      [
+        {
+          "question": "string",
+          "options": ["string", "string", "string", "string"],
+          "correct_answer": "string"
+        }
+      ]
+
+      Rules:
+      1. Return only the JSON array without any explanations or comments.
+      2. Ensure each question and options are meaningful and unique.
+      3. Format the JSON properly.
+  `;
+
+    console.log('Generating quiz from neet guide');
+
+    // Step 4: AI Integration and retry logic
+    const generateQuizWithRetry = async () => {
+      let attempts = 0;
+
+      while (attempts < MAX_RETRIES) {
+        try {
+          const chat = model.startChat({ history: [] });
+          const result = await chat.sendMessage(prompt);
+          const rawResponse = await result.response.text();
+
+          const sanitizedResponse = rawResponse.replace(/```(?:json)?/g, '').trim();
+          let quizQuestions;
+
+          try {
+            quizQuestions = JSON.parse(sanitizedResponse);
+          } catch (parseError) {
+            throw new Error('Invalid JSON response from the AI model');
+          }
+
+          return quizQuestions;
+        } catch (error) {
+          attempts++;
+          if (attempts === MAX_RETRIES) {
+            throw new Error('Failed to generate quiz after multiple attempts');
+          }
+          await new Promise((resolve) => setTimeout(resolve, 2000)); // Retry delay
+        }
+      }
+    };
+
+    const quizQuestions = await generateQuizWithRetry();
+
+    // Step 6: Insert quiz details into the database
+    const title = `${subject} Quiz`; // Use the subject from the frontend
+    const description = `Quiz on ${subject}`; // Use subject for description as well
+    const [quizResult] = await connection.promise().query(
+      'INSERT INTO quizzes (title, description, creator_id) VALUES (?, ?, ?)',
+      [title, description, userId]
+    );
+    const quizId = quizResult.insertId;
+
+    // Step 7: Insert questions and their options into the database
+    for (const question of quizQuestions) {
+      const [questionResult] = await connection.promise().query(
+        'INSERT INTO questions (quiz_id, question_text) VALUES (?, ?)',
+        [quizId, question.question]
+      );
+      const questionId = questionResult.insertId;
+
+      for (const option of question.options) {
+        const isCorrect = option === question.correct_answer;
+        await connection.promise().query(
+          'INSERT INTO answers (question_id, answer_text, is_correct) VALUES (?, ?, ?)',
+          [questionId, option, isCorrect]
+        );
+      }
+    }
+
+    // Step 8: Return the generated quiz details
+    res.json({ message: 'Quiz generated successfully', quizId });
+  } catch (error) {
+    console.error('Error generating quiz:', error);
+    res.status(500).json({ error: 'Error generating quiz' });
+  }
+});
 
 // Start the server
 app.listen(PORT, () => {
