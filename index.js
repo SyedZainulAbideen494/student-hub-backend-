@@ -10470,41 +10470,19 @@ app.post('/api/quiz/generate/from-neet-guide', upload.none(), async (req, res) =
 
 
 app.get("/download-neet-pyqs", (req, res) => {
-  const pdfFolderPath = path.join(__dirname, "public"); // PDFs are directly in public
+  const zipFilePath = path.join(__dirname, "public", "NEET_2025_PYQs_Edusify.zip"); // Adjust file name if different
 
-  if (!fs.existsSync(pdfFolderPath)) {
-    return res.status(404).send("Public folder not found.");
+  if (!fs.existsSync(zipFilePath)) {
+    return res.status(404).send("NEET ZIP file not found.");
   }
 
-  const pdfFiles = fs.readdirSync(pdfFolderPath).filter(file => file.endsWith(".pdf")); // Only PDFs
-  if (pdfFiles.length === 0) {
-    return res.status(404).send("No PDFs available for download.");
-  }
-
-  const zipFileName = "NEET_2025_PYQs_Edusify.zip";
-  res.setHeader("Content-Type", "application/zip");
-  res.setHeader("Content-Disposition", `attachment; filename=${zipFileName}`);
-
-  const archive = archiver("zip", { zlib: { level: 9 } });
-  archive.pipe(res);
-
-  // Add all PDFs from public folder to the ZIP archive
-  pdfFiles.forEach((file) => {
-    const filePath = path.join(pdfFolderPath, file);
-    archive.file(filePath, { name: file });
-  });
-
-  archive.finalize().catch((err) => {
-    console.error("Error finalizing archive:", err);
-    res.status(500).send("Failed to create ZIP file.");
-  });
-
-  archive.on("error", (err) => {
-    console.error("Archive error:", err);
-    res.status(500).send("Failed to create ZIP file.");
+  res.download(zipFilePath, "NEET_2025_PYQs_Edusify.zip", (err) => {
+    if (err) {
+      console.error("Download error:", err);
+      res.status(500).send("Failed to download the file.");
+    }
   });
 });
-
 
 // Start the server
 app.listen(PORT, () => {
