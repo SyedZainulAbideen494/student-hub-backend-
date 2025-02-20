@@ -52,11 +52,10 @@ const safetySettings = [
   }
 ];
 
-
 const model = genAI.getGenerativeModel({
-  model: "gemini-1.5-flash-8b",
+  model: "gemini-2.0-flash",
   safetySettings: safetySettings,
-  systemInstruction: "You are Edusify, an AI-powered productivity assistant designed to help students manage their academic tasks, study materials, and stay organized. Your mission is to provide tailored assistance and streamline the study experience with a wide range of features. Below are the core functionalities that you support: \n\n" +
+  systemInstruction: "You are Edusify, an AI-powered productivity assistant designed to help students manage their academic tasks, study materials, and stay organized. Your mission is to provide tailored assistance and streamline the study experience with a wide range of features.\n\n" +
   
   "- **Sticky Notes**: Users can quickly add sticky notes on the dashboard by clicking 'Add Note'. They can input a title, optional description, and select the note color. Notes are saved for easy access and organization. The dashboard also displays today's tasks and events.\n" +
   
@@ -78,8 +77,9 @@ const model = genAI.getGenerativeModel({
   
   "- **Pomodoro Timer**: The Pomodoro Timer helps users maintain focus with study sessions and breaks. It tracks study and break times, allowing users to monitor their productivity and download stats for social sharing.\n\n" +
   
-  "Your goal is to provide a seamless and engaging experience by offering personalized study tools, helping students organize their academic tasks, and encouraging efficient study habits through the integration of AI-powered features. You are designed to assist students in staying on top of their goals, providing reminders, feedback, and support whenever needed."
+  "When responding to user requests related to schedules, tasks, or notes, generate a general plan or summary based on the provided input without asking for too many details. If the user provides a broad topic, generate a summary note instead of requesting more specifics. If the user requires changes, wait for their feedback and adjust accordingly. Keep the flow of conversation smooth and focused on providing immediate value, not excessive clarifications."
 });
+
 
 
 
@@ -10483,6 +10483,143 @@ app.get("/download-neet-pyqs", (req, res) => {
     }
   });
 });
+
+
+app.post('/api/mindmap/generate', async (req, res) => {
+  const { topic, token } = req.body;
+
+  try {
+      // Step 1: Retrieve userId from the token
+      const userId = await getUserIdFromToken(token);
+
+      // Step 2: Insert into mind_map_master
+      const [masterResult] = await connection.promise().query(
+          'INSERT INTO mind_map_master (topic, creator_id) VALUES (?, ?)',
+          [topic, userId]
+      );
+      const mindMapId = masterResult.insertId; // Get the newly created mind_map_id
+
+      // Step 3: AI prompt to generate hierarchical mind map
+      const prompt = `Generate a JSON mind map for the topic "${topic}".
+      It should follow this strict JSON format:
+      [
+          {
+              "content": "Main Topic",
+              "children": [
+                  {
+                      "content": "Subtopic 1",
+                      "children": [
+                          {
+                              "content": "Sub-subtopic 1",
+                              "children": []
+                          }
+                      ]
+                  },
+                  {
+                      "content": "Subtopic 2",
+                      "children": []
+                  }
+              ]
+          }
+      ]
+
+      Rules:
+      1. Return only the JSON without any explanation.
+      2. Ensure logical structuring with meaningful subtopics.
+      3. Format the JSON properly.
+      `;
+
+      console.log('Generating AI-powered mind map...');
+
+      const generateMindMapWithRetry = async () => {
+          let attempts = 0;
+          while (attempts < MAX_RETRIES) {
+              try {
+                  const chat = model.startChat({ history: [] });
+                  const result = await chat.sendMessage(prompt);
+                  const rawResponse = await result.response.text();
+
+                  // Log full AI response before parsing
+                  console.log("RAW AI RESPONSE:", rawResponse);
+
+                  const sanitizedResponse = rawResponse.replace(/```(?:json)?/g, '').trim();
+                  let mindMapData;
+
+                  try {
+                      mindMapData = JSON.parse(sanitizedResponse);
+                      console.log("PARSED JSON MIND MAP:", JSON.stringify(mindMapData, null, 2)); // Pretty print JSON
+                  } catch (parseError) {
+                      console.error("JSON PARSE ERROR:", parseError);
+                      throw new Error('Invalid JSON response from AI');
+                  }
+
+                  return mindMapData;
+              } catch (error) {
+                  attempts++;
+                  if (attempts === MAX_RETRIES) {
+                      throw new Error('Failed to generate mind map after multiple attempts');
+                  }
+                  console.warn(`Retrying AI request... Attempt ${attempts}/${MAX_RETRIES}`);
+                  await new Promise((resolve) => setTimeout(resolve, 2000)); // Retry delay
+              }
+          }
+      };
+
+      const mindMapData = await generateMindMapWithRetry();
+
+      // Step 4: Store Mind Map Data in MySQL
+      const insertMindMap = async (node, parentId = null) => {
+          const [result] = await connection.promise().query(
+              'INSERT INTO mind_maps (mind_map_id, content, parent_id, creator_id) VALUES (?, ?, ?, ?)',
+              [mindMapId, node.content, parentId, userId]
+          );
+          const nodeId = result.insertId;
+
+          for (const child of node.children || []) {
+              await insertMindMap(child, nodeId);
+          }
+      };
+
+      await insertMindMap(mindMapData[0]); // Insert recursively
+
+      res.json({ mindMapId, message: 'Mind map generated successfully' });
+
+  } catch (error) {
+      console.error('Error generating mind map:', error);
+      res.status(500).json({ error: 'Error generating mind map' });
+  }
+});
+
+// Fetch Mind Map by ID
+app.get('/api/mindmap/:mindMapId', async (req, res) => {
+  const { mindMapId } = req.params;
+
+  try {
+      const [rows] = await connection.promise().query(
+          'SELECT * FROM mind_maps WHERE mind_map_id = ?',
+          [mindMapId]
+      );
+
+      const buildHierarchy = (nodes, parentId = null) => {
+          return nodes
+              .filter(node => node.parent_id === parentId)
+              .map(node => ({
+                  id: node.id,
+                  content: node.content,
+                  children: buildHierarchy(nodes, node.id)
+              }));
+      };
+
+      const hierarchy = buildHierarchy(rows);
+
+      res.json({ mindMap: hierarchy });
+
+  } catch (error) {
+      console.error('Error fetching mind map:', error);
+      res.status(500).json({ error: 'Error fetching mind map' });
+  }
+});
+
 
 // Start the server
 app.listen(PORT, () => {
