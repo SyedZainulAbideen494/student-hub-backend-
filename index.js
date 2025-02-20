@@ -3564,6 +3564,8 @@ const MAX_RETRIES = 10;
 
 // Helper function to introduce a delay (in milliseconds)
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+
 app.post('/api/chat/ai', async (req, res) => {
   const { message, chatHistory, token } = req.body;
 
@@ -3591,6 +3593,7 @@ app.post('/api/chat/ai', async (req, res) => {
       query('SELECT score, completed_at, quiz_id FROM user_quizzes WHERE user_id = ?', [userId]),
       query('SELECT title FROM quizzes WHERE id IN (SELECT quiz_id FROM user_quizzes WHERE user_id = ?)', [userId]),
       query('SELECT unique_id FROM users WHERE id = ?', [userId]),
+      query('SELECT * FROM user_goal WHERE user_id = ? ORDER BY created_at DESC LIMIT 1', [userId]) // Fetch the latest user goal
     ]);
 
     // Extract user data
@@ -3600,7 +3603,9 @@ app.post('/api/chat/ai', async (req, res) => {
     const quizResults = userData[3]; // Quiz Results
     const quizTitles = userData[4]; // Quiz Titles
     const userName = userData[5]?.[0]?.unique_id; // User's name (unique_id)
-
+    const userGoal = userData[6]?.[0]; // Latest User Goal
+    const today = new Date();
+    const formattedDate = today.toISOString().split('T')[0]; // Format as YYYY-MM-DD
     // Build dynamic system instruction
     const dynamicSystemInstruction = `
       You are Edusify, an AI-powered productivity assistant designed to help students manage their academic tasks, study materials, and stay organized. Your mission is to provide tailored assistance and streamline the study experience with a wide range of features.
@@ -3614,7 +3619,19 @@ app.post('/api/chat/ai', async (req, res) => {
         const quizTitle = quizTitles[index]?.title || 'Unknown Quiz';
         return `- ${quizTitle}: Score: ${result.score}, Completed on: ${result.completed_at}`;
       }).join('\n') : 'No quiz results available.'}
-
+       - **User Goal**: ${userGoal ? `
+        - **Grade**: ${userGoal.grade || 'N/A'}
+        - **Goal**: ${userGoal.goal || 'N/A'}
+        - **Study Time**: ${userGoal.study_time || 'N/A'}
+        - **Speed**: ${userGoal.speed || 'N/A'}
+        - **Revision Method**: ${userGoal.revision_method || 'N/A'}
+        - **Pomodoro Preference**: ${userGoal.pomodoro_preference || 'N/A'}
+        - **Subjects**: ${userGoal.subjects || 'N/A'}
+        - **Recent Grades**: ${userGoal.recent_grades || 'N/A'}
+        - **Exam Details**: ${userGoal.exam_details || 'N/A'}
+        - **Daily Routine**: ${userGoal.daily_routine || 'N/A'}
+      ` : 'No user goal available.'}
+- **Today's Date**: ${formattedDate}
   "- **Sticky Notes**: Users can quickly add sticky notes on the dashboard by clicking 'Add Note'. They can input a title, optional description, and select the note color. Notes are saved for easy access and organization. The dashboard also displays today's tasks and events.\n" +
   
   "- **AI Assistant**: Edusify helps users by generating notes, quizzes, and even adding AI responses directly to their notes with the 'Magic' feature. Users can click on the 'Magic' button to generate content like quizzes and notes from their AI response and add that content to their study materials.\n" +
