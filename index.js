@@ -209,7 +209,7 @@ const publicVapidKey = 'BLDWVHPzXRA9ZOFhSyCet2trdRuvErMUBKuUPNzDsffj-b3-yvd7z58U
 const privateVapidKey = 'm5wPuyP581Ndto1uRBwGufADT7shUIbfUyV6YQcv88Q';
 
 webPush.setVapidDetails('mailto:zainkaleem27@gmail.com', publicVapidKey, privateVapidKey);
-
+{/* 
 
 // ✅ **Save or Update Subscription in Database**
 app.post("/subscribe/notification", async (req, res) => {
@@ -276,7 +276,7 @@ app.post("/subscribe/notification", async (req, res) => {
     console.error("❌ Error extracting user_id from token:", error);
     return res.status(500).json({ error: "Failed to authenticate user." });
   }
-});
+});*/}
 
 
 
