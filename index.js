@@ -10610,7 +10610,7 @@ app.post("/api/chat/ai/yt", async (req, res) => {
 
     let transcript = "";
 
-    // Extract video ID from YouTube link
+ 
     const videoUrlMatch = youtubeLink.match(
       /(?:v=|youtu\.be\/|embed\/|shorts\/|\/v\/)([a-zA-Z0-9_-]{11})/
     );
