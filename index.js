@@ -10621,7 +10621,8 @@ app.post("/api/chat/ai/yt", async (req, res) => {
 
       try {
         transcript = await new Promise((resolve, reject) => {
-          exec(`python transcript.py ${videoId}`, (error, stdout, stderr) => {
+          exec(`python3 transcript.py ${videoId}`, (error, stdout, stderr) => {
+
             if (error) {
               console.error("Exec Error:", error);
               return reject("Internal Server Error: " + error.message);
