@@ -31,6 +31,7 @@ const moment = require('moment');
 const archiver = require("archiver");
 const Razorpay = require('razorpay');
 const { exec } = require("child_process");
+const { YoutubeTranscript } = require("youtube-transcript");
 // Initialize Google Generative AI
 const genAI = new GoogleGenerativeAI('AIzaSyCvmpjZRi7GGS9TcPQeVCnSDJLFPchYZ38');
 
@@ -209,7 +210,7 @@ const publicVapidKey = 'BLDWVHPzXRA9ZOFhSyCet2trdRuvErMUBKuUPNzDsffj-b3-yvd7z58U
 const privateVapidKey = 'm5wPuyP581Ndto1uRBwGufADT7shUIbfUyV6YQcv88Q';
 
 webPush.setVapidDetails('mailto:zainkaleem27@gmail.com', publicVapidKey, privateVapidKey);
-{/* 
+{/* */}
 
 // ✅ **Save or Update Subscription in Database**
 app.post("/subscribe/notification", async (req, res) => {
@@ -276,7 +277,7 @@ app.post("/subscribe/notification", async (req, res) => {
     console.error("❌ Error extracting user_id from token:", error);
     return res.status(500).json({ error: "Failed to authenticate user." });
   }
-});*/}
+});
 
 
 
@@ -10590,8 +10591,6 @@ app.post("/getTranscript", (req, res) => {
 
 });
 
-
-
 app.post("/api/chat/ai/yt", async (req, res) => {
   const { youtubeLink, chatHistory, token } = req.body;
 
@@ -10620,23 +10619,11 @@ app.post("/api/chat/ai/yt", async (req, res) => {
       const videoId = videoUrlMatch[1];
 
       try {
-        transcript = await new Promise((resolve, reject) => {
-          exec(`python3 transcript.py ${videoId}`, (error, stdout, stderr) => {
-
-            if (error) {
-              console.error("Exec Error:", error);
-              return reject("Internal Server Error: " + error.message);
-            }
-            if (stderr) {
-              console.error("Python Script Error:", stderr);
-              return reject("Transcript Fetch Failed: " + stderr);
-            }
-            resolve(stdout.trim());
-          });
-        });
-      } catch (err) {
-        console.error("Transcript Fetch Error:", err);
-        return res.status(500).json({ error: err });
+        const transcriptData = await YoutubeTranscript.fetchTranscript(videoId);
+        transcript = transcriptData.map((entry) => entry.text).join(" ");
+      } catch (error) {
+        console.error("Error fetching transcript:", error);
+        return res.status(500).json({ error: "Failed to fetch YouTube transcript." });
       }
     }
 
@@ -10756,7 +10743,6 @@ app.post("/api/chat/ai/yt", async (req, res) => {
     res.status(500).json({ error: "An error occurred while processing your request. Please try again later." });
   }
 });
-
 
 // Start the server
 app.listen(PORT, () => {
