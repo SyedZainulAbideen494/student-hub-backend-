@@ -30,6 +30,7 @@ const { speechToText, textToSpeech } = require('./speechService'); // Speech ser
 const moment = require('moment');
 const archiver = require("archiver");
 const Razorpay = require('razorpay');
+const { exec } = require("child_process");
 // Initialize Google Generative AI
 const genAI = new GoogleGenerativeAI('AIzaSyCvmpjZRi7GGS9TcPQeVCnSDJLFPchYZ38');
 
@@ -10559,139 +10560,199 @@ app.get("/download-neet-pyqs", (req, res) => {
   });
 });
 
+app.post("/getTranscript", (req, res) => {
+  const { videoUrl } = req.body;
 
-app.post('/api/mindmap/generate', async (req, res) => {
-  const { topic, token } = req.body;
-
-  try {
-      // Step 1: Retrieve userId from the token
-      const userId = await getUserIdFromToken(token);
-
-      // Step 2: Insert into mind_map_master
-      const [masterResult] = await connection.promise().query(
-          'INSERT INTO mind_map_master (topic, creator_id) VALUES (?, ?)',
-          [topic, userId]
-      );
-      const mindMapId = masterResult.insertId; // Get the newly created mind_map_id
-
-      // Step 3: AI prompt to generate hierarchical mind map
-      const prompt = `Generate a JSON mind map for the topic "${topic}".
-      It should follow this strict JSON format:
-      [
-          {
-              "content": "Main Topic",
-              "children": [
-                  {
-                      "content": "Subtopic 1",
-                      "children": [
-                          {
-                              "content": "Sub-subtopic 1",
-                              "children": []
-                          }
-                      ]
-                  },
-                  {
-                      "content": "Subtopic 2",
-                      "children": []
-                  }
-              ]
-          }
-      ]
-
-      Rules:
-      1. Return only the JSON without any explanation.
-      2. Ensure logical structuring with meaningful subtopics.
-      3. Format the JSON properly.
-      `;
-
-      console.log('Generating AI-powered mind map...');
-
-      const generateMindMapWithRetry = async () => {
-          let attempts = 0;
-          while (attempts < MAX_RETRIES) {
-              try {
-                  const chat = model.startChat({ history: [] });
-                  const result = await chat.sendMessage(prompt);
-                  const rawResponse = await result.response.text();
-
-                  // Log full AI response before parsing
-                  console.log("RAW AI RESPONSE:", rawResponse);
-
-                  const sanitizedResponse = rawResponse.replace(/```(?:json)?/g, '').trim();
-                  let mindMapData;
-
-                  try {
-                      mindMapData = JSON.parse(sanitizedResponse);
-                      console.log("PARSED JSON MIND MAP:", JSON.stringify(mindMapData, null, 2)); // Pretty print JSON
-                  } catch (parseError) {
-                      console.error("JSON PARSE ERROR:", parseError);
-                      throw new Error('Invalid JSON response from AI');
-                  }
-
-                  return mindMapData;
-              } catch (error) {
-                  attempts++;
-                  if (attempts === MAX_RETRIES) {
-                      throw new Error('Failed to generate mind map after multiple attempts');
-                  }
-                  console.warn(`Retrying AI request... Attempt ${attempts}/${MAX_RETRIES}`);
-                  await new Promise((resolve) => setTimeout(resolve, 2000)); // Retry delay
-              }
-          }
-      };
-
-      const mindMapData = await generateMindMapWithRetry();
-
-      // Step 4: Store Mind Map Data in MySQL
-      const insertMindMap = async (node, parentId = null) => {
-          const [result] = await connection.promise().query(
-              'INSERT INTO mind_maps (mind_map_id, content, parent_id, creator_id) VALUES (?, ?, ?, ?)',
-              [mindMapId, node.content, parentId, userId]
-          );
-          const nodeId = result.insertId;
-
-          for (const child of node.children || []) {
-              await insertMindMap(child, nodeId);
-          }
-      };
-
-      await insertMindMap(mindMapData[0]); // Insert recursively
-
-      res.json({ mindMapId, message: 'Mind map generated successfully' });
-
-  } catch (error) {
-      console.error('Error generating mind map:', error);
-      res.status(500).json({ error: 'Error generating mind map' });
+  if (!videoUrl) {
+      return res.status(400).json({ error: "No YouTube URL provided" });
   }
+
+  // Extract YouTube video ID
+  const videoIdMatch = videoUrl.match(/(?:v=|youtu\.be\/|embed\/|shorts\/|\/v\/)([a-zA-Z0-9_-]{11})/);
+  if (!videoIdMatch) {
+      return res.status(400).json({ error: "Invalid YouTube URL" });
+  }
+  const videoId = videoIdMatch[1];
+
+  exec(`python transcript.py ${videoId}`, (error, stdout, stderr) => {
+
+    if (error) {
+        console.error("Exec Error:", error);
+        return res.status(500).json({ error: "Internal Server Error", details: error.message });
+    }
+    if (stderr) {
+        console.error("Python Script Error:", stderr);
+        return res.status(500).json({ error: "Transcript Fetch Failed", details: stderr });
+    }
+
+    res.json({ transcript: stdout });
 });
 
-// Fetch Mind Map by ID
-app.get('/api/mindmap/:mindMapId', async (req, res) => {
-  const { mindMapId } = req.params;
+});
+
+
+
+app.post("/api/chat/ai/yt", async (req, res) => {
+  const { youtubeLink, chatHistory, token } = req.body;
 
   try {
-      const [rows] = await connection.promise().query(
-          'SELECT * FROM mind_maps WHERE mind_map_id = ?',
-          [mindMapId]
-      );
+    if (!youtubeLink || typeof youtubeLink !== "string" || youtubeLink.trim() === "") {
+      return res.status(400).json({ error: "YouTube link cannot be empty." });
+    }
 
-      const buildHierarchy = (nodes, parentId = null) => {
-          return nodes
-              .filter(node => node.parent_id === parentId)
-              .map(node => ({
-                  id: node.id,
-                  content: node.content,
-                  children: buildHierarchy(nodes, node.id)
-              }));
-      };
+    if (!token) {
+      return res.status(400).json({ error: "Token is required." });
+    }
 
-      const hierarchy = buildHierarchy(rows);
+    const userId = await getUserIdFromToken(token);
+    if (!userId) {
+      return res.status(401).json({ error: "Invalid token or user not authenticated." });
+    }
 
-      res.json({ mindMap: hierarchy });
+    let transcript = "";
+
+    // Extract video ID from YouTube link
+    const videoUrlMatch = youtubeLink.match(
+      /(?:v=|youtu\.be\/|embed\/|shorts\/|\/v\/)([a-zA-Z0-9_-]{11})/
+    );
+
+    if (videoUrlMatch) {
+      const videoId = videoUrlMatch[1];
+
+      try {
+        transcript = await new Promise((resolve, reject) => {
+          exec(`python transcript.py ${videoId}`, (error, stdout, stderr) => {
+            if (error) {
+              console.error("Exec Error:", error);
+              return reject("Internal Server Error: " + error.message);
+            }
+            if (stderr) {
+              console.error("Python Script Error:", stderr);
+              return reject("Transcript Fetch Failed: " + stderr);
+            }
+            resolve(stdout.trim());
+          });
+        });
+      } catch (err) {
+        console.error("Transcript Fetch Error:", err);
+        return res.status(500).json({ error: err });
+      }
+    }
+
+    const userData = await Promise.all([
+      query(
+        "SELECT title, due_date, description, created_at, priority FROM tasks WHERE user_id = ? AND completed = 1",
+        [userId]
+      ),
+      query("SELECT title, date FROM events WHERE user_id = ?", [userId]),
+      query(
+        "SELECT study_plan FROM study_plans WHERE user_id = ? ORDER BY created_at DESC LIMIT 1",
+        [userId]
+      ),
+      query("SELECT score, completed_at, quiz_id FROM user_quizzes WHERE user_id = ?", [userId]),
+      query(
+        "SELECT title FROM quizzes WHERE id IN (SELECT quiz_id FROM user_quizzes WHERE user_id = ?)",
+        [userId]
+      ),
+      query("SELECT unique_id FROM users WHERE id = ?", [userId]),
+      query(
+        "SELECT * FROM user_goal WHERE user_id = ? ORDER BY created_at DESC LIMIT 1",
+        [userId]
+      ),
+    ]);
+
+    const tasks = userData[0];
+    const events = userData[1];
+    const studyPlan = userData[2]?.[0]?.study_plan;
+    const quizResults = userData[3];
+    const quizTitles = userData[4];
+    const userName = userData[5]?.[0]?.unique_id;
+    const userGoal = userData[6]?.[0];
+
+    const today = new Date();
+    const formattedDate = today.toISOString().split("T")[0];
+
+    const dynamicSystemInstruction = `
+      You are Edusify, an AI-powered productivity assistant for students. Here is the user's information:
+      - **Name**: ${userName || "Unknown"}
+      - **Tasks**: ${
+        tasks.length > 0
+          ? tasks.map((task) => `- ${task.title} (Due: ${task.due_date}, Priority: ${task.priority})`).join("\n")
+          : "No tasks available."
+      }
+      - **Events**: ${
+        events.length > 0
+          ? events.map((event) => `- ${event.title} (Date: ${event.date})`).join("\n")
+          : "No upcoming events."
+      }
+      - **Study Plan**: ${studyPlan || "No study plan available."}
+      - **Quiz Results**: ${
+        quizResults.length > 0
+          ? quizResults
+              .map((result, index) => {
+                const quizTitle = quizTitles[index]?.title || "Unknown Quiz";
+                return `- ${quizTitle}: Score: ${result.score}, Completed on: ${result.completed_at}`;
+              })
+              .join("\n")
+          : "No quiz results available."
+      }
+      - **User Goal**: ${userGoal ? `- **Goal**: ${userGoal.goal || "N/A"}` : "No user goal available."}
+      - **Today's Date**: ${formattedDate}
+      
+      - **YouTube Video Analyzed**: ${youtubeLink}
+      - **Transcript Summary**: ${transcript || "Transcript could not be fetched."}
+    `;
+
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.0-flash",
+      safetySettings: safetySettings,
+      systemInstruction: dynamicSystemInstruction,
+    });
+
+    const initialChatHistory = [
+      { role: "user", parts: [{ text: "Hello" }] },
+      { role: "model", parts: [{ text: "Great to meet you. What would you like to know?" }] },
+    ];
+
+    const chat = model.startChat({ history: chatHistory || initialChatHistory });
+
+    console.log("User requested summary for YouTube link:", youtubeLink, "User ID:", userId);
+
+    let aiResponse = "";
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const result = await chat.sendMessage(`Summarize the YouTube video at ${youtubeLink} using its transcript.`);
+        aiResponse = result.response?.text?.() || "No response from AI.";
+        console.log(`AI responded on attempt ${attempt}`);
+        break;
+      } catch (error) {
+        console.error(`Attempt ${attempt} failed:`, error.message);
+        if (attempt === MAX_RETRIES) {
+          throw new Error("AI service failed after multiple attempts.");
+        }
+        const delayMs = Math.pow(2, attempt) * 100;
+        console.log(`Retrying in ${delayMs}ms...`);
+        await delay(delayMs);
+      }
+    }
+
+    if (!aiResponse || aiResponse === "No response from AI.") {
+      return res.status(500).json({ error: "AI service did not return a response." });
+    }
+
+    await query("INSERT INTO ai_history (user_id, user_message, ai_response) VALUES (?, ?, ?)", [
+      userId,
+      youtubeLink,
+      aiResponse,
+    ]);
+
+    res.json({ response: aiResponse });
+    console.log("Final AI Response being sent:", aiResponse);
 
   } catch (error) {
-      console.error('Error fetching mind map:', error);
-      res.status(500).json({ error: 'Error fetching mind map' });
+    console.error("Error in /api/chat/ai/yt endpoint:", error);
+    res.status(500).json({ error: "An error occurred while processing your request. Please try again later." });
   }
 });
 
