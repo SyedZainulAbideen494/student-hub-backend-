@@ -10744,6 +10744,247 @@ app.post("/api/chat/ai/yt", async (req, res) => {
   }
 });
 
+app.post("/api/mindmaps/generate", async (req, res) => {
+  const { subject, headings, instructions } = req.body;
+  const token = req.headers.authorization?.split(" ")[1];
+
+  if (!token) return res.status(401).json({ error: "No token provided" });
+
+  console.log(`➡️  Generating mind map...`);
+  console.log(`📌 Subject: ${subject}`);
+  console.log(`📌 Topics: ${headings}`);
+
+  try {
+    const userId = await getUserIdFromToken(token);
+    if (!headings || !subject) {
+      return res.status(400).json({ error: "Headings and subject are required" });
+    }
+
+    const query = "INSERT INTO mindmaps (name, subject, user_id) VALUES (?, ?, ?)";
+    connection.query(query, [subject, subject, userId], async (err, results) => {
+      if (err) {
+        console.error("❌ Database error while inserting mind map:", err);
+        return res.status(500).json({ error: "Database error" });
+      }
+
+      const mindmapId = results.insertId;
+
+      const generateMindMapWithRetry = async () => {
+        let attempts = 0;
+        const MAX_RETRIES = 3;
+
+        while (attempts < MAX_RETRIES) {
+          try {
+            const chat = model.startChat({ history: [] });
+            const result = await chat.sendMessage(`
+              Generate a highly detailed and structured JSON object for a mind map based on the following details:
+
+              - Topics: ${headings}
+              - Subject: ${subject}
+              - Additional Instructions: ${instructions || "None provided"}
+
+              The JSON structure should be:
+              {
+                "nodes": [
+                  {
+                    "id": number,
+                    "label": "string",
+                    "x": number,
+                    "y": number
+                  }
+                ],
+                "edges": [
+                  {
+                    "from": number,
+                    "to": number
+                  }
+                ]
+              }
+
+              Rules:
+              1. Structure nodes logically for ${subject}.
+              2. Ensure each node connects to at least one other node.
+              3. Follow additional instructions, if provided.
+              4. Return only the JSON object.
+              5. Format JSON properly.
+              ✅ **More Detail** – Covers all major topics and breaks them down logically.  
+✅ **Better Layout** – Even distribution of nodes to prevent clutter.  
+✅ **Stricter JSON Compliance** – Ensures AI returns a clean, usable JSON object.  
+✅ **More Logical Connections** – Topics are linked meaningfully, not randomly.  
+
+This version guarantees a **highly structured, comprehensive mind map** with all essential details. 🚀
+            `);
+
+            const rawResponse = await result.response.text();
+            const sanitizedResponse = rawResponse.replace(/```(?:json)?/g, "").trim();
+
+            let mindMap;
+            try {
+              mindMap = JSON.parse(sanitizedResponse);
+            } catch (parseError) {
+              throw new Error("Invalid JSON response from AI model");
+            }
+
+            return mindMap;
+          } catch (error) {
+            console.error(`⚠️ Attempt ${attempts + 1} failed:`, error.message);
+            attempts++;
+            if (attempts === MAX_RETRIES) {
+              throw new Error("Failed to generate mind map after multiple attempts");
+            }
+            await new Promise((resolve) => setTimeout(resolve, 2000)); // Retry delay
+          }
+        }
+      };
+
+      const mindMap = await generateMindMapWithRetry();
+
+      const nodesData = mindMap.nodes
+        .filter((node) => node.label?.trim())
+        .map(({ id, label, x, y }) => [mindmapId, id, label.trim(), x, y]);
+
+      if (nodesData.length === 0) {
+        console.error("❌ No valid nodes generated.");
+        return res.status(400).json({ error: "No valid nodes generated" });
+      }
+
+      connection.query(
+        "INSERT INTO mindmap_nodes (mindmap_id, node_id, label, x, y) VALUES ?",
+        [nodesData],
+        (err) => {
+          if (err) {
+            console.error("❌ Database error while inserting nodes:", err);
+            return res.status(500).json({ error: "Database error" });
+          }
+
+          const edgesData = mindMap.edges.map(({ from, to }) => [mindmapId, from, to]);
+
+          connection.query(
+            "INSERT INTO mindmap_edges (mindmap_id, node_from, node_to) VALUES ?",
+            [edgesData],
+            (err) => {
+              if (err) {
+                console.error("❌ Database error while inserting edges:", err);
+                return res.status(500).json({ error: "Database error" });
+              }
+
+              console.log(`✅ Mind map generated successfully! (ID: ${mindmapId})`);
+              res.json({ mindmapId, nodes: mindMap.nodes, edges: mindMap.edges });
+            }
+          );
+        }
+      );
+    });
+  } catch (error) {
+    console.error("❌ Error processing request:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+app.get("/api/mindmaps/:mindmapId", async (req, res) => {
+  const { mindmapId } = req.params;
+  const token = req.headers.authorization?.split(" ")[1];
+
+  if (!token) return res.status(401).json({ error: "No token provided" });
+
+  try {
+    const userId = await getUserIdFromToken(token);
+
+    // Fetch mind map data from MySQL
+    const mindmapQuery = "SELECT * FROM mindmaps WHERE id = ? AND user_id = ?";
+    connection.query(mindmapQuery, [mindmapId, userId], (err, mindmapResults) => {
+      if (err || mindmapResults.length === 0) return res.status(404).json({ error: "Mind map not found" });
+
+      const nodesQuery = "SELECT * FROM mindmap_nodes WHERE mindmap_id = ?";
+      connection.query(nodesQuery, [mindmapId], (err, nodesResults) => {
+        if (err) return res.status(500).json({ error: "Database error" });
+
+        const edgesQuery = "SELECT * FROM mindmap_edges WHERE mindmap_id = ?";
+        connection.query(edgesQuery, [mindmapId], (err, edgesResults) => {
+          if (err) return res.status(500).json({ error: "Database error" });
+
+          res.json({
+            mindmapId,
+            nodes: nodesResults.map((node) => ({
+              id: node.node_id,
+              label: node.label,
+              x: node.x,
+              y: node.y,
+            })),
+            edges: edgesResults.map((edge) => ({
+              from: edge.node_from,
+              to: edge.node_to,
+            })),
+          });
+        });
+      });
+    });
+  } catch (error) {
+    console.error("Error fetching mind map:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+
+
+// **3. Update Node Position**
+app.put("/api/mindmaps/update-node", (req, res) => {
+  const { nodeId, x, y } = req.body;
+  connection.query(
+    "UPDATE mindmap_nodes SET x = ?, y = ? WHERE id = ?",
+    [x, y, nodeId],
+    (err) => {
+      if (err) return res.status(500).json({ error: "Database error" });
+      res.json({ success: true });
+    }
+  );
+});
+
+app.get("/api/mindmaps/count/for-premium", async (req, res) => {
+  const token = req.headers.authorization?.split(" ")[1];
+
+  if (!token) return res.status(401).json({ error: "No token provided" });
+
+  try {
+    const userId = await getUserIdFromToken(token);
+
+    // Get mind maps count for the current week, ensuring same year
+    const mindMapCount = await query(
+      `SELECT COUNT(*) AS count 
+       FROM mindmaps 
+       WHERE user_id = ? 
+         AND WEEK(created_at, 1) = WEEK(NOW(), 1) 
+         AND YEAR(created_at) = YEAR(NOW())`,
+      [userId]
+    );
+
+    res.json({ count: mindMapCount[0]?.count || 0 });
+  } catch (error) {
+    console.error("Error fetching mind map count:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+app.get("/api/mindmaps/all", async (req, res) => {
+  const token = req.headers.authorization?.split(" ")[1];
+  if (!token) return res.status(401).json({ error: "No token provided" });
+
+  try {
+    const userId = await getUserIdFromToken(token);
+
+    const mindMaps = await query(
+      "SELECT id, name, subject, created_at FROM mindmaps WHERE user_id = ? ORDER BY created_at DESC",
+      [userId]
+    );
+
+    res.json(mindMaps);
+  } catch (error) {
+    console.error("Error fetching mind maps:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
