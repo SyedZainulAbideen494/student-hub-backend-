@@ -10983,6 +10983,140 @@ app.get("/api/mindmaps/all/user", async (req, res) => {
   }
 });
 
+app.post("/api/mindmaps/generate/from-magic", async (req, res) => {
+  const { subject, headings } = req.body;
+  const token = req.headers.authorization?.split(" ")[1];
+
+  if (!token) return res.status(401).json({ error: "No token provided" });
+
+  console.log(`➡️  Generating mind map from magic...`);
+
+
+  try {
+    const userId = await getUserIdFromToken(token);
+    if (!headings || !subject) {
+      return res.status(400).json({ error: "Headings and subject are required" });
+    }
+
+    const query = "INSERT INTO mindmaps (name, subject, user_id) VALUES (?, ?, ?)";
+    connection.query(query, [subject, subject, userId], async (err, results) => {
+      if (err) {
+        console.error("❌ Database error while inserting mind map:", err);
+        return res.status(500).json({ error: "Database error" });
+      }
+
+      const mindmapId = results.insertId;
+
+      const generateMindMapWithRetry = async () => {
+        let attempts = 0;
+        const MAX_RETRIES = 3;
+
+        while (attempts < MAX_RETRIES) {
+          try {
+            const chat = model.startChat({ history: [] });
+            const result = await chat.sendMessage(`
+              Generate a highly detailed and structured JSON object for a mind map based on the following Notes:
+
+              - Notes: ${headings}
+
+
+              The JSON structure should be:
+              {
+                "nodes": [
+                  {
+                    "id": number,
+                    "label": "string",
+                    "x": number,
+                    "y": number
+                  }
+                ],
+                "edges": [
+                  {
+                    "from": number,
+                    "to": number
+                  }
+                ]
+              }
+
+              Rules:
+              1. Structure nodes logical.
+              2. Ensure each node connects to at least one other node.
+              3. Follow additional instructions, if provided.
+              4. Return only the JSON object.
+              5. Format JSON properly.
+              ✅ **More Detail** – Covers all major topics and breaks them down logically.  
+✅ **Better Layout** – Even distribution of nodes to prevent clutter.  
+✅ **Stricter JSON Compliance** – Ensures AI returns a clean, usable JSON object.  
+✅ **More Logical Connections** – Topics are linked meaningfully, not randomly.  
+
+This version guarantees a **highly structured, comprehensive mind map** with all essential details. 🚀
+            `);
+
+            const rawResponse = await result.response.text();
+            const sanitizedResponse = rawResponse.replace(/```(?:json)?/g, "").trim();
+
+            let mindMap;
+            try {
+              mindMap = JSON.parse(sanitizedResponse);
+            } catch (parseError) {
+              throw new Error("Invalid JSON response from AI model");
+            }
+
+            return mindMap;
+          } catch (error) {
+            console.error(`⚠️ Attempt ${attempts + 1} failed:`, error.message);
+            attempts++;
+            if (attempts === MAX_RETRIES) {
+              throw new Error("Failed to generate mind map after multiple attempts");
+            }
+            await new Promise((resolve) => setTimeout(resolve, 2000)); // Retry delay
+          }
+        }
+      };
+
+      const mindMap = await generateMindMapWithRetry();
+
+      const nodesData = mindMap.nodes
+        .filter((node) => node.label?.trim())
+        .map(({ id, label, x, y }) => [mindmapId, id, label.trim(), x, y]);
+
+      if (nodesData.length === 0) {
+        console.error("❌ No valid nodes generated.");
+        return res.status(400).json({ error: "No valid nodes generated" });
+      }
+
+      connection.query(
+        "INSERT INTO mindmap_nodes (mindmap_id, node_id, label, x, y) VALUES ?",
+        [nodesData],
+        (err) => {
+          if (err) {
+            console.error("❌ Database error while inserting nodes:", err);
+            return res.status(500).json({ error: "Database error" });
+          }
+
+          const edgesData = mindMap.edges.map(({ from, to }) => [mindmapId, from, to]);
+
+          connection.query(
+            "INSERT INTO mindmap_edges (mindmap_id, node_from, node_to) VALUES ?",
+            [edgesData],
+            (err) => {
+              if (err) {
+                console.error("❌ Database error while inserting edges:", err);
+                return res.status(500).json({ error: "Database error" });
+              }
+
+              console.log(`✅ Mind map generated successfully! (ID: ${mindmapId})`);
+              res.json({ mindmapId, nodes: mindMap.nodes, edges: mindMap.edges });
+            }
+          );
+        }
+      );
+    });
+  } catch (error) {
+    console.error("❌ Error processing request:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 // Start the server
 app.listen(PORT, () => {
