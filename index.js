@@ -10948,7 +10948,6 @@ app.get("/api/mindmaps/count/for-premium", async (req, res) => {
   try {
     const userId = await getUserIdFromToken(token);
 
-    // Get mind maps count for the current week, ensuring same year
     const mindMapCount = await query(
       `SELECT COUNT(*) AS count 
        FROM mindmaps 
