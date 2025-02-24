@@ -9376,7 +9376,6 @@ app.post('/api/quiz/ai-analysis', async (req, res) => {
   }
 });
 
-
 const generateWithRetry = async (prompt) => {
   let attempts = 0;
   const MAX_RETRIES = 5;
@@ -9389,8 +9388,9 @@ const generateWithRetry = async (prompt) => {
 
       const sanitizedResponse = rawResponse.replace(/```(?:json)?/g, '').trim();
 
-      return sanitizedResponse; 
+      return sanitizedResponse;
     } catch (error) {
+      console.error(`Error generating response (Attempt ${attempts + 1}):`, error);
       attempts++;
       if (attempts === MAX_RETRIES) {
         throw new Error('Failed to generate AI response after multiple attempts');
@@ -9400,143 +9400,93 @@ const generateWithRetry = async (prompt) => {
   }
 };
 
-
 app.post('/api/question-paper/generate', async (req, res) => {
   try {
-    const { subject, chapters, board, grade, token } = req.body;
-    if (!subject || !chapters || !board || !grade || !token) {
-      return res.status(400).json({ error: 'All fields are required' });
+    const { boardOrExam, subject, grade, token } = req.body;
+    const competitiveExams = ['JEE Mains', 'JEE Advanced', 'NEET', 'CUET', 'GATE', 'UPSC'];
+
+    if (!boardOrExam || !token || (!competitiveExams.includes(boardOrExam) && !subject)) {
+      return res.status(400).json({ error: 'Missing required fields' });
     }
 
     const userId = await getUserIdFromToken(token);
 
-    let prompt = '';
-    const competitiveExams = ['JEE Mains', 'JEE Advanced', 'NEET', 'CUET', 'GATE', 'UPSC', 'CAT', 'SAT', 'GRE', 'GMAT'];
+    // AI fetches syllabus & chapters automatically
+    const syllabusPrompt = `
+      Fetch the **official syllabus** for **${boardOrExam}** in **${subject}**.
+      ${grade ? `Grade: ${grade}` : ''}
+      Only provide chapter names as a comma-separated list. No extra text.
+    `;
 
-    // Adjust difficulty level based on board
-    const difficultyLevel = competitiveExams.includes(board) ? 'very hard' : 'moderate';
+    console.log('Fetching syllabus...');
+    const chaptersResponse = await generateWithRetry(syllabusPrompt);
+    const chapters = chaptersResponse.split(',').map(ch => ch.trim());
 
-    // Generate prompt based on board
-    if (competitiveExams.includes(board)) {
-      // Competitive Exam Format (e.g., NEET, JEE)
-      prompt = `
-      Generate a **competitive exam question paper** for **${subject}**.
-      **Exam:** ${board}
-      **Chapters:** ${chapters.join(', ')}
-      **Grade:** ${grade}
-      
-      **Difficulty Level:** ${difficultyLevel} (Please ensure the questions are challenging enough for ${board})
-      
-      Generate 6 questions in total with 4 main sections:
-      - Section 1: 2 MCQs (multiple-choice questions)
-      - Section 2: 2 short-answer questions
-      - Section 3: 1 long-answer question
-      - Section 4: 1 reasoning-based question
-
-      Please ensure all questions are of appropriate difficulty for the ${board} exam. Questions should be in-depth and require critical thinking. Do not include answers or any extra text, formatting, or instructions. Just the questions.
-
-      --- 
-
-      <h2>${board} - ${subject} (Grade ${grade})</h2>
-
-      <h3>Section 1: Multiple-Choice Questions (MCQs)</h3>
-      <ol>
-        <li>MCQ 1 for ${subject}</li>
-        <li>MCQ 2 for ${subject}</li>
-      </ol>
-
-      <h3>Section 2: Short Answer Questions</h3>
-      <ol>
-        <li>Short Answer 1 for ${subject}</li>
-        <li>Short Answer 2 for ${subject}</li>
-      </ol>
-
-      <h3>Section 3: Long Answer Question</h3>
-      <ol>
-        <li>Long Answer Question for ${subject}</li>
-      </ol>
-
-      <h3>Section 4: Reasoning-Based Question</h3>
-      <ol>
-        <li>Reasoning Question for ${subject}</li>
-      </ol>
-      `;
-    } else {
-      // School Board Format (e.g., CBSE, ICSE)
-      prompt = `
-      Generate a **school board question paper** for **${subject}**.
-      **Chapters:** ${chapters.join(', ')}
-      **Board:** ${board}, **Grade:** ${grade}
-      
-      **Difficulty Level:** ${difficultyLevel} (Please ensure the questions are appropriately challenging for ${board})
-      
-      Generate 6 questions in total with 4 main sections:
-      - Section 1: 2 MCQs
-      - Section 2: 2 short-answer questions
-      - Section 3: 1 long-answer question
-      - Section 4: 1 reasoning-based question
-
-      Do not include answers or any extra text, formatting, or instructions. Just the questions.
-
-      --- 
-
-      <h2>${board} - ${subject} (Grade ${grade})</h2>
-
-      <h3>Section 1: Multiple-Choice Questions (MCQs)</h3>
-      <ol>
-        <li>MCQ 1 for ${subject}</li>
-        <li>MCQ 2 for ${subject}</li>
-      </ol>
-
-      <h3>Section 2: Short Answer Questions</h3>
-      <ol>
-        <li>Short Answer 1 for ${subject}</li>
-        <li>Short Answer 2 for ${subject}</li>
-      </ol>
-
-      <h3>Section 3: Long Answer Question</h3>
-      <ol>
-        <li>Long Answer Question for ${subject}</li>
-      </ol>
-
-      <h3>Section 4: Reasoning-Based Question</h3>
-      <ol>
-        <li>Reasoning Question for ${subject}</li>
-      </ol>
-      `;
+    if (!chapters.length) {
+      return res.status(400).json({ error: 'Failed to fetch syllabus. Please check board/exam name.' });
     }
 
-    console.log('Generating question paper');
-    const questionPaper = await generateWithRetry(prompt);
+    const examFormats = {
+      'NEET': { totalQuestions: 200, batchSize: 50 },
+      'JEE Mains': { totalQuestions: 90, batchSize: 30 },
+      'JEE Advanced': { totalQuestions: 60, batchSize: 20 },
+      'CUET': { totalQuestions: 50, batchSize: 25 },
+      'GATE': { totalQuestions: 65, batchSize: 30 },
+      'UPSC': { totalQuestions: 100, batchSize: 50 },
+    };
 
-    const answerPrompt = `
-    Generate **detailed answers** for the following question paper in **HTML format**:
-    - **Use HTML tags** to properly format answers. Do not use markdown, asterisks, or plain text.
-    - Make sure to clearly show all steps and reasoning, including explanations for formulas and any necessary units.
-    - Format each question and answer separately with proper use of HTML elements like <h3>, <p>, <ol>, <li>, <strong>, and <em> for clarity.
-    - Keep explanations educational, concise, and focused on step-by-step reasoning.
-    
-    ### Question Paper:
-    ${questionPaper}
-    
-    Ensure each answer is clearly explained and formatted with proper HTML structure.
-    `;
-    
-    console.log('Generating answers for the question paper');
-    const answers = await generateWithRetry(answerPrompt);
-    
+    let prompt = '';
+    let totalQuestions = 50;
+    let batchSize = 25;
 
-    // 📌 Insert into Database with Answers
+    if (competitiveExams.includes(boardOrExam)) {
+      const examConfig = examFormats[boardOrExam];
+
+      if (!examConfig) {
+        return res.status(400).json({ error: 'Unsupported exam type' });
+      }
+
+      totalQuestions = examConfig.totalQuestions;
+      batchSize = examConfig.batchSize;
+    }
+
+    console.log(`Generating ${totalQuestions} questions in batches of ${batchSize}...`);
+    let fullPaper = '';
+
+    for (let i = 0; i < totalQuestions; i += batchSize) {
+      console.log(`Generating batch ${i + 1} to ${i + batchSize}...`);
+
+      const batchPrompt = `
+        Generate **${batchSize}** questions for **${boardOrExam}** in **${subject}**.
+        **Exam:** ${boardOrExam}
+        **Chapters:** ${chapters.join(', ')}
+
+        - Follow the actual **exam format**.
+        - Ensure **real exam-style** questions.
+        - Do **not** include answers, only questions.
+        - The output must be in **HTML format**.
+        - Include a **title** in <h1>.
+        - Each **section title** (like "Physics Section", "Chemistry Section") should be inside <h2>.
+        - Each **question** must be inside <p>.
+        - Multiple-choice options should be inside <ul><li>.
+        - Ensure **proper spacing** between questions and options.
+      `;
+
+      const batchQuestions = await generateWithRetry(batchPrompt);
+      fullPaper += batchQuestions + '\n\n';
+    }
+
+    // Insert into DB
     const result = await query(
-      'INSERT INTO question_papers (user_id, subject, board, grade, questions, answers) VALUES (?, ?, ?, ?, ?, ?)', 
-      [userId, subject, board, grade, questionPaper, answers]
+      'INSERT INTO question_papers (user_id, subject, board, grade, questions) VALUES (?, ?, ?, ?, ?)',
+      [userId, subject, boardOrExam, grade || null, fullPaper]
     );
 
     const questionPaperId = result.insertId;
 
-    res.json({ 
-      message: 'Question paper generated successfully', 
-      questionPaper: { id: questionPaperId, content: questionPaper, answers: answers } 
+    res.json({
+      message: 'Question paper generated successfully',
+      questionPaper: { id: questionPaperId, content: fullPaper }
     });
 
   } catch (error) {
@@ -9544,7 +9494,6 @@ app.post('/api/question-paper/generate', async (req, res) => {
     res.status(500).json({ error: 'Failed to generate question paper' });
   }
 });
-
 
 
 // **Fetch User's Question Papers**
@@ -11124,6 +11073,137 @@ This version guarantees a **highly structured, comprehensive mind map** with all
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
+
+
+
+app.post("/api/mindmaps/generate-from-pdf", uploadPDF.single("file"), async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) return res.status(401).json({ error: "No token provided" });
+
+    const file = req.file;
+    if (!file) return res.status(400).json({ error: "No PDF file provided" });
+
+    const userId = await getUserIdFromToken(token);
+    console.log(`➡️ Generating mind map from PDF...`);
+
+    // Step 1: Extract text from the PDF
+    const pdfPath = file.path;
+    const pdfText = await pdfParse(fs.readFileSync(pdfPath)).then((data) => data.text);
+
+    if (!pdfText.trim()) {
+      fs.unlinkSync(pdfPath); // Clean up file
+      return res.status(400).json({ error: "Failed to extract text from PDF" });
+    }
+
+    // Step 2: Define AI prompt
+    const model = genAI.getGenerativeModel({ model: "models/gemini-1.5-flash" });
+    const result = await model.generateContent([
+      {
+        text: `
+        Extract key topics and subtopics from the following text and structure them as a JSON-based mind map.
+
+        - **Text**: "${pdfText}"
+
+        **Expected JSON format**:
+        {
+          "nodes": [
+            {
+              "id": number,
+              "label": "string",
+              "x": number,
+              "y": number
+            }
+          ],
+          "edges": [
+            {
+              "from": number,
+              "to": number
+            }
+          ]
+        }
+
+        **Rules**:
+        1️⃣ Structure nodes logically.
+        2️⃣ Ensure each node connects to at least one other node.
+        3️⃣ Follow additional instructions, if provided.
+        4️⃣ Return only the JSON object.
+        5️⃣ Format JSON properly.
+        ✅ **More Detail** – Covers all major topics and breaks them down logically.
+        ✅ **Better Layout** – Even distribution of nodes to prevent clutter.
+        ✅ **Stricter JSON Compliance** – Ensures AI returns a clean, usable JSON object.
+        ✅ **More Logical Connections** – Topics are linked meaningfully, not randomly.
+
+        Return only the JSON object and nothing else.
+      `,
+      },
+    ]);
+
+    // Step 3: Parse AI response
+    const rawResponse = result.response?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+    const sanitizedResponse = rawResponse.replace(/```(?:json)?/g, "").trim();
+
+    let mindMap;
+    try {
+      mindMap = JSON.parse(sanitizedResponse);
+    } catch (error) {
+      console.error("❌ Invalid JSON response from AI:", error);
+      fs.unlinkSync(pdfPath); // Cleanup
+      return res.status(500).json({ error: "AI returned an invalid response" });
+    }
+
+    if (!mindMap.nodes || !mindMap.edges) {
+      fs.unlinkSync(pdfPath);
+      return res.status(500).json({ error: "AI response missing required fields" });
+    }
+
+    // Step 4: Insert Mind Map into DB
+    const query = "INSERT INTO mindmaps (name, subject, user_id) VALUES (?, ?, ?)";
+    connection.query(query, ["Generated from PDF", "PDF Content", userId], async (err, results) => {
+      if (err) {
+        console.error("❌ Database error while inserting mind map:", err);
+        fs.unlinkSync(pdfPath);
+        return res.status(500).json({ error: "Database error" });
+      }
+
+      const mindmapId = results.insertId;
+
+      const nodesData = mindMap.nodes.map(({ id, label, x, y }) => [mindmapId, id, label, x, y]);
+      connection.query(
+        "INSERT INTO mindmap_nodes (mindmap_id, node_id, label, x, y) VALUES ?",
+        [nodesData],
+        (err) => {
+          if (err) {
+            console.error("❌ Database error while inserting nodes:", err);
+            fs.unlinkSync(pdfPath);
+            return res.status(500).json({ error: "Database error" });
+          }
+
+          const edgesData = mindMap.edges.map(({ from, to }) => [mindmapId, from, to]);
+          connection.query(
+            "INSERT INTO mindmap_edges (mindmap_id, node_from, node_to) VALUES ?",
+            [edgesData],
+            (err) => {
+              fs.unlinkSync(pdfPath); // Cleanup file
+              if (err) {
+                console.error("❌ Database error while inserting edges:", err);
+                return res.status(500).json({ error: "Database error" });
+              }
+
+              console.log(`✅ Mind map generated successfully from PDF! (ID: ${mindmapId})`);
+              res.json({ mindmapId, nodes: mindMap.nodes, edges: mindMap.edges });
+            }
+          );
+        }
+      );
+    });
+  } catch (error) {
+    console.error("❌ Error processing PDF mind map request:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 
 // Start the server
 app.listen(PORT, () => {
