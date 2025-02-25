@@ -10939,6 +10939,8 @@ app.get("/api/mindmaps/all/user", async (req, res) => {
   }
 });
 
+
+
 app.post("/api/mindmaps/generate/from-magic", async (req, res) => {
   const { subject, headings } = req.body;
   const token = req.headers.authorization?.split(" ")[1];
@@ -11203,6 +11205,322 @@ app.post("/api/mindmaps/generate-from-pdf", uploadPDF.single("file"), async (req
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
+
+app.post("/api/tasks/generate/from-magic", async (req, res) => {
+  const { subject, headings } = req.body;
+  const token = req.headers.authorization?.split(" ")[1];
+
+  if (!token) return res.status(401).json({ error: "No token provided" });
+
+  console.log(`➡️ Generating tasks from magic...`);
+
+  try {
+    const userId = await getUserIdFromToken(token);
+    if (!headings || !subject) {
+      return res.status(400).json({ error: "Headings and subject are required" });
+    }
+
+    const today = new Date().toISOString().split("T")[0]; // Format: YYYY-MM-DD
+
+    const generateTasksWithRetry = async () => {
+      let attempts = 0;
+      const MAX_RETRIES = 3;
+
+      while (attempts < MAX_RETRIES) {
+        try {
+          const chat = model.startChat({ history: [] });
+          const result = await chat.sendMessage(`
+            Generate a JSON array of tasks based on this AI response:
+
+            - **Response:** ${headings}
+            - **Today's Date:** ${today}
+
+            **JSON Format:**
+            [
+              {
+                "title": "Summarized task action",
+                "description": "Detailed steps and key points",
+                "due_date": "YYYY-MM-DD (Set based on today's date + priority)",
+                "priority": "Low | Normal | High"
+              }
+            ]
+
+            **Rules:**
+            - Ensure tasks are actionable and relevant.
+            - Assign **due_date** dynamically: 
+              - **High Priority** → Due tomorrow (${today} +1 day)
+              - **Normal Priority** → Due in 3 days (${today} +3 days)
+              - **Low Priority** → Due in 5 days (${today} +5 days)
+            - Prioritize tasks logically.
+            - Return **only** the JSON output.
+          `);
+
+          const rawResponse = await result.response.text();
+          const sanitizedResponse = rawResponse.replace(/```(?:json)?/g, "").trim();
+
+          let tasks;
+          try {
+            tasks = JSON.parse(sanitizedResponse);
+          } catch (parseError) {
+            throw new Error("Invalid JSON response from AI model");
+          }
+
+          return tasks;
+        } catch (error) {
+          console.error(`⚠️ Attempt ${attempts + 1} failed:`, error.message);
+          attempts++;
+          if (attempts === MAX_RETRIES) {
+            throw new Error("Failed to generate tasks after multiple attempts");
+          }
+          await new Promise((resolve) => setTimeout(resolve, 2000)); // Retry delay
+        }
+      }
+    };
+
+    const tasks = await generateTasksWithRetry();
+
+    const tasksValues = tasks.map(({ title, description, due_date, priority }) => [
+      userId,
+      title.trim(),
+      description.trim(),
+      due_date,
+      priority,
+    ]);
+
+    if (tasksValues.length === 0) {
+      console.error("❌ No valid tasks generated.");
+      return res.status(400).json({ error: "No valid tasks generated" });
+    }
+
+    connection.query(
+      "INSERT INTO tasks (user_id, title, description, due_date, priority) VALUES ?",
+      [tasksValues],
+      (err) => {
+        if (err) {
+          console.error("❌ Database error while inserting tasks:", err);
+          return res.status(500).json({ error: "Database error" });
+        }
+
+        console.log(`✅ Tasks generated successfully!`);
+        res.json({ tasks });
+      }
+    );
+  } catch (error) {
+    console.error("❌ Error processing request:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+app.post("/api/notes/generate/from-magic", async (req, res) => {
+  const { subject, headings } = req.body;
+  const token = req.headers.authorization?.split(" ")[1];
+
+  if (!token) return res.status(401).json({ error: "No token provided" });
+
+  console.log(`➡️ Generating AI notes...`);
+
+  try {
+    const userId = await getUserIdFromToken(token);
+    if (!headings || !subject) {
+      return res.status(400).json({ error: "Headings and subject are required" });
+    }
+
+    const generateNotesWithRetry = async () => {
+      let attempts = 0;
+      const MAX_RETRIES = 3;
+
+      while (attempts < MAX_RETRIES) {
+        try {
+          const chat = model.startChat({ history: [] });
+          const result = await chat.sendMessage(`
+            Convert the following text into **pure HTML notes** with structured formatting:
+
+            **Input Content:** 
+            ${headings}
+
+            **Instructions:**
+            - Return **only raw HTML**.
+            - No explanations, no Markdown, no text outside HTML.
+            - Properly structure using **<h1>, <h2>, <h3>, <p>, <ul>, <li>, <strong>, <em>** where needed.
+            - Keep it **clean, well-formatted, and readable**.
+            - No extra words like "Here is your response" or "Formatted notes below."
+            - Directly output valid, structured HTML.
+
+            **Example Output:**
+            <h1>Title</h1>
+            <p>Introduction...</p>
+            <h2>Key Concepts</h2>
+            <ul>
+              <li>Concept 1</li>
+              <li>Concept 2</li>
+            </ul>
+            <h3>Examples</h3>
+            <p>Some explanation...</p>
+          `);
+
+          const rawResponse = await result.response.text();
+          const sanitizedResponse = rawResponse.trim();
+
+          return sanitizedResponse;
+        } catch (error) {
+          console.error(`⚠️ Attempt ${attempts + 1} failed:`, error.message);
+          attempts++;
+          if (attempts === MAX_RETRIES) {
+            throw new Error("Failed to generate notes after multiple attempts");
+          }
+          await new Promise((resolve) => setTimeout(resolve, 2000)); // Retry delay
+        }
+      }
+    };
+
+    const notesHTML = await generateNotesWithRetry();
+
+    // ✅ Using `connection.query` properly
+    connection.query(
+      "INSERT INTO flashcards (title, description, headings, is_public, user_id, subject_id, is_ai) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [
+        `Notes on ${subject}`,
+        `AI-generated notes for ${subject}`,
+        notesHTML, // Store the generated notes in HTML format
+        true, // Assuming public
+        userId,
+        subject, // Assuming subject ID is the name itself
+        true, // AI-generated flag
+      ],
+      (err, result) => {
+        if (err) {
+          console.error("❌ Database error:", err);
+          return res.status(500).json({ error: "Database insertion failed" });
+        }
+
+        console.log(`✅ Notes generated successfully!`);
+        res.json({ noteId: result.insertId, html: notesHTML });
+      }
+    );
+  } catch (error) {
+    console.error("❌ Error processing request:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+
+// Step 1: Feynman Technique Flow - Main Entry Point
+app.post("/api/feynman", async (req, res) => {
+  const { topic, userExplanation } = req.body;
+  const token = req.headers.authorization?.split(" ")[1];
+
+  if (!token) return res.status(401).json({ error: "No token provided" });
+
+  try {
+    const userId = await getUserIdFromToken(token);
+
+    if (!topic || !userExplanation) {
+      return res.status(400).json({ error: "Topic and explanation are required" });
+    }
+
+    // Step 2: AI provides a simple explanation of the topic
+    const simpleExplanation = await getSimpleExplanationFromAI(topic);
+
+    // Step 3: Store user’s input in the database (for tracking)
+    const query = "INSERT INTO feynman_explanations (user_id, topic, user_explanation, ai_explanation) VALUES (?, ?, ?, ?)";
+    connection.query(query, [userId, topic, userExplanation, simpleExplanation], (err, results) => {
+      if (err) {
+        console.error("❌ Database error:", err);
+        return res.status(500).json({ error: "Database error" });
+      }
+
+      // Return the simple explanation to front-end
+      res.json({ simpleExplanation, message: "Feynman Technique step 1 completed!" });
+    });
+  } catch (error) {
+    console.error("❌ Error processing Feynman technique:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Step 2: Get Feedback on User Explanation
+app.post("/api/feynman-feedback", async (req, res) => {
+  const { topic, userExplanation, simpleExplanation } = req.body; // Make sure to pass topic here
+  try {
+    const feedback = await getFeedbackFromAI(userExplanation, simpleExplanation);
+    const questions = await getTestQuestionsFromAI(topic); // Pass the topic here directly
+    res.json({ feedback, questions });
+  } catch (error) {
+    console.error("❌ Error generating feedback:", error);
+    res.status(500).json({ error: "Error generating feedback" });
+  }
+});
+
+// Step 3: Get Simplicity Score
+app.post("/api/feynman-score", async (req, res) => {
+  const { userExplanation } = req.body;
+  try {
+    const simplicityScore = await getSimplicityScoreFromAI(userExplanation);
+    res.json({ simplicityScore });
+  } catch (error) {
+    console.error("❌ Error generating simplicity score:", error);
+    res.status(500).json({ error: "Error generating simplicity score" });
+  }
+});
+
+// AI Helper Functions (Simple Explanation, Feedback, Test Questions, Simplicity Score)
+async function getSimpleExplanationFromAI(topic) {
+  try {
+    const chat = model.startChat({ history: [] });
+    const result = await chat.sendMessage(`Explain the topic "${topic}" in simple terms for a 12-year-old.`);
+    const response = await result.response.text();
+    return response.trim();
+  } catch (error) {
+    console.error("❌ Error generating simple explanation:", error);
+    throw new Error("Error generating explanation from AI");
+  }
+}
+
+async function getFeedbackFromAI(userExplanation, simpleExplanation) {
+  try {
+    const chat = model.startChat({ history: [] });
+    const result = await chat.sendMessage(`
+      Provide feedback on this user explanation based on the AI's simple version of the topic.
+
+      User's explanation: ${userExplanation}
+      Simple explanation: ${simpleExplanation}
+    `);
+    const response = await result.response.text();
+    return response.trim();
+  } catch (error) {
+    console.error("❌ Error generating feedback:", error);
+    throw new Error("Error generating feedback from AI");
+  }
+}
+
+async function getTestQuestionsFromAI(topic) {
+  try {
+    const chat = model.startChat({ history: [] });
+    const result = await chat.sendMessage(`Generate 5 questions to test knowledge on the topic "${topic}".`);
+    const response = await result.response.text();
+    return response.trim().split('\n'); // Assuming each question is separated by a new line
+  } catch (error) {
+    console.error("❌ Error generating test questions:", error);
+    throw new Error("Error generating test questions from AI");
+  }
+}
+
+async function getSimplicityScoreFromAI(userExplanation) {
+  try {
+    const chat = model.startChat({ history: [] });
+    const result = await chat.sendMessage(`
+      Rate the simplicity of the following explanation on a scale from 1 to 10, with 10 being the simplest:
+
+      Explanation: ${userExplanation}
+    `);
+    const response = await result.response.text();
+    return response.trim(); // Return the score
+  } catch (error) {
+    console.error("❌ Error generating simplicity score:", error);
+    throw new Error("Error generating simplicity score from AI");
+  }
+}
 
 
 // Start the server
