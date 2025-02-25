@@ -11057,13 +11057,25 @@ This version guarantees a **highly structured, comprehensive mind map** with all
           connection.query(
             "INSERT INTO mindmap_edges (mindmap_id, node_from, node_to) VALUES ?",
             [edgesData],
-            (err) => {
+            async (err) => {
               if (err) {
                 console.error("❌ Database error while inserting edges:", err);
                 return res.status(500).json({ error: "Database error" });
               }
 
               console.log(`✅ Mind map generated successfully! (ID: ${mindmapId})`);
+
+              // ✅ Track AI Magic usage (new code added here)
+              try {
+                await connection.promise().query(
+                  "INSERT INTO magic_usage (user_id, type) VALUES (?, ?)",
+                  [userId, "mindmap_generation"]
+                );
+                console.log(`📌 Magic usage recorded successfully for user ${userId}`);
+              } catch (magicError) {
+                console.error("⚠️ Failed to track magic usage:", magicError);
+              }
+
               res.json({ mindmapId, nodes: mindMap.nodes, edges: mindMap.edges });
             }
           );
@@ -11075,6 +11087,7 @@ This version guarantees a **highly structured, comprehensive mind map** with all
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
 
 
 
@@ -11296,13 +11309,25 @@ app.post("/api/tasks/generate/from-magic", async (req, res) => {
     connection.query(
       "INSERT INTO tasks (user_id, title, description, due_date, priority) VALUES ?",
       [tasksValues],
-      (err) => {
+      async (err) => {
         if (err) {
           console.error("❌ Database error while inserting tasks:", err);
           return res.status(500).json({ error: "Database error" });
         }
 
         console.log(`✅ Tasks generated successfully!`);
+
+        // ✅ Track AI Magic usage (new code added here)
+        try {
+          await connection.promise().query(
+            "INSERT INTO magic_usage (user_id, type) VALUES (?, ?)",
+            [userId, "tasks_generation"]
+          );
+          console.log(`📌 Magic usage recorded successfully for user ${userId}`);
+        } catch (magicError) {
+          console.error("⚠️ Failed to track magic usage:", magicError);
+        }
+
         res.json({ tasks });
       }
     );
@@ -11376,7 +11401,7 @@ app.post("/api/notes/generate/from-magic", async (req, res) => {
 
     const notesHTML = await generateNotesWithRetry();
 
-    // ✅ Using `connection.query` properly
+    // ✅ Insert generated notes into the flashcards table
     connection.query(
       "INSERT INTO flashcards (title, description, headings, is_public, user_id, subject_id, is_ai) VALUES (?, ?, ?, ?, ?, ?, ?)",
       [
@@ -11388,13 +11413,25 @@ app.post("/api/notes/generate/from-magic", async (req, res) => {
         subject, // Assuming subject ID is the name itself
         true, // AI-generated flag
       ],
-      (err, result) => {
+      async (err, result) => {
         if (err) {
           console.error("❌ Database error:", err);
           return res.status(500).json({ error: "Database insertion failed" });
         }
 
         console.log(`✅ Notes generated successfully!`);
+
+        // ✅ Track AI Magic usage (new code added here)
+        try {
+          await connection.promise().query(
+            "INSERT INTO magic_usage (user_id, type) VALUES (?, ?)",
+            [userId, "notes_generation"] // Changed type to "notes_generation" (instead of "quiz_generation")
+          );
+          console.log(`📌 Magic usage recorded successfully for user ${userId}`);
+        } catch (magicError) {
+          console.error("⚠️ Failed to track magic usage:", magicError);
+        }
+
         res.json({ noteId: result.insertId, html: notesHTML });
       }
     );
