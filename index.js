@@ -11597,7 +11597,7 @@ app.post('/check-subscription/trial', async (req, res) => {
               const expiryDate = new Date();
               expiryDate.setDate(expiryDate.getDate() + 2);
 
-              console.log(`✅ Granting 3-day free trial to user ${userId}, expires on: ${expiryDate}`);
+              console.log(`✅ Granting 2-day free trial to user ${userId}`);
 
               // Insert into free_trials
               const insertTrialQuery = `
