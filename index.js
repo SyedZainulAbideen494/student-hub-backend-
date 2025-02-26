@@ -9880,11 +9880,9 @@ app.post('/api/quiz/generate/exam', async (req, res) => {
   }
 });
 
-
 app.post('/submitCompetitiveQuiz', async (req, res) => {
   const { token, quizId, type, answers } = req.body;
 
-  // Validate input
   if (!token || typeof token !== 'string' || !quizId || typeof quizId !== 'number' || !Array.isArray(answers) || !type) {
     console.error('Invalid input data:', req.body);
     return res.status(400).json({ message: 'Invalid input data' });
@@ -9896,7 +9894,7 @@ app.post('/submitCompetitiveQuiz', async (req, res) => {
     let incorrectCount = 0;
     let answerResults = [];
 
-    // Step 1: Check answers and collect results
+    // **Step 1: Check answers**
     for (const answer of answers) {
       if (typeof answer.answerId !== 'number' || typeof answer.questionId !== 'number') {
         console.error('Invalid answer format:', answer);
@@ -9924,7 +9922,7 @@ app.post('/submitCompetitiveQuiz', async (req, res) => {
       }
     }
 
-    // Step 2: Get total questions
+    // **Step 2: Get total questions**
     const [questions] = await connection.promise().query(
       'SELECT COUNT(*) AS count FROM questions WHERE quiz_id = ?',
       [quizId]
@@ -9935,59 +9933,47 @@ app.post('/submitCompetitiveQuiz', async (req, res) => {
       return res.status(400).json({ message: 'No questions found for this quiz' });
     }
 
-   // Step 3: Apply scoring system based on `type`
-let score = 0;
-let maxMarksPerQuestion = 1; // Default max marks per question
+    // **Step 3: Apply scoring system based on `type`**
+    let score = 0;
 
-switch (type) {
-  case 'NEET':
-  case 'JEE':
-    score = correctCount * 4 - incorrectCount * 1;
-    maxMarksPerQuestion = 4;
-    break;
-  case 'UPSC':
-  case 'SSC':
-  case 'Banking':
-    score = correctCount * 2 - incorrectCount * 0.66;
-    maxMarksPerQuestion = 2;
-    break;
-  case 'CAT':
-  case 'CUET':
-    score = correctCount * 3 - incorrectCount * 1;
-    maxMarksPerQuestion = 3;
-    break;
-  case 'GATE':
-    score = correctCount * 2 - incorrectCount * 0.33;
-    maxMarksPerQuestion = 2;
-    break;
-  case 'GMAT':
-  case 'GRE':
-  case 'SAT':
-    score = correctCount * 1 - incorrectCount * 0.25;
-    maxMarksPerQuestion = 1;
-    break;
-  case 'CLAT':
-    score = correctCount * 1 - incorrectCount * 0.5;
-    maxMarksPerQuestion = 1;
-    break;
-  default:
-    score = (correctCount / totalQuestions) * 100; // Default percentage score
-}
+    switch (type) {
+      case 'NEET':
+      case 'JEE':
+        score = correctCount * 4 - incorrectCount * 1;
+        break;
+      case 'UPSC':
+      case 'SSC':
+      case 'Banking':
+        score = correctCount * 2 - incorrectCount * 0.66;
+        break;
+      case 'CAT':
+      case 'CUET':
+        score = correctCount * 3 - incorrectCount * 1;
+        break;
+      case 'GATE':
+        score = correctCount * 2 - incorrectCount * 0.33;
+        break;
+      case 'GMAT':
+      case 'GRE':
+      case 'SAT':
+        score = correctCount * 1 - incorrectCount * 0.25;
+        break;
+      case 'CLAT':
+        score = correctCount * 1 - incorrectCount * 0.5;
+        break;
+      default:
+        score = correctCount * 1 - incorrectCount * 0.25; // Default rule for unknown types
+    }
 
-// Ensure score never exceeds 100% of total possible marks
-const maxPossibleScore = totalQuestions * maxMarksPerQuestion;
-score = Math.min(score, maxPossibleScore);
-
-
-    // **No longer preventing negative scores**
+    // **Negative scores are allowed! No `Math.max(score, 0)`**
     
-    // Step 4: Save score to `user_quizzes`
+    // **Step 4: Save score to `user_quizzes`**
     await connection.promise().query(
       'INSERT INTO user_quizzes (user_id, quiz_id, score) VALUES (?, ?, ?)',
       [userId, quizId, score]
     );
 
-    // Step 5: Update Points System (only if score is positive)
+    // **Step 5: Update Points System (only if score is positive)**
     if (score > 0) {
       const pointsEarned = correctCount * 5; // 5 points per correct answer
       const pointsQuery = 'SELECT * FROM user_points WHERE user_id = ?';
