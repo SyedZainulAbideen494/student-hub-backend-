@@ -11593,9 +11593,9 @@ app.post('/check-subscription/trial', async (req, res) => {
                   return res.json({ status: 'redirect_subscription' }); // Trial already claimed
               }
 
-              // Grant 3-day free trial
+              // Grant 2-day free trial
               const expiryDate = new Date();
-              expiryDate.setDate(expiryDate.getDate() + 3);
+              expiryDate.setDate(expiryDate.getDate() + 2);
 
               console.log(`✅ Granting 3-day free trial to user ${userId}, expires on: ${expiryDate}`);
 
