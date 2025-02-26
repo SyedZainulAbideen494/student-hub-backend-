@@ -11559,6 +11559,84 @@ async function getSimplicityScoreFromAI(userExplanation) {
   }
 }
 
+app.post('/check-subscription/trial', async (req, res) => {
+  const { token } = req.body; 
+
+  if (!token) {
+      return res.status(400).json({ message: 'Token is required' });
+  }
+
+  try {
+      const userId = await getUserIdFromToken(token);
+
+      // Check for an active premium subscription
+      const subscriptionQuery = 'SELECT * FROM subscriptions WHERE user_id = ?';
+      connection.query(subscriptionQuery, [userId], (err, results) => {
+          if (err) {
+              console.error("❌ Database error (subscriptions):", err);
+              return res.status(500).json({ message: 'Database error', error: err });
+          }
+
+          if (results.length > 0 && new Date(results[0].expiry_date) > new Date()) {
+              return res.json({ status: 'premium' }); // Already premium
+          }
+
+          // Check if user already claimed a free trial
+          const trialQuery = 'SELECT * FROM free_trials WHERE user_id = ?';
+          connection.query(trialQuery, [userId], (err, trialResults) => {
+              if (err) {
+                  console.error("❌ Database error (free_trials):", err);
+                  return res.status(500).json({ message: 'Database error', error: err });
+              }
+
+              if (trialResults.length > 0) {
+                  return res.json({ status: 'redirect_subscription' }); // Trial already claimed
+              }
+
+              // Grant 3-day free trial
+              const expiryDate = new Date();
+              expiryDate.setDate(expiryDate.getDate() + 3);
+
+              console.log(`✅ Granting 3-day free trial to user ${userId}, expires on: ${expiryDate}`);
+
+              // Insert into free_trials
+              const insertTrialQuery = `
+                  INSERT INTO free_trials (user_id, expires_at) 
+                  VALUES (?, ?)
+                  ON DUPLICATE KEY UPDATE expires_at = VALUES(expires_at)
+              `;
+
+              connection.query(insertTrialQuery, [userId, expiryDate], (err) => {
+                  if (err) {
+                      console.error("❌ Database error (insert free_trials):", err);
+                      return res.status(500).json({ message: 'Database error', error: err });
+                  }
+
+                  // Insert into subscriptions
+                  const insertSubscriptionQuery = `
+                      INSERT INTO subscriptions (user_id, subscription_plan, payment_status, payment_date, expiry_date)
+                      VALUES (?, 'trial', 'free', NOW(), ?)
+                      ON DUPLICATE KEY UPDATE expiry_date = VALUES(expiry_date)
+                  `;
+
+                  connection.query(insertSubscriptionQuery, [userId, expiryDate], (err) => {
+                      if (err) {
+                          console.error("❌ Database error (insert subscriptions):", err);
+                          return res.status(500).json({ message: 'Database error', error: err });
+                      }
+
+                      return res.json({ status: 'trial_granted' });
+                  });
+              });
+          });
+      });
+  } catch (error) {
+      console.error("❌ Error processing token:", error);
+      return res.status(500).json({ message: 'Error processing token', error });
+  }
+});
+
+
 
 // Start the server
 app.listen(PORT, () => {
