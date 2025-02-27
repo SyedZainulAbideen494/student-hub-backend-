@@ -11588,9 +11588,9 @@ app.post('/check-subscription/trial', async (req, res) => {
 
               // Grant 2-day free trial
               const expiryDate = new Date();
-              expiryDate.setDate(expiryDate.getDate() + 2);
+              expiryDate.setDate(expiryDate.getDate() + 1);
 
-              console.log(`✅ Granting 2-day free trial to user ${userId}`);
+              console.log(`Granting 1-day free trial to user ${userId}`);
 
               // Insert into free_trials
               const insertTrialQuery = `
@@ -11629,6 +11629,191 @@ app.post('/check-subscription/trial', async (req, res) => {
   }
 });
 
+const fetchImages = async (searchQuery) => {
+  try {
+    const response = await fetch(
+      `https://www.bing.com/images/search?q=${encodeURIComponent(searchQuery)}&FORM=HDRSC2`
+    );
+    const html = await response.text();
+
+    // Extract image URLs using regex
+    const imageUrls = [...html.matchAll(/murl&quot;:&quot;(https:\/\/[^&]+)&quot;/g)]
+      .map(match => match[1])
+      .slice(0, 5); // Get the first 5 images
+
+    if (imageUrls.length === 0) {
+      console.warn(`No images found for: ${searchQuery}`);
+    }
+
+    return imageUrls;
+  } catch (error) {
+    console.error("Error fetching images:", error);
+    return []; // Return an empty array to prevent failures
+  }
+};
+
+app.post("/api/chat/assignment", async (req, res) => {
+  const { topic, details, pages, token } = req.body;
+
+  try {
+    if (!topic || typeof topic !== "string" || topic.trim() === "") {
+      return res.status(400).json({ error: "Assignment topic cannot be empty." });
+    }
+    if (!token) {
+      return res.status(400).json({ error: "Token is required." });
+    }
+
+    const userId = await getUserIdFromToken(token);
+    if (!userId) {
+      return res.status(401).json({ error: "Invalid token or user not authenticated." });
+    }
+
+    // Fetch images for the topic
+    const images = await fetchImages(topic);
+    
+    const dynamicSystemInstruction = `
+      You are the Edusify Assignment Maker. Your job is to generate detailed academic assignments in well-structured HTML format.
+
+      - **Topic**: ${topic}
+      - **Details**: ${details || "No additional details provided."}
+      - **Pages Required**: ${pages || "Not specified"}
+
+      **Instructions:**
+      - Create an assignment with headings, paragraphs, and bullet points.
+      - Use academic language and structure (Introduction, Body, Conclusion).
+      - Format responses in **HTML**.
+      - Insert **Image Placeholders** where relevant (I will attach images separately).
+      - Keep each section concise but informative.
+    `;
+
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.0-flash",
+      systemInstruction: dynamicSystemInstruction,
+    });
+
+    const chat = model.startChat();
+    let assignmentContent = "";
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const result = await chat.sendMessage(`Generate an academic assignment on: ${topic}`);
+        assignmentContent = result.response?.text?.() || "No response from AI.";
+        console.log(`AI responded on attempt ${attempt}`);
+        break;
+      } catch (error) {
+        console.error(`Attempt ${attempt} failed:`, error.message);
+        if (attempt === MAX_RETRIES) throw new Error("AI service failed.");
+        await new Promise((resolve) => setTimeout(resolve, Math.pow(2, attempt) * 100));
+      }
+    }
+
+    if (!assignmentContent || assignmentContent === "No response from AI.") {
+      return res.status(500).json({ error: "AI did not generate an assignment." });
+    }
+
+    // Construct the assignment HTML with images
+    const htmlAssignment = `
+      <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; margin: 20px; }
+            h1, h2, h3 { color: #333; }
+            img { max-width: 100%; height: auto; margin: 10px 0; }
+            .download-img { display: block; margin-top: 5px; text-decoration: none; color: blue; }
+          </style>
+        </head>
+        <body>
+          <h1>Assignment: ${topic}</h1>
+          ${assignmentContent}
+          ${images.length > 0 ? "<h2>Related Images</h2>" : ""}
+          ${images
+            .map(
+              (img) => `<div>
+                  <img src="${img}" alt="Related Image">
+                </div>`
+            )
+            .join("")}
+        </body>
+      </html>
+    `;
+
+    // Store assignment in database
+    const result = await query(
+      "INSERT INTO assignments (user_id, topic, content) VALUES (?, ?, ?)",
+      [userId, topic, htmlAssignment]
+    );
+    
+    const assignmentId = result.insertId; // Get the inserted assignment's ID
+    
+    res.json({ id: assignmentId, assignment: htmlAssignment });
+    
+  } catch (error) {
+    console.error("Error in /api/chat/assignment:", error);
+    res.status(500).json({ error: "An error occurred while generating the assignment." });
+  }
+});
+
+
+app.get("/api/chat/assignment/:id", async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    if (!id) {
+      return res.status(400).json({ error: "Assignment ID is required." });
+    }
+
+    const assignment = await query("SELECT content FROM assignments WHERE id = ?", [id]);
+
+    if (!assignment.length) {
+      return res.status(404).json({ error: "Assignment not found." });
+    }
+
+    res.json({ assignment: assignment[0].content });
+  } catch (error) {
+    console.error("Error in fetching assignment:", error);
+    res.status(500).json({ error: "An error occurred while retrieving the assignment." });
+  }
+});
+
+
+app.get("/api/get/assignments", async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1]; // Extract token from header
+    if (!token) return res.status(401).json({ error: "Unauthorized. Token missing." });
+
+    const userId = await getUserIdFromToken(token);
+    if (!userId) return res.status(403).json({ error: "Invalid or expired token." });
+
+    const assignments = await query("SELECT id, topic, created_at FROM assignments WHERE user_id = ?", [userId]);
+
+    if (!assignments.length) {
+      return res.status(404).json({ error: "No assignments found." });
+    }
+
+    res.json({ assignments });
+  } catch (error) {
+    console.error("Error fetching assignments:", error);
+    res.status(500).json({ error: "An error occurred while retrieving assignments." });
+  }
+});
+
+app.get("/api/chat/user-assignments", async (req, res) => {
+  try {
+    const token = req.headers.authorization;
+    if (!token) {
+      return res.status(401).json({ error: "Unauthorized. Token required." });
+    }
+
+    const userId = await getUserIdFromToken(token); // Extract user ID from token
+
+    const assignments = await query("SELECT id, topic, created_at FROM assignments WHERE user_id = ?", [userId]);
+
+    res.json({ assignments });
+  } catch (error) {
+    console.error("Error fetching user assignments:", error);
+    res.status(500).json({ error: "An error occurred while retrieving assignments." });
+  }
+});
 
 
 // Start the server
