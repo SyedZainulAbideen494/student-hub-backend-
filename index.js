@@ -11588,9 +11588,9 @@ app.post('/check-subscription/trial', async (req, res) => {
 
               // Grant 2-day free trial
               const expiryDate = new Date();
-              expiryDate.setDate(expiryDate.getDate() + 1);
+              expiryDate.setDate(expiryDate.getDate() + 3);
 
-              console.log(`Granting 1-day free trial to user ${userId}`);
+              console.log(`Granting 3-day free trial to user ${userId}`);
 
               // Insert into free_trials
               const insertTrialQuery = `
@@ -11700,7 +11700,7 @@ app.post("/api/chat/assignment", async (req, res) => {
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
         const result = await chat.sendMessage(`Generate an academic assignment on: ${topic}`);
-        assignmentContent = result.response?.text?.() || "No response from AI.";
+        assignmentContent = result.response?.text?.().replace(/^```html|```$/g, "").trim() || "No response from AI.";
         console.log(`AI responded on attempt ${attempt}`);
         break;
       } catch (error) {
@@ -11709,6 +11709,7 @@ app.post("/api/chat/assignment", async (req, res) => {
         await new Promise((resolve) => setTimeout(resolve, Math.pow(2, attempt) * 100));
       }
     }
+    
 
     if (!assignmentContent || assignmentContent === "No response from AI.") {
       return res.status(500).json({ error: "AI did not generate an assignment." });
