@@ -11668,6 +11668,9 @@ app.post("/api/chat/assignment", async (req, res) => {
       return res.status(401).json({ error: "Invalid token or user not authenticated." });
     }
 
+    console.log(`Generating assignment for topic: "${topic}" | User ID: ${userId}`);
+
+
     // Fetch images for the topic
     const images = await fetchImages(topic);
     
@@ -11744,7 +11747,8 @@ app.post("/api/chat/assignment", async (req, res) => {
     );
     
     const assignmentId = result.insertId; // Get the inserted assignment's ID
-    
+    console.log(`Assignment generated successfully! Assignment ID: ${assignmentId}`);
+
     res.json({ id: assignmentId, assignment: htmlAssignment });
     
   } catch (error) {
