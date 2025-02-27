@@ -6402,7 +6402,7 @@ app.delete('/api/room_tasks/delete/:taskId', (req, res) => {
 // Define storage for PDF uploads
 const pdfStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, '/root/student-hub-backend-/public/'); // Save PDFs in a dedicated folder
+    cb(null, 'public/'); // Save PDFs in a dedicated folder
   },
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname);
@@ -10719,12 +10719,12 @@ app.post("/api/mindmaps/generate", async (req, res) => {
           try {
             const chat = model.startChat({ history: [] });
             const result = await chat.sendMessage(`
-              Generate a highly detailed and structured JSON object for a mind map based on the following details:
-
+              Generate a highly detailed and structured JSON object for a **circular** mind map based on the following details:
+            
               - Topics: ${headings}
               - Subject: ${subject}
               - Additional Instructions: ${instructions || "None provided"}
-
+            
               The JSON structure should be:
               {
                 "nodes": [
@@ -10742,20 +10742,31 @@ app.post("/api/mindmaps/generate", async (req, res) => {
                   }
                 ]
               }
-
-              Rules:
-              1. Structure nodes logically for ${subject}.
-              2. Ensure each node connects to at least one other node.
-              3. Follow additional instructions, if provided.
-              4. Return only the JSON object.
-              5. Format JSON properly.
-              ✅ **More Detail** – Covers all major topics and breaks them down logically.  
-✅ **Better Layout** – Even distribution of nodes to prevent clutter.  
-✅ **Stricter JSON Compliance** – Ensures AI returns a clean, usable JSON object.  
-✅ **More Logical Connections** – Topics are linked meaningfully, not randomly.  
-
-This version guarantees a **highly structured, comprehensive mind map** with all essential details. 🚀
+            
+              **Rules:**
+              1. The structure must be **circular**, ensuring balanced spacing between nodes.  
+              2. The **main topic** should be centrally placed with major topics surrounding it.  
+              3. Subtopics should be **distributed evenly** around their parent topics.  
+              4. Each node must be **logically connected**, avoiding random placements.  
+              5. Follow additional instructions, if provided.  
+              6. Ensure the JSON output is **formatted properly** with no extra text.  
+            
+              **Guidelines:**
+              - **Circular Layout** → The central topic should be the **core node**, with branches expanding outward.
+              - **Even Distribution** → Arrange all nodes to **prevent overlapping** and ensure **readability**.
+              - **Logical Connections** → Link nodes **hierarchically**, ensuring a **structured flow**.
+              - **Minimum 300px Spacing** → Ensure **at least 300px gap** between each node to avoid clutter.
+              - **Detailed Breakdown** → Expand major topics into **clear, well-organized** subtopics.
+              - **Strict JSON Format** → Output must be **clean, valid JSON** with no extra text.
+            
+              **✅ Optimized for Clarity** – Balanced structure with **proper spacing**.  
+              **✅ Hierarchical & Meaningful** – Each topic connects **logically**.  
+              **✅ Radial Expansion** – Topics expand in a **smooth circular pattern**.  
+              **✅ No Extra Clutter** – AI must **only return JSON**, with no explanations.  
+            
+              **Return ONLY the JSON object** with no additional text or explanation. 🚀
             `);
+            
 
             const rawResponse = await result.response.text();
             const sanitizedResponse = rawResponse.replace(/```(?:json)?/g, "").trim();
@@ -10827,14 +10838,20 @@ app.get("/api/mindmaps/:mindmapId", async (req, res) => {
   const { mindmapId } = req.params;
   const token = req.headers.authorization?.split(" ")[1];
 
-  if (!token) return res.status(401).json({ error: "No token provided" });
+  let userId = null;
+  if (token) {
+    try {
+      userId = await getUserIdFromToken(token);
+    } catch (error) {
+      console.error("Invalid token:", error);
+      return res.status(401).json({ error: "Invalid token" });
+    }
+  }
 
   try {
-    const userId = await getUserIdFromToken(token);
-
-    // Fetch mind map data from MySQL
-    const mindmapQuery = "SELECT * FROM mindmaps WHERE id = ? AND user_id = ?";
-    connection.query(mindmapQuery, [mindmapId, userId], (err, mindmapResults) => {
+    // Fetch mind map without requiring userId
+    const mindmapQuery = "SELECT * FROM mindmaps WHERE id = ?";
+    connection.query(mindmapQuery, [mindmapId], (err, mindmapResults) => {
       if (err || mindmapResults.length === 0) return res.status(404).json({ error: "Mind map not found" });
 
       const nodesQuery = "SELECT * FROM mindmap_nodes WHERE mindmap_id = ?";
@@ -10866,7 +10883,6 @@ app.get("/api/mindmaps/:mindmapId", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
-
 
 
 // **3. Update Node Position**
@@ -10958,42 +10974,38 @@ app.post("/api/mindmaps/generate/from-magic", async (req, res) => {
         while (attempts < MAX_RETRIES) {
           try {
             const chat = model.startChat({ history: [] });
-            const result = await chat.sendMessage(`
-              Generate a highly detailed and structured JSON object for a mind map based on the following Notes:
+const result = await chat.sendMessage(`
+  Generate a **circular mind map** in **JSON format** based on the following:
 
-              - Notes: ${headings}
+  - **Notes:** ${headings}
 
+  **JSON Output:**
+  {
+    "nodes": [
+      { "id": number, "label": "string", "x": number, "y": number }
+    ],
+    "edges": [
+      { "from": number, "to": number }
+    ]
+  }
 
-              The JSON structure should be:
-              {
-                "nodes": [
-                  {
-                    "id": number,
-                    "label": "string",
-                    "x": number,
-                    "y": number
-                  }
-                ],
-                "edges": [
-                  {
-                    "from": number,
-                    "to": number
-                  }
-                ]
-              }
+  
+    **Instructions:**
+    - The **central node** represents the main idea.
+    - Major topics should expand outward in a **wide, non-overlapping circular pattern**.
+    - Ensure **minimum 300px spacing** between all nodes to prevent clutter.
+    - Arrange **subtopics evenly around their parent**, keeping a **minimum angle gap**.
+    - If too many subtopics exist, **split them into tiers** to maintain readability.
+    - Use a **force-directed layout** to prevent overlapping.
 
-              Rules:
-              1. Structure nodes logical.
-              2. Ensure each node connects to at least one other node.
-              3. Follow additional instructions, if provided.
-              4. Return only the JSON object.
-              5. Format JSON properly.
-              ✅ **More Detail** – Covers all major topics and breaks them down logically.  
-✅ **Better Layout** – Even distribution of nodes to prevent clutter.  
-✅ **Stricter JSON Compliance** – Ensures AI returns a clean, usable JSON object.  
-✅ **More Logical Connections** – Topics are linked meaningfully, not randomly.  
+    **Rules:**
+    ✅ **Strictly return JSON** – No extra text.  
+    ✅ **Maintain structure** – Balanced and well-organized.  
+    ✅ **Logical connections** – Every node must be meaningful.  
+    ✅ **Ensure readability** – Nodes should have **at least 300px spacing**.  
+    ✅ **Even distribution** – Ensure a **wide, uncluttered** radial expansion.  
 
-This version guarantees a **highly structured, comprehensive mind map** with all essential details. 🚀
+    **Return ONLY the JSON object.**
             `);
 
             const rawResponse = await result.response.text();
@@ -11103,43 +11115,40 @@ app.post("/api/mindmaps/generate-from-pdf", uploadPDF.single("file"), async (req
     const result = await model.generateContent([
       {
         text: `
-        Extract key topics and subtopics from the following text and structure them as a JSON-based mind map.
-
+        Generate a **circular mind map** in **JSON format** from the following text:
+    
         - **Text**: "${pdfText}"
-
-        **Expected JSON format**:
+    
+        **Expected JSON structure**:
         {
           "nodes": [
-            {
-              "id": number,
-              "label": "string",
-              "x": number,
-              "y": number
-            }
+            { "id": number, "label": "string", "x": number, "y": number }
           ],
           "edges": [
-            {
-              "from": number,
-              "to": number
-            }
+            { "from": number, "to": number }
           ]
         }
-
-        **Rules**:
-        1️⃣ Structure nodes logically.
-        2️⃣ Ensure each node connects to at least one other node.
-        3️⃣ Follow additional instructions, if provided.
-        4️⃣ Return only the JSON object.
-        5️⃣ Format JSON properly.
-        ✅ **More Detail** – Covers all major topics and breaks them down logically.
-        ✅ **Better Layout** – Even distribution of nodes to prevent clutter.
-        ✅ **Stricter JSON Compliance** – Ensures AI returns a clean, usable JSON object.
-        ✅ **More Logical Connections** – Topics are linked meaningfully, not randomly.
-
-        Return only the JSON object and nothing else.
-      `,
+    
+        **Instructions:**
+        - The **central node** is the main idea.
+        - Major topics should expand outward in a **wide, non-overlapping circular pattern**.
+        - **Ensure at least 100-150px spacing** between all nodes to prevent clutter.
+        - Arrange **subtopics evenly around their parent**, keeping a **minimum angle gap**.
+        - If too many subtopics exist, **split them into tiers** to maintain readability.
+        - Use a **force-directed layout** to prevent overlapping.
+    
+        **Rules:**
+        ✅ **Strictly return JSON** – No extra text.  
+        ✅ **More spacing** – Nodes should never touch or stack on top of each other.  
+        ✅ **Even distribution** – Ensure a **wide, uncluttered** radial expansion.  
+        ✅ **Logical hierarchy** – Topics must expand **clearly and meaningfully**.  
+        ✅ **Easy readability** – Every node should have ample surrounding space.  
+    
+        **Return ONLY the JSON object.**
+        `,
       },
     ]);
+    
 
     // Step 3: Parse AI response
     const rawResponse = result.response?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
