@@ -3282,32 +3282,29 @@ app.get('/cancel', (req, res) => {
   res.redirect(FRONTEND_BASE_URL); // Redirect to the frontend home or cancel page
 });
 
-
-// Function to remove expired premium subscriptions
 const removeExpiredSubscriptions = () => {
-  const currentDate = new Date();
+  const currentDateTime = new Date(); // Get current timestamp
 
-  // Delete subscriptions where expiry_date has passed
+  // Delete subscriptions where expiry_date (including time) has passed
   const deleteQuery = `
     DELETE FROM subscriptions 
-    WHERE expiry_date < ?`;
+    WHERE expiry_date <= ?`;
 
-  connection.query(deleteQuery, [currentDate], (err, results) => {
+  connection.query(deleteQuery, [currentDateTime], (err, results) => {
     if (err) {
-      console.error('Error deleting expired subscriptions:', err);
+      console.error(`[${currentDateTime.toISOString()}] Error deleting expired subscriptions:`, err);
     } else {
-      console.log(`Deleted ${results.affectedRows} expired subscriptions.`);
+      if (results.affectedRows > 0) {
+        console.log(`Deleted ${results.affectedRows} expired subscriptions.`);
+      }
     }
   });
 };
 
-
-// Schedule the cron job to run every day at 6:30 PM UTC (which is 12:00 AM IST)
-cron.schedule('30 18 * * *', () => {
-  console.log('Running cleanup for expired subscriptions...');
+// Run the cron job every minute to check for exact expiry time
+cron.schedule('* * * * *', () => {
   removeExpiredSubscriptions();
 });
-
 
 
 // Example in Node.js with Express
@@ -8796,12 +8793,11 @@ app.post('/buy-premium', async (req, res) => {
   try {
     const { amount, currency, subscription_plan, token, duration } = req.body;
     
-    // Extract user ID from token
     const userId = await getUserIdFromToken(token);
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
     const options = {
-      amount: amount * 100, // Convert to paise
+      amount: amount * 100, 
       currency,
       receipt: `order_rcptid_${Math.floor(Math.random() * 100000)}`,
       notes: { subscription_plan, userId, duration },
@@ -8816,6 +8812,7 @@ app.post('/buy-premium', async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
 
 
 app.post('/verify-payment', async (req, res) => {
@@ -8838,9 +8835,10 @@ app.post('/verify-payment', async (req, res) => {
     if (expected_signature === signature) {
       // Calculate expiry date based on duration
       const expiryDate = new Date();
-      if (duration === 'weekly') expiryDate.setDate(expiryDate.getDate() + 7);
+      if (duration === 'daily') expiryDate.setDate(expiryDate.getDate() + 1);
+      else if (duration === 'weekly') expiryDate.setDate(expiryDate.getDate() + 7);
       else if (duration === 'monthly') expiryDate.setDate(expiryDate.getDate() + 30);
-      else if (duration === '6months') expiryDate.setDate(expiryDate.getDate() + 180);
+      else if (duration === '6months') expiryDate.setDate(expiryDate.getDate() + 180);      
 
       const queryText = `
         INSERT INTO subscriptions (user_id, subscription_plan, payment_status, payment_date, expiry_date)
