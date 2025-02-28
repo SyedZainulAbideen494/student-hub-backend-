@@ -6550,7 +6550,23 @@ app.post('/api/flashcards/upload/set-created', uploadPDF.single('pdf'), async (r
     }
 
     // Generate flashcards using AI logic based on PDF text
-    const prompt = `Generate flashcards in JSON format based on the following text extracted from a PDF. Each flashcard should have a 'question' and 'answer' field. No additional formatting or Markdown:\n\n${pdfText}`;
+    const prompt = `
+    Generate a JSON array of flashcards based on the following text. Each flashcard must have:
+    - "question": The key point as a question.
+    - "answer": The explanation.
+    
+    Only return valid JSON output. No additional text, no markdown formatting.
+    
+    Text:
+    ${pdfText}
+    
+    Example Output:
+    [
+      {"question": "What is Newton's First Law?", "answer": "An object in motion stays in motion unless acted upon by an external force."},
+      {"question": "Define osmosis.", "answer": "The movement of water molecules through a semipermeable membrane."}
+    ]
+    `;
+    
     
     const chat = model.startChat({
       history: [
