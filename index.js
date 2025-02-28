@@ -11245,45 +11245,41 @@ app.post("/api/tasks/generate/from-magic", async (req, res) => {
 
     const today = new Date().toISOString().split("T")[0]; // Format: YYYY-MM-DD
 
-    const isValidDate = (dateStr) => {
-      const date = new Date(dateStr);
-      return !isNaN(date.getTime()) && dateStr === date.toISOString().split("T")[0];
+    const isLeapYear = (year) => {
+      return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
     };
-    
+
     const adjustInvalidDates = (tasks) => {
       return tasks.map((task) => {
         let { due_date } = task;
-    
         const dateObj = new Date(due_date);
         const year = dateObj.getFullYear();
         const month = dateObj.getMonth() + 1; // JS months are 0-based
         const day = dateObj.getDate();
-    
-        // 🛠️ Fix non-leap year Feb 29 issue
-        if (month === 2 && day === 29) {
-          if (!(year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0))) {
-            console.warn(`⚠️ Adjusting invalid date ${due_date} to ${year}-02-28`);
-            due_date = `${year}-02-28`; // Convert Feb 29 → Feb 28 if not a leap year
-          }
+
+        // ✅ If due_date is Feb 29 on a non-leap year, shift it to March 1
+        if (month === 2 && day === 29 && !isLeapYear(year)) {
+          console.warn(`⚠️ Adjusting invalid date ${due_date} → ${year}-03-01`);
+          due_date = `${year}-03-01`;
         }
-    
+
         return { ...task, due_date };
       });
     };
-    
+
     const generateTasksWithRetry = async () => {
       let attempts = 0;
       const MAX_RETRIES = 3;
-    
+
       while (attempts < MAX_RETRIES) {
         try {
           const chat = model.startChat({ history: [] });
           const result = await chat.sendMessage(`
             Generate a JSON array of tasks based on this AI response:
-    
+
             - **Response:** ${headings}
             - **Today's Date:** ${today}
-    
+
             **JSON Format:**
             [
               {
@@ -11293,30 +11289,30 @@ app.post("/api/tasks/generate/from-magic", async (req, res) => {
                 "priority": "Low | Normal | High"
               }
             ]
-    
+
             **Rules:**
             - Ensure tasks are actionable and relevant.
             - Assign **due_date** dynamically:
               - **High Priority** → Due tomorrow (${today} +1 day)
               - **Normal Priority** → Due in 3 days (${today} +3 days)
               - **Low Priority** → Due in 5 days (${today} +5 days)
-            - If a generated date is invalid (e.g., February 29 in a non-leap year), adjust it to the closest valid date.
+            - If a generated date is February 29 on a non-leap year, adjust it to **March 1**.
             - Return **only** the JSON output.
           `);
-    
+
           const rawResponse = await result.response.text();
           const sanitizedResponse = rawResponse.replace(/```(?:json)?/g, "").trim();
-    
+
           let tasks;
           try {
             tasks = JSON.parse(sanitizedResponse);
           } catch (parseError) {
             throw new Error("Invalid JSON response from AI model");
           }
-    
-          // ✅ Fix Invalid Dates
+
+          // ✅ Fix Invalid Dates (Feb 29 → Mar 1 if necessary)
           tasks = adjustInvalidDates(tasks);
-    
+
           return tasks;
         } catch (error) {
           console.error(`⚠️ Attempt ${attempts + 1} failed:`, error.message);
@@ -11328,8 +11324,6 @@ app.post("/api/tasks/generate/from-magic", async (req, res) => {
         }
       }
     };
-    
-    
 
     const tasks = await generateTasksWithRetry();
 
@@ -11376,6 +11370,7 @@ app.post("/api/tasks/generate/from-magic", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
 
 app.post("/api/notes/generate/from-magic", async (req, res) => {
   const { subject, headings } = req.body;
