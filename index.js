@@ -11234,6 +11234,27 @@ app.post("/api/tasks/generate/from-magic", async (req, res) => {
       return !isNaN(date.getTime()) && dateStr === date.toISOString().split("T")[0];
     };
     
+    const adjustInvalidDates = (tasks) => {
+      return tasks.map((task) => {
+        let { due_date } = task;
+    
+        const dateObj = new Date(due_date);
+        const year = dateObj.getFullYear();
+        const month = dateObj.getMonth() + 1; // JS months are 0-based
+        const day = dateObj.getDate();
+    
+        // 🛠️ Fix non-leap year Feb 29 issue
+        if (month === 2 && day === 29) {
+          if (!(year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0))) {
+            console.warn(`⚠️ Adjusting invalid date ${due_date} to ${year}-02-28`);
+            due_date = `${year}-02-28`; // Convert Feb 29 → Feb 28 if not a leap year
+          }
+        }
+    
+        return { ...task, due_date };
+      });
+    };
+    
     const generateTasksWithRetry = async () => {
       let attempts = 0;
       const MAX_RETRIES = 3;
@@ -11277,16 +11298,8 @@ app.post("/api/tasks/generate/from-magic", async (req, res) => {
             throw new Error("Invalid JSON response from AI model");
           }
     
-          // ✅ Fix Invalid Dates (e.g., Feb 29 in non-leap years)
-          tasks.forEach(task => {
-            if (!isValidDate(task.due_date)) {
-              const dateObj = new Date(task.due_date);
-              if (dateObj.getMonth() === 1 && dateObj.getDate() === 29) {
-                // Adjust February 29 to February 28 if not a leap year
-                task.due_date = `${dateObj.getFullYear()}-02-28`;
-              }
-            }
-          });
+          // ✅ Fix Invalid Dates
+          tasks = adjustInvalidDates(tasks);
     
           return tasks;
         } catch (error) {
@@ -11299,6 +11312,7 @@ app.post("/api/tasks/generate/from-magic", async (req, res) => {
         }
       }
     };
+    
     
 
     const tasks = await generateTasksWithRetry();
