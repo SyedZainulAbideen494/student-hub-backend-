@@ -32,6 +32,8 @@ const archiver = require("archiver");
 const Razorpay = require('razorpay');
 const { exec } = require("child_process");
 const { YoutubeTranscript } = require("youtube-transcript");
+YoutubeTranscript.fetchTranscript("n4gxr7_mJFk").then(console.log).catch(console.error);
+
 // Initialize Google Generative AI
 const genAI = new GoogleGenerativeAI('AIzaSyCvmpjZRi7GGS9TcPQeVCnSDJLFPchYZ38');
 
