@@ -3718,6 +3718,31 @@ app.post('/api/chat/ai', async (req, res) => {
   }
 });
 
+
+app.post("/check-convo-count", async (req, res) => {
+  try {
+    const { token } = req.body; // Token is expected in the request body
+    if (!token) return res.status(401).json({ error: "Unauthorized" });
+
+    const userId = await getUserIdFromToken(token);
+    if (!userId) return res.status(403).json({ error: "Invalid token" });
+
+    const rows = await query(
+      `SELECT COUNT(*) AS convoCount FROM ai_history 
+       WHERE user_id = ? AND DATE(created_at) = CURDATE()`,
+      [userId]
+    );
+
+    res.json({ convoCount: rows[0].convoCount });
+  } catch (error) {
+    console.error("Error checking conversation count:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+
+
+
 app.post('/api/chat/ai/demo', async (req, res) => {
   const { message, chatHistory } = req.body;
 
