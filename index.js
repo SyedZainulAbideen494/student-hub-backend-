@@ -11229,19 +11229,24 @@ app.post("/api/tasks/generate/from-magic", async (req, res) => {
 
     const today = new Date().toISOString().split("T")[0]; // Format: YYYY-MM-DD
 
+    const isValidDate = (dateStr) => {
+      const date = new Date(dateStr);
+      return !isNaN(date.getTime()) && dateStr === date.toISOString().split("T")[0];
+    };
+    
     const generateTasksWithRetry = async () => {
       let attempts = 0;
       const MAX_RETRIES = 3;
-
+    
       while (attempts < MAX_RETRIES) {
         try {
           const chat = model.startChat({ history: [] });
           const result = await chat.sendMessage(`
             Generate a JSON array of tasks based on this AI response:
-
+    
             - **Response:** ${headings}
             - **Today's Date:** ${today}
-
+    
             **JSON Format:**
             [
               {
@@ -11251,27 +11256,38 @@ app.post("/api/tasks/generate/from-magic", async (req, res) => {
                 "priority": "Low | Normal | High"
               }
             ]
-
+    
             **Rules:**
             - Ensure tasks are actionable and relevant.
-            - Assign **due_date** dynamically: 
+            - Assign **due_date** dynamically:
               - **High Priority** → Due tomorrow (${today} +1 day)
               - **Normal Priority** → Due in 3 days (${today} +3 days)
               - **Low Priority** → Due in 5 days (${today} +5 days)
-            - Prioritize tasks logically.
+            - If a generated date is invalid (e.g., February 29 in a non-leap year), adjust it to the closest valid date.
             - Return **only** the JSON output.
           `);
-
+    
           const rawResponse = await result.response.text();
           const sanitizedResponse = rawResponse.replace(/```(?:json)?/g, "").trim();
-
+    
           let tasks;
           try {
             tasks = JSON.parse(sanitizedResponse);
           } catch (parseError) {
             throw new Error("Invalid JSON response from AI model");
           }
-
+    
+          // ✅ Fix Invalid Dates (e.g., Feb 29 in non-leap years)
+          tasks.forEach(task => {
+            if (!isValidDate(task.due_date)) {
+              const dateObj = new Date(task.due_date);
+              if (dateObj.getMonth() === 1 && dateObj.getDate() === 29) {
+                // Adjust February 29 to February 28 if not a leap year
+                task.due_date = `${dateObj.getFullYear()}-02-28`;
+              }
+            }
+          });
+    
           return tasks;
         } catch (error) {
           console.error(`⚠️ Attempt ${attempts + 1} failed:`, error.message);
@@ -11283,6 +11299,7 @@ app.post("/api/tasks/generate/from-magic", async (req, res) => {
         }
       }
     };
+    
 
     const tasks = await generateTasksWithRetry();
 
