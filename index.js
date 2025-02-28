@@ -31,8 +31,46 @@ const moment = require('moment');
 const archiver = require("archiver");
 const Razorpay = require('razorpay');
 const { exec } = require("child_process");
-const { YoutubeTranscript } = require("youtube-transcript");
-YoutubeTranscript.fetchTranscript("n4gxr7_mJFk").then(console.log).catch(console.error);
+const puppeteer = require("puppeteer");
+
+(async () => {
+  const browser = await puppeteer.launch({ headless: false }); // Set true for production
+  const page = await browser.newPage();
+
+  // Set a realistic user-agent to avoid bot detection
+  await page.setUserAgent(
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
+  );
+
+  // Navigate to YouTube video page
+  await page.goto("https://www.youtube.com/watch?v=n4gxr7_mJFk", {
+    waitUntil: "networkidle2",
+  });
+
+  // Click on the transcript button (if available)
+  try {
+    await page.waitForSelector('button[aria-label*="Show transcript"]', { timeout: 5000 });
+    await page.click('button[aria-label*="Show transcript"]');
+  } catch (error) {
+    console.log("No transcript button found. Transcript may be disabled.");
+    await browser.close();
+    return;
+  }
+
+  // Wait for the transcript to load
+  await page.waitForSelector("yt-transcript-segment-renderer", { timeout: 5000 });
+
+  // Extract transcript text
+  const transcript = await page.evaluate(() => {
+    return Array.from(document.querySelectorAll("yt-transcript-segment-renderer")).map(
+      (segment) => segment.innerText
+    );
+  });
+
+  console.log("Transcript:", transcript.join("\n"));
+
+  await browser.close();
+})();
 
 // Initialize Google Generative AI
 const genAI = new GoogleGenerativeAI('AIzaSyCvmpjZRi7GGS9TcPQeVCnSDJLFPchYZ38');
