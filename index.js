@@ -11905,38 +11905,6 @@ app.get("/api/chat/user-assignments", async (req, res) => {
 
 
 
-async function updatePoints() {
-  try {
-      // Get users who haven't updated in the last 24 hours
-      const users = await query(`
-          SELECT id, points 
-          FROM user_points 
-          WHERE updated_at < NOW() - INTERVAL 24 HOUR
-      `);
-
-      for (const user of users) {
-          const newPoints = Math.max(0, user.points - 10); // Ensure it doesn't go negative
-
-          // Update points and refresh updated_at
-          await query(`
-              UPDATE user_points 
-              SET points = ?, updated_at = NOW()
-              WHERE id = ?
-          `, [newPoints, user.id]);
-          console.log(`User ${user.id} updated: ${user.points} → ${newPoints}`);
-        }
-    } catch (error) {
-        console.error("Error updating points:", error);
-    }
-}
-
-// Schedule the cron job to run every 24 hours at midnight (00:00)
-cron.schedule('0 0 * * *', () => {
-    console.log("Running cron job to update user points...");
-    updatePoints();
-});
-
-console.log("Cron job scheduled to run every 24 hours.");
 
 
 // Start the server
