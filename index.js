@@ -33,7 +33,7 @@ const Razorpay = require('razorpay');
 const { exec } = require("child_process");
 const { YoutubeTranscript } = require("youtube-transcript");
 // Initialize Google Generative AI
-const genAI = new GoogleGenerativeAI('AIzaSyCvmpjZRi7GGS9TcPQeVCnSDJLFPchYZ38');
+const genAI = new GoogleGenerativeAI('AIzaSyCn_tU2RtvijhXXtfwU5WLh56Nedjwl_JI');
 
 const safetySettings = [
   {
@@ -3662,7 +3662,7 @@ app.post('/api/chat/ai', async (req, res) => {
     `;
 
     const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
+      model: "gemini-2.0-flash",
       safetySettings: safetySettings,
       systemInstruction: dynamicSystemInstruction
     });
