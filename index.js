@@ -3662,7 +3662,7 @@ app.post('/api/chat/ai', async (req, res) => {
     `;
 
     const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
+      model: "gemini-1.5-flash",
       safetySettings: safetySettings,
       systemInstruction: dynamicSystemInstruction
     });
@@ -11517,123 +11517,6 @@ app.post("/api/notes/generate/from-magic", async (req, res) => {
   }
 });
 
-
-// Step 1: Feynman Technique Flow - Main Entry Point
-app.post("/api/feynman", async (req, res) => {
-  const { topic, userExplanation } = req.body;
-  const token = req.headers.authorization?.split(" ")[1];
-
-  if (!token) return res.status(401).json({ error: "No token provided" });
-
-  try {
-    const userId = await getUserIdFromToken(token);
-
-    if (!topic || !userExplanation) {
-      return res.status(400).json({ error: "Topic and explanation are required" });
-    }
-
-    // Step 2: AI provides a simple explanation of the topic
-    const simpleExplanation = await getSimpleExplanationFromAI(topic);
-
-    // Step 3: Store user’s input in the database (for tracking)
-    const query = "INSERT INTO feynman_explanations (user_id, topic, user_explanation, ai_explanation) VALUES (?, ?, ?, ?)";
-    connection.query(query, [userId, topic, userExplanation, simpleExplanation], (err, results) => {
-      if (err) {
-        console.error("❌ Database error:", err);
-        return res.status(500).json({ error: "Database error" });
-      }
-
-      // Return the simple explanation to front-end
-      res.json({ simpleExplanation, message: "Feynman Technique step 1 completed!" });
-    });
-  } catch (error) {
-    console.error("❌ Error processing Feynman technique:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
-
-// Step 2: Get Feedback on User Explanation
-app.post("/api/feynman-feedback", async (req, res) => {
-  const { topic, userExplanation, simpleExplanation } = req.body; // Make sure to pass topic here
-  try {
-    const feedback = await getFeedbackFromAI(userExplanation, simpleExplanation);
-    const questions = await getTestQuestionsFromAI(topic); // Pass the topic here directly
-    res.json({ feedback, questions });
-  } catch (error) {
-    console.error("❌ Error generating feedback:", error);
-    res.status(500).json({ error: "Error generating feedback" });
-  }
-});
-
-// Step 3: Get Simplicity Score
-app.post("/api/feynman-score", async (req, res) => {
-  const { userExplanation } = req.body;
-  try {
-    const simplicityScore = await getSimplicityScoreFromAI(userExplanation);
-    res.json({ simplicityScore });
-  } catch (error) {
-    console.error("❌ Error generating simplicity score:", error);
-    res.status(500).json({ error: "Error generating simplicity score" });
-  }
-});
-
-// AI Helper Functions (Simple Explanation, Feedback, Test Questions, Simplicity Score)
-async function getSimpleExplanationFromAI(topic) {
-  try {
-    const chat = model.startChat({ history: [] });
-    const result = await chat.sendMessage(`Explain the topic "${topic}" in simple terms for a 12-year-old.`);
-    const response = await result.response.text();
-    return response.trim();
-  } catch (error) {
-    console.error("❌ Error generating simple explanation:", error);
-    throw new Error("Error generating explanation from AI");
-  }
-}
-
-async function getFeedbackFromAI(userExplanation, simpleExplanation) {
-  try {
-    const chat = model.startChat({ history: [] });
-    const result = await chat.sendMessage(`
-      Provide feedback on this user explanation based on the AI's simple version of the topic.
-
-      User's explanation: ${userExplanation}
-      Simple explanation: ${simpleExplanation}
-    `);
-    const response = await result.response.text();
-    return response.trim();
-  } catch (error) {
-    console.error("❌ Error generating feedback:", error);
-    throw new Error("Error generating feedback from AI");
-  }
-}
-
-async function getTestQuestionsFromAI(topic) {
-  try {
-    const chat = model.startChat({ history: [] });
-    const result = await chat.sendMessage(`Generate 5 questions to test knowledge on the topic "${topic}".`);
-    const response = await result.response.text();
-    return response.trim().split('\n'); // Assuming each question is separated by a new line
-  } catch (error) {
-    console.error("❌ Error generating test questions:", error);
-    throw new Error("Error generating test questions from AI");
-  }
-}
-
-async function getSimplicityScoreFromAI(userExplanation) {
-  try {
-    const chat = model.startChat({ history: [] });
-    const result = await chat.sendMessage(`
-      Rate the simplicity of the following explanation on a scale from 1 to 10, with 10 being the simplest:
-
-      Explanation: ${userExplanation}
-    `);
-    const response = await result.response.text();
-    return response.trim(); // Return the score
-  } catch (error) {
-    console.error("❌ Error generating simplicity score:", error);
-    throw new Error("Error generating simplicity score from AI");
-  }
-}
 
 app.post('/check-subscription/trial', async (req, res) => {
   const { token } = req.body; 
