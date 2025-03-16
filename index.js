@@ -11788,6 +11788,275 @@ app.get("/api/chat/user-assignments", async (req, res) => {
 
 
 
+app.post('/api/ai-agent', async (req, res) => {
+  const { studyTopic, token } = req.body;
+
+  try {
+    // Validate inputs
+    if (!studyTopic || typeof studyTopic !== 'string' || studyTopic.trim() === '') {
+      return res.status(400).json({ error: 'Study topic cannot be empty.' });
+    }
+
+    if (!token) {
+      return res.status(400).json({ error: 'Token is required.' });
+    }
+
+    // Get user ID from token
+    const userId = await getUserIdFromToken(token);
+    if (!userId) {
+      return res.status(401).json({ error: 'Invalid token or user not authenticated.' });
+    }
+
+    // Fetch user data
+    const userData = await Promise.all([
+      query('SELECT title, due_date, priority FROM tasks WHERE user_id = ? AND completed = 0', [userId]),
+      query('SELECT study_plan FROM study_plans WHERE user_id = ? ORDER BY created_at DESC LIMIT 1', [userId]),
+      query('SELECT score, completed_at FROM user_quizzes WHERE user_id = ?', [userId]),
+      query('SELECT * FROM user_goal WHERE user_id = ? ORDER BY created_at DESC LIMIT 1', [userId])
+    ]);
+
+    // Extract user data
+    const tasks = userData[0]; // Pending Tasks
+    const studyPlan = userData[1]?.[0]?.study_plan; // Latest Study Plan
+    const quizResults = userData[2]; // Quiz Results
+    const userGoal = userData[3]?.[0]; // Latest User Goal
+    const formattedDate = new Date().toISOString().split('T')[0]; // Today's Date
+
+    // Dynamic system instruction for AI Study Agent
+    const dynamicSystemInstruction = `
+      You are Edusify AI, a **smart study agent** that helps students organize their study sessions, generate personalized recommendations, and provide adaptive learning strategies. Your goal is to **streamline the study experience** by offering **clear, structured, and actionable insights**.
+
+      ## **User Profile & Data**
+      - **Tasks**: ${tasks.length > 0 ? tasks.map(task => `- ${task.title} (Due: ${task.due_date}, Priority: ${task.priority})`).join('\n') : 'No pending tasks.'}
+      - **Study Plan**: ${studyPlan || 'No study plan available.'}
+      - **Quiz Performance**: ${quizResults.length > 0 ? quizResults.map(result => `- Score: ${result.score}, Completed on: ${result.completed_at}`).join('\n') : 'No quiz results available.'}
+      - **User Goal**: ${userGoal ? `
+        - **Grade**: ${userGoal.grade || 'N/A'}
+        - **Goal**: ${userGoal.goal || 'N/A'}
+        - **Study Time**: ${userGoal.study_time || 'N/A'}
+        - **Speed**: ${userGoal.speed || 'N/A'}
+        - **Revision Method**: ${userGoal.revision_method || 'N/A'}
+        - **Pomodoro Preference**: ${userGoal.pomodoro_preference || 'N/A'}
+        - **Subjects**: ${userGoal.subjects || 'N/A'}
+      ` : 'No user goal available.'}
+      - **Today's Date**: ${formattedDate}
+
+      ## **AI Study Agent Responsibilities**
+      - **Smart Study Task Generator**: Generate a list of study tasks based on the user’s study topic, upcoming deadlines, and past performance.
+      - **Adaptive Pomodoro Sessions**: Recommend Pomodoro session durations based on study topic complexity and the user’s preferences.
+      - **Focus Topics Identification**: Identify key areas the user should focus on within the given topic.
+      - **AI-Powered Notes & Summaries**: Provide a well-structured summary or notes for any study topic.
+      - **Quick Revision Mode**: Generate rapid revision materials (flashcards, key points, or MCQs) for quick recall.
+      - **AI-Based Question Prediction**: Predict potential exam questions based on the study topic.
+
+      ## **Response Format Guidelines**
+      - **Structured Format**: Use bullet points, numbered lists, and proper headings for clarity.
+      - **Concise & Focused**: Provide direct answers without unnecessary clarifications.
+      - **No Overwhelming Details**: Keep responses digestible and **actionable**.
+      - **Encourage Premium Features Subtly**: If premium features can enhance the user's experience, mention them **without aggressive promotion**.
+
+      **Example Response for "Study Newton’s Laws of Motion"**
+      ---
+      **📌 Study Plan for Newton’s Laws of Motion**
+      - **Key Focus Areas**:
+        1. First, Second, and Third Laws with real-life examples.
+        2. Equations of motion and their applications.
+        3. Free-body diagrams and force calculations.
+      - **🚀 Smart Study Tasks**:
+        - Revise formulas and concepts.
+        - Solve 10 numerical problems on force and acceleration.
+        - Watch a video explanation of Newton’s Third Law.
+      - **⏳ Recommended Pomodoro Session**:
+        - 40 minutes of study + 10-minute break (Adjust based on fatigue levels).
+      - **📖 Quick Revision Mode**:
+        - Flashcard: *What is Newton’s Second Law?*
+        - MCQ: *What happens when two equal forces act in opposite directions?*
+      - **❓ Predicted Exam Questions**:
+        - Explain Newton’s First Law with a real-world example.
+        - Derive the equation F = ma and explain its significance.
+      ---
+    `;
+
+    // Initialize AI model
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.0-flash",
+      safetySettings: safetySettings,
+      systemInstruction: dynamicSystemInstruction
+    });
+
+    console.log('User requested study help for:', studyTopic, userId);
+
+    let aiResponse = '';
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        // Send study topic to AI
+        const result = await model.generateContent(studyTopic);
+        aiResponse = result.response?.text?.() || 'No response from AI.';
+        console.log(`AI responded on attempt ${attempt}`);
+        break; // Exit loop if successful
+      } catch (error) {
+        console.error(`Attempt ${attempt} failed:`, error.message);
+
+        if (attempt === MAX_RETRIES) {
+          throw new Error('AI service failed after multiple attempts.');
+        }
+
+        // Exponential backoff delay (2^attempt * 100 ms)
+        const delayMs = Math.pow(2, attempt) * 100;
+        console.log(`Retrying in ${delayMs}ms...`);
+        await delay(delayMs);
+      }
+    }
+
+    if (!aiResponse || aiResponse === 'No response from AI.') {
+      return res.status(500).json({ error: 'AI service did not return a response.' });
+    }
+
+    await query('INSERT INTO ai_agent_history (user_id, study_topic, ai_response) VALUES (?, ?, ?)', [
+      userId,
+      studyTopic,
+      aiResponse,
+    ]);
+    
+
+    res.json({ response: aiResponse });
+  } catch (error) {
+    console.error('Error in /api/ai-agent endpoint:', error);
+    res.status(500).json({ error: 'An error occurred while processing your request. Please try again later.' });
+  }
+});
+
+app.get("/pomodoro/weekly-progress-premium", async (req, res) => { 
+  const token = req.headers["authorization"];
+  if (!token || !token.startsWith("Bearer ")) {
+    return res.status(403).json({ message: "No token provided" });
+  }
+
+  try {
+    const user_id = await getUserIdFromToken(token.split(" ")[1]);
+
+    // Get total Pomodoro study time (in seconds) from Monday 12 AM till now
+    const query = `
+      SELECT SUM(duration) AS total_time
+      FROM pomodoro_date
+      WHERE user_id = ?
+      AND session_type = 'study'
+      AND end_time >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)
+      AND end_time < DATE_ADD(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY);
+    `;
+
+    connection.query(query, [user_id], (err, result) => {
+      if (err) {
+        console.error("Database Query Error:", err);  // Log error to debug
+        return res.status(500).json({ message: "Database error", error: err });
+      }
+
+      const total_time = result[0]?.total_time || 0; // Ensure it defaults to 0
+      res.json({ total_time });
+    });
+  } catch (err) {
+    console.error("Token Error:", err);  // Log error to debug
+    res.status(401).json({ message: "Invalid token" });
+  }
+});
+
+
+app.post("/pomodoro/claim", async (req, res) => {
+  try {
+    const { token } = req.body;
+    if (!token) return res.status(403).json({ message: "No token provided" });
+
+    const user_id = await getUserIdFromToken(token);
+    const weekNumber = new Date().getWeekNumber();
+    const year = new Date().getFullYear();
+
+    // Check if already claimed this week
+    const checkClaimQuery = `SELECT * FROM claimed_pomodoro_rewards WHERE user_id = ? AND week_number = ? AND year = ?`;
+    connection.query(checkClaimQuery, [user_id, weekNumber, year], (claimErr, claimResult) => {
+      if (claimErr) return res.status(500).json({ message: "Database error (claim check)", error: claimErr });
+
+      if (claimResult.length > 0) {
+        return res.status(400).json({ message: "Already claimed this week" });
+      }
+
+      // Check if user already has an active premium subscription
+      const checkPremiumQuery = `SELECT expiry_date FROM subscriptions WHERE user_id = ? AND expiry_date > NOW() ORDER BY expiry_date DESC LIMIT 1`;
+      connection.query(checkPremiumQuery, [user_id], (premiumErr, premiumResult) => {
+        if (premiumErr) return res.status(500).json({ message: "Database error (premium check)", error: premiumErr });
+
+        if (premiumResult.length > 0) {
+          // User already has an active premium, extend by 1 day
+          const currentExpiry = new Date(premiumResult[0].expiry_date);
+          const newExpiry = new Date(currentExpiry);
+          newExpiry.setDate(newExpiry.getDate() + 1);
+
+          const updateExpiryQuery = `UPDATE subscriptions SET expiry_date = ? WHERE user_id = ? AND expiry_date = ?`;
+          connection.query(updateExpiryQuery, [newExpiry, user_id, currentExpiry], (updateErr) => {
+            if (updateErr) return res.status(500).json({ message: "Error extending premium", error: updateErr });
+
+            console.log(`User ID: ${user_id} extended premium until ${newExpiry.toISOString()}`);
+
+            // Mark claim in the claimed_pomodoro_rewards table
+            const insertClaimQuery = `INSERT INTO claimed_pomodoro_rewards (user_id, week_number, year) VALUES (?, ?, ?)`;
+            connection.query(insertClaimQuery, [user_id, weekNumber, year], (insertErr) => {
+              if (insertErr) return res.status(500).json({ message: "Error marking claim", error: insertErr });
+
+              return res.json({ message: "Premium extended successfully", new_expiry: newExpiry });
+            });
+          });
+        } else {
+          // No active premium, create a new 1-day subscription
+          const insertClaimQuery = `INSERT INTO claimed_pomodoro_rewards (user_id, week_number, year) VALUES (?, ?, ?)`;
+          connection.query(insertClaimQuery, [user_id, weekNumber, year], (insertErr) => {
+            if (insertErr) return res.status(500).json({ message: "Error marking claim", error: insertErr });
+
+            const addPremiumQuery = `
+              INSERT INTO subscriptions (user_id, subscription_plan, payment_status, payment_date, expiry_date)
+              VALUES (?, '1-day Premium', 'free', NOW(), DATE_ADD(NOW(), INTERVAL 1 DAY));
+            `;
+            connection.query(addPremiumQuery, [user_id], (subErr) => {
+              if (subErr) return res.status(500).json({ message: "Error adding premium", error: subErr });
+
+              console.log(`User ID: ${user_id} successfully claimed free premium for this week.`);
+              return res.json({ message: "Premium claimed successfully" });
+            });
+          });
+        }
+      });
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error });
+  }
+});
+
+// Helper function to get the current week number
+Date.prototype.getWeekNumber = function () {
+  const firstDayOfYear = new Date(this.getFullYear(), 0, 1);
+  const pastDaysOfYear = (this - firstDayOfYear) / 86400000;
+  return Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
+};
+
+app.get("/pomodoro/check-claim", async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) return res.status(403).json({ message: "No token provided" });
+
+    const user_id = await getUserIdFromToken(token);
+    const weekNumber = new Date().getWeekNumber();
+    const year = new Date().getFullYear();
+
+    const checkClaimQuery = `SELECT * FROM claimed_pomodoro_rewards WHERE user_id = ? AND week_number = ? AND year = ?`;
+    connection.query(checkClaimQuery, [user_id, weekNumber, year], (claimErr, claimResult) => {
+      if (claimErr) return res.status(500).json({ message: "Database error" });
+
+      const claimed = claimResult.length > 0;
+      res.json({ claimed });
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error });
+  }
+});
 
 
 // Start the server
