@@ -11936,30 +11936,39 @@ app.get("/pomodoro/weekly-progress-premium", async (req, res) => {
   try {
     const user_id = await getUserIdFromToken(token.split(" ")[1]);
 
-    // Get total Pomodoro study time (in seconds) from Monday 12 AM till now
+    // Get current IST date and start of the week in IST
+    const nowIST = new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" });
+    const startOfWeekIST = new Date(nowIST);
+    startOfWeekIST.setDate(startOfWeekIST.getDate() - startOfWeekIST.getDay()); // Monday of this week
+    startOfWeekIST.setHours(0, 0, 0, 0); // Set to 12 AM
+
+    // Convert to MySQL date format
+    const startOfWeekMySQL = startOfWeekIST.toISOString().slice(0, 19).replace("T", " ");
+
     const query = `
       SELECT SUM(duration) AS total_time
       FROM pomodoro_date
       WHERE user_id = ?
       AND session_type = 'study'
-      AND end_time >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)
-      AND end_time < DATE_ADD(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY);
+      AND end_time >= CONVERT_TZ(?, 'UTC', 'Asia/Kolkata')
+      AND end_time < CONVERT_TZ(NOW(), 'UTC', 'Asia/Kolkata');
     `;
 
-    connection.query(query, [user_id], (err, result) => {
+    connection.query(query, [user_id, startOfWeekMySQL], (err, result) => {
       if (err) {
-        console.error("Database Query Error:", err);  // Log error to debug
+        console.error("Database Query Error:", err);
         return res.status(500).json({ message: "Database error", error: err });
       }
 
-      const total_time = result[0]?.total_time || 0; // Ensure it defaults to 0
+      const total_time = result[0]?.total_time || 0;
       res.json({ total_time });
     });
   } catch (err) {
-    console.error("Token Error:", err);  // Log error to debug
+    console.error("Token Error:", err);
     res.status(401).json({ message: "Invalid token" });
   }
 });
+
 
 
 app.post("/pomodoro/claim", async (req, res) => {
