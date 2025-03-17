@@ -12077,13 +12077,20 @@ app.get("/pomodoro/check-claim", async (req, res) => {
   }
 });
 
+
 app.post("/generate-image", async (req, res) => {
   const { message, token } = req.body;
 
   if (!message) {
     return res.status(400).json({ error: "Message is required." });
   }
-
+      // Fetch user ID based on token (assuming you have a function for this)
+      const userId = await getUserIdFromToken(token);
+      if (!userId) {
+        return res.status(401).json({ error: "Invalid user token." });
+      }
+  
+  console.log('Ai image generating', message, userId)
   try {
     const model = genAI.getGenerativeModel({
       model: "gemini-2.0-flash-exp-image-generation",
@@ -12098,6 +12105,15 @@ app.post("/generate-image", async (req, res) => {
       if (part.text) responseText += part.text;
       if (part.inlineData) imageData = part.inlineData.data;
     }
+
+
+    // Store AI chat history in the database
+    await query(
+      "INSERT INTO ai_history (user_id, user_message, ai_response) VALUES (?, ?, ?)",
+      [userId, message, 'image']
+    );
+
+    console.log("AI Image generated");
 
     res.json({ text: responseText, image: imageData });
   } catch (error) {
