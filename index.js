@@ -11936,18 +11936,24 @@ app.get("/pomodoro/weekly-progress-premium", async (req, res) => {
   try {
     const user_id = await getUserIdFromToken(token.split(" ")[1]);
 
-    // Get current UTC time and convert to IST
+    // Get current UTC time
     const nowUTC = new Date();
-    const nowIST = new Date(nowUTC.getTime() + 5.5 * 60 * 60 * 1000); // IST = UTC + 5:30
 
-    // Get the start of the week in IST (Monday 12 AM)
-    const startOfWeekIST = new Date(nowIST);
-    startOfWeekIST.setDate(startOfWeekIST.getDate() - startOfWeekIST.getDay()); // Move to Monday
-    startOfWeekIST.setHours(0, 0, 0, 0); // Set to 12 AM
+    // Convert current time to IST
+    const nowIST = new Date(nowUTC.getTime() + 5.5 * 60 * 60 * 1000);
 
-    // Convert to MySQL date format (YYYY-MM-DD HH:MM:SS)
-    const startOfWeekMySQL = startOfWeekIST.toISOString().slice(0, 19).replace("T", " ");
-    const nowISTMySQL = nowIST.toISOString().slice(0, 19).replace("T", " ");
+    // Get start of the week (Monday 12 AM in IST)
+    const startOfWeekUTC = new Date(nowIST);
+    startOfWeekUTC.setDate(startOfWeekUTC.getDate() - startOfWeekUTC.getDay()); // Move to Monday
+    startOfWeekUTC.setHours(0, 0, 0, 0); // Set time to 12 AM IST
+
+    // Convert back to UTC (because MySQL stores times in UTC)
+    const startOfWeekUTC_MySQL = new Date(startOfWeekUTC.getTime() - 5.5 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 19)
+      .replace("T", " ");
+
+    const nowUTC_MySQL = nowUTC.toISOString().slice(0, 19).replace("T", " ");
 
     const query = `
       SELECT SUM(duration) AS total_time
@@ -11958,7 +11964,7 @@ app.get("/pomodoro/weekly-progress-premium", async (req, res) => {
       AND end_time < ?;
     `;
 
-    connection.query(query, [user_id, startOfWeekMySQL, nowISTMySQL], (err, result) => {
+    connection.query(query, [user_id, startOfWeekUTC_MySQL, nowUTC_MySQL], (err, result) => {
       if (err) {
         console.error("Database Query Error:", err);
         return res.status(500).json({ message: "Database error", error: err });
@@ -11972,6 +11978,7 @@ app.get("/pomodoro/weekly-progress-premium", async (req, res) => {
     res.status(401).json({ message: "Invalid token" });
   }
 });
+
 
 
 app.post("/pomodoro/claim", async (req, res) => {
@@ -12070,6 +12077,34 @@ app.get("/pomodoro/check-claim", async (req, res) => {
   }
 });
 
+app.post("/generate-image", async (req, res) => {
+  const { message, token } = req.body;
+
+  if (!message) {
+    return res.status(400).json({ error: "Message is required." });
+  }
+
+  try {
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.0-flash-exp-image-generation",
+      generationConfig: { responseModalities: ["Text", "Image"] },
+    });
+
+    const response = await model.generateContent(message);
+    let responseText = "";
+    let imageData = null;
+
+    for (const part of response.response.candidates[0].content.parts) {
+      if (part.text) responseText += part.text;
+      if (part.inlineData) imageData = part.inlineData.data;
+    }
+
+    res.json({ text: responseText, image: imageData });
+  } catch (error) {
+    console.error("Error generating image:", error);
+    res.status(500).json({ error: "Failed to generate image." });
+  }
+});
 
 // Start the server
 app.listen(PORT, () => {
