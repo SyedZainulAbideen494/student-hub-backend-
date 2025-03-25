@@ -33,7 +33,7 @@ const Razorpay = require('razorpay');
 const { exec } = require("child_process");
 const { YoutubeTranscript } = require("youtube-transcript");
 // Initialize Google Generative AI
-const genAI = new GoogleGenerativeAI('AIzaSyCn_tU2RtvijhXXtfwU5WLh56Nedjwl_JI');
+const genAI = new GoogleGenerativeAI('AIzaSyBQNbRQ8AsWeWaRWqzL7tN3xMdtH9oRodI');
 
 const safetySettings = [
   {
@@ -55,7 +55,7 @@ const safetySettings = [
 ];
 
 const model = genAI.getGenerativeModel({
-  model: "gemini-2.0-flash",
+  model: "gemini-1.5-flash",
   safetySettings: safetySettings,
   systemInstruction: "You are Edusify, an AI-powered productivity assistant designed to help students manage their academic tasks, study materials, and stay organized. Your mission is to provide tailored assistance and streamline the study experience with a wide range of features.\n\n" +
   
@@ -3662,7 +3662,7 @@ app.post('/api/chat/ai', async (req, res) => {
     `;
 
     const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
+      model: "gemini-1.5-flash",
       safetySettings: safetySettings,
       systemInstruction: dynamicSystemInstruction
     });
@@ -12097,7 +12097,15 @@ app.post("/generate-image", async (req, res) => {
       generationConfig: { responseModalities: ["Text", "Image"] },
     });
 
-    const response = await model.generateContent(message);
+        // Embed system instructions inside the user prompt
+        const prompt = `
+        You are an AI image generator designed for academic purposes. 
+        Generate a **high-quality, detailed, and realistic** image based on the following description:  
+        "${message}"
+      `;
+  
+
+    const response = await model.generateContent(prompt);
     let responseText = "";
     let imageData = null;
 
@@ -12120,6 +12128,14 @@ app.post("/generate-image", async (req, res) => {
     console.error("Error generating image:", error);
     res.status(500).json({ error: "Failed to generate image." });
   }
+});
+
+app.post("/upload-captions", (req, res) => {
+  const { captions } = req.body;
+  console.log("Received Captions:", captions);
+
+  // Here, you can save captions to a database or process them
+  res.status(200).json({ message: "Captions received successfully!" });
 });
 
 // Start the server
