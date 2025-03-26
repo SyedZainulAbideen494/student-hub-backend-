@@ -8846,6 +8846,94 @@ const razorpay = new Razorpay({
   key_secret: 'ec9nrw9RjbIcvpkufzaYxmr6',
 });
 
+app.post("/buy-opulenx", async (req, res) => {
+  try {
+    const { email, name, phone } = req.body; // Collect user details
+
+    const options = {
+      amount: 499900, // ₹4,999 in paise
+      currency: "INR",
+      receipt: `order_${Date.now()}`,
+      notes: { email, name, phone }, // Send user details to Razorpay
+    };
+
+    const order = await razorpay.orders.create(options);
+    res.json({ order });
+  } catch (error) {
+    console.error("Error creating order:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+app.post("/verify-payment-opulenx", async (req, res) => {
+  try {
+    const { payment_id, order_id, signature } = req.body;
+
+    const expected_signature = crypto
+      .createHmac("sha256", "ec9nrw9RjbIcvpkufzaYxmr6")
+      .update(`${order_id}|${payment_id}`)
+      .digest("hex");
+
+    if (expected_signature !== signature) {
+      return res.status(400).json({ error: "Signature mismatch" });
+    }
+
+    // Fetch order details from Razorpay
+    const order = await razorpay.orders.fetch(order_id);
+    const { email, name, phone } = order.notes; // Get user details
+
+    // Generate a unique 6-digit ID
+    const userId = Math.floor(100000 + Math.random() * 900000);
+
+    // Store payment details in the database
+    const sql = `INSERT INTO opulenx_purchases (order_id, payment_id, signature, email, name, phone, amount, status, user_id)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, 'Completed', ?)`; // Store the user ID
+
+    connection.query(sql, [order_id, payment_id, signature, email, name, phone, order.amount, userId], (err, result) => {
+      if (err) {
+        console.error("Database error:", err);
+        return res.status(500).json({ error: "Database error" });
+      }
+      res.json({ success: true, userId }); // Send user ID in the response
+    });
+
+  } catch (error) {
+    console.error("Error in verify-payment:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+
+app.get("/search-elite-pass", async (req, res) => {
+  try {
+    const { userId } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ error: "User ID is required" });
+    }
+
+    const sql = `SELECT user_id, name, status, created_at FROM opulenx_purchases WHERE user_id = ? LIMIT 1`;
+
+    connection.query(sql, [userId], (err, results) => {
+      if (err) {
+        console.error("Database error:", err);
+        return res.status(500).json({ error: "Database error" });
+      }
+
+      if (results.length > 0) {
+        res.json(results[0]); // Return user details
+      } else {
+        res.json({ status: "Poor" }); // No elite pass found
+      }
+    });
+  } catch (error) {
+    console.error("Error in search API:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+
+
 app.post('/buy-premium', async (req, res) => {
   try {
     const { amount, currency, subscription_plan, token, duration } = req.body;
