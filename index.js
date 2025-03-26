@@ -8851,7 +8851,8 @@ app.post("/buy-opulenx", async (req, res) => {
     const { email, name, phone } = req.body; // Collect user details
 
     const options = {
-      amount: 1, // ₹4,999 in paise
+      amount: 100, // ₹1 in paise
+
       currency: "INR",
       receipt: `order_${Date.now()}`,
       notes: { email, name, phone }, // Send user details to Razorpay
