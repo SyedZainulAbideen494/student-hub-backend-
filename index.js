@@ -8915,15 +8915,20 @@ app.post("/verify-payment-opulenx", async (req, res) => {
 
 app.get("/search-elite-pass", async (req, res) => {
   try {
-    const { userId } = req.query;
+    const { query } = req.query; // Can be userId, email, or phone
 
-    if (!userId) {
-      return res.status(400).json({ error: "User ID is required" });
+    if (!query) {
+      return res.status(400).json({ error: "Query parameter is required" });
     }
 
-    const sql = `SELECT user_id, name, status, created_at FROM opulenx_purchases WHERE user_id = ? LIMIT 1`;
+    const sql = `
+      SELECT user_id, name, status, created_at 
+      FROM opulenx_purchases 
+      WHERE user_id = ? OR email = ? OR phone = ?
+      LIMIT 1
+    `;
 
-    connection.query(sql, [userId], (err, results) => {
+    connection.query(sql, [query, query, query], (err, results) => {
       if (err) {
         console.error("❌ Database error:", err);
         return res.status(500).json({ error: "Database error" });
@@ -8933,7 +8938,7 @@ app.get("/search-elite-pass", async (req, res) => {
         console.log(`✅ Elite Pass Found: ${results[0].name} (User ID: ${results[0].user_id})`);
         res.json(results[0]); // Return user details
       } else {
-        console.log(`❌ No Elite Pass found for User ID: ${userId}`);
+        console.log(`❌ No Elite Pass found for query: ${query}`);
         res.json({ status: "Poor" }); // No elite pass found
       }
     });
@@ -8942,6 +8947,7 @@ app.get("/search-elite-pass", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
 
 
 app.post('/buy-premium', async (req, res) => {
