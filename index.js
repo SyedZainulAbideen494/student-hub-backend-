@@ -8851,7 +8851,7 @@ app.post("/buy-opulenx", async (req, res) => {
     const { email, name, phone } = req.body; // Collect user details
 
     const options = {
-      amount: 499900, // ₹4,999 in paise
+      amount: 1, // ₹4,999 in paise
       currency: "INR",
       receipt: `order_${Date.now()}`,
       notes: { email, name, phone }, // Send user details to Razorpay
@@ -8875,6 +8875,7 @@ app.post("/verify-payment-opulenx", async (req, res) => {
       .digest("hex");
 
     if (expected_signature !== signature) {
+      console.warn(`❌ Signature mismatch for Order ID: ${order_id}`);
       return res.status(400).json({ error: "Signature mismatch" });
     }
 
@@ -8891,14 +8892,22 @@ app.post("/verify-payment-opulenx", async (req, res) => {
 
     connection.query(sql, [order_id, payment_id, signature, email, name, phone, order.amount, userId], (err, result) => {
       if (err) {
-        console.error("Database error:", err);
+        console.error("❌ Database error:", err);
         return res.status(500).json({ error: "Database error" });
       }
+
+      console.log(`✅ Payment Verified! 
+      - User: ${name} (${email}, ${phone})
+      - Order ID: ${order_id}
+      - Payment ID: ${payment_id}
+      - Amount: ₹${(order.amount / 100).toFixed(2)}
+      - Assigned User ID: ${userId}`);
+
       res.json({ success: true, userId }); // Send user ID in the response
     });
 
   } catch (error) {
-    console.error("Error in verify-payment:", error);
+    console.error("❌ Error in verify-payment:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -8916,22 +8925,23 @@ app.get("/search-elite-pass", async (req, res) => {
 
     connection.query(sql, [userId], (err, results) => {
       if (err) {
-        console.error("Database error:", err);
+        console.error("❌ Database error:", err);
         return res.status(500).json({ error: "Database error" });
       }
 
       if (results.length > 0) {
+        console.log(`✅ Elite Pass Found: ${results[0].name} (User ID: ${results[0].user_id})`);
         res.json(results[0]); // Return user details
       } else {
+        console.log(`❌ No Elite Pass found for User ID: ${userId}`);
         res.json({ status: "Poor" }); // No elite pass found
       }
     });
   } catch (error) {
-    console.error("Error in search API:", error);
+    console.error("❌ Error in search API:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
-
 
 
 app.post('/buy-premium', async (req, res) => {
