@@ -55,7 +55,7 @@ const safetySettings = [
 ];
 
 const model = genAI.getGenerativeModel({
-  model: "gemini-1.5-flash",
+  model: "gemini-2.0-flash",
   safetySettings: safetySettings,
   systemInstruction: "You are Edusify, an AI-powered productivity assistant designed to help students manage their academic tasks, study materials, and stay organized. Your mission is to provide tailored assistance and streamline the study experience with a wide range of features.\n\n" +
   
@@ -3662,7 +3662,7 @@ app.post('/api/chat/ai', async (req, res) => {
     `;
 
     const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash-lite",
+      model: "gemini-2.0-flash",
       safetySettings: safetySettings,
       systemInstruction: dynamicSystemInstruction
     });
@@ -11656,7 +11656,7 @@ app.post("/api/chat/assignment", async (req, res) => {
     `;
 
     const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
+      model: "gemini-2.0-flash",
       systemInstruction: dynamicSystemInstruction,
     });
 
@@ -12130,13 +12130,13 @@ app.post("/generate-image", async (req, res) => {
   }
 });
 
-app.post("/upload-captions", (req, res) => {
-  const { captions } = req.body;
-  console.log("Received Captions:", captions);
+// Store speech text
+app.post("/speech", (req, res) => {
+  const { text } = req.body;
+  console.log("Received:", text);
 
-  // Here, you can save captions to a database or process them
-  res.status(200).json({ message: "Captions received successfully!" });
 });
+
 
 // Start the server
 app.listen(PORT, () => {
