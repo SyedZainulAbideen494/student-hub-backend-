@@ -8864,7 +8864,6 @@ app.post("/buy-opulenx", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
-
 app.post("/verify-payment-opulenx", async (req, res) => {
   try {
     const { payment_id, order_id, signature } = req.body;
@@ -8902,6 +8901,46 @@ app.post("/verify-payment-opulenx", async (req, res) => {
       - Payment ID: ${payment_id}
       - Amount: ₹${(order.amount / 100).toFixed(2)}
       - Assigned User ID: ${userId}`);
+
+      const mailOptions = {
+        from: '"OpulenX Elite Club" <edusyfy@gmail.com>',
+        to: email,
+        subject: "🔱 Your OpulenX Elite Status is Verified!",
+        html: `
+          <div style="font-family: Arial, sans-serif; text-align: center; background: #0D0D0D; padding: 40px; color: #FFF; border-radius: 10px; max-width: 500px; margin: auto; box-shadow: 0px 0px 15px rgba(255, 215, 0, 0.3);">
+            
+            <h1 style="color: gold; font-size: 26px; margin-bottom: 10px;">🎩 Welcome to OpulenX Elite</h1>
+            
+            <p style="font-size: 16px; opacity: 0.9;">You are now officially part of the **most exclusive club**.</p>
+      
+            <div style="border: 2px solid gold; padding: 15px; border-radius: 8px; margin: 20px 0; background: rgba(255, 215, 0, 0.1);">
+              <p style="margin: 5px 0;"><strong>👑 Elite ID:</strong> ${userId}</p>
+              <p style="margin: 5px 0;"><strong>📜 Order ID:</strong> ${order_id}</p>
+              <p style="margin: 5px 0;"><strong>💳 Payment ID:</strong> ${payment_id}</p>
+              <p style="margin: 5px 0;"><strong>💰 Amount Paid:</strong> ₹${(order.amount / 100).toFixed(2)}</p>
+            </div>
+      
+            <p style="font-size: 14px; opacity: 0.8;">Your status is now **Elite.** Nothing more, nothing less.</p>
+      
+            <div style="margin-top: 20px;">
+              <a href="https://opulenx.vercel.app/search" style="display: inline-block; padding: 12px 24px; background: gold; color: #000; text-decoration: none; border-radius: 5px; font-weight: bold; transition: 0.3s;">
+                View Your Status
+              </a>
+            </div>
+      
+            <p style="margin-top: 20px; font-size: 12px; opacity: 0.6;">This is an automated email. No need to reply.</p>
+          </div>
+        `,
+      };
+      
+
+      transporter.sendMail(mailOptions, (error, info) => {
+        if (error) {
+          console.error("❌ Email sending failed:", error);
+        } else {
+          console.log(`📧 Email sent: ${info.response}`);
+        }
+      });
 
       res.json({ success: true, userId }); // Send user ID in the response
     });
