@@ -31,6 +31,7 @@ const moment = require('moment');
 const archiver = require("archiver");
 const Razorpay = require('razorpay');
 const { exec } = require("child_process");
+const puppeteer = require("puppeteer");
 const { YoutubeTranscript } = require("youtube-transcript");
 // Initialize Google Generative AI
 const genAI = new GoogleGenerativeAI('AIzaSyBQNbRQ8AsWeWaRWqzL7tN3xMdtH9oRodI');
@@ -3565,11 +3566,11 @@ const MAX_RETRIES = 10;
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 
+
 app.post('/api/chat/ai', async (req, res) => {
-  const { message, chatHistory, token } = req.body;
+  const { message, chatHistory, token, thinkingMode } = req.body; // Receive thinkingMode from frontend
 
   try {
-    // Validate required inputs
     if (!message || typeof message !== 'string' || message.trim() === '') {
       return res.status(400).json({ error: 'Message cannot be empty.' });
     }
@@ -3578,14 +3579,15 @@ app.post('/api/chat/ai', async (req, res) => {
       return res.status(400).json({ error: 'Token is required.' });
     }
 
-    // Get user ID from token
     const userId = await getUserIdFromToken(token);
     if (!userId) {
       return res.status(401).json({ error: 'Invalid token or user not authenticated.' });
     }
 
-    // Fetch user data
-    const userData = await Promise.all([
+    const modelName = thinkingMode ? "gemini-2.5-pro-exp-03-25" : "gemini-2.0-flash"; // Toggle model
+
+     // Fetch user data
+     const userData = await Promise.all([
       query('SELECT title, due_date, description, created_at, priority FROM tasks WHERE user_id = ? AND completed = 1', [userId]),
       query('SELECT title, date FROM events WHERE user_id = ?', [userId]),
       query('SELECT study_plan FROM study_plans WHERE user_id = ? ORDER BY created_at DESC LIMIT 1', [userId]),
@@ -3661,8 +3663,9 @@ app.post('/api/chat/ai', async (req, res) => {
   "When responding to user requests related to schedules, tasks, or notes, generate a general plan or summary based on the provided input without asking for too many details. If the user provides a broad topic, generate a summary note instead of requesting more specifics. If the user requires changes, wait for their feedback and adjust accordingly. Keep the flow of conversation smooth and focused on providing immediate value, not excessive clarifications."
     `;
 
+
     const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
+      model: modelName,
       safetySettings: safetySettings,
       systemInstruction: dynamicSystemInstruction
     });
@@ -3674,17 +3677,16 @@ app.post('/api/chat/ai', async (req, res) => {
 
     const chat = model.startChat({ history: chatHistory || initialChatHistory });
 
-    console.log('User asked:', message, userId);
+    console.log(`User asked: ${message}, User ID: ${userId}, Thinking Mode: ${thinkingMode}`);
 
     let aiResponse = '';
 
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
-        // Attempt to send message to AI
         const result = await chat.sendMessage(message);
         aiResponse = result.response?.text?.() || 'No response from AI.';
         console.log(`AI responded on attempt ${attempt}`);
-        break; // Exit loop if successful
+        break;
       } catch (error) {
         console.error(`Attempt ${attempt} failed:`, error.message);
 
@@ -3692,7 +3694,6 @@ app.post('/api/chat/ai', async (req, res) => {
           throw new Error('AI service failed after multiple attempts.');
         }
 
-        // Exponential backoff delay (2^attempt * 100 ms)
         const delayMs = Math.pow(2, attempt) * 100;
         console.log(`Retrying in ${delayMs}ms...`);
         await delay(delayMs);
@@ -3703,7 +3704,6 @@ app.post('/api/chat/ai', async (req, res) => {
       return res.status(500).json({ error: 'AI service did not return a response.' });
     }
 
-    // Store user message and AI response in the database
     await query('INSERT INTO ai_history (user_id, user_message, ai_response) VALUES (?, ?, ?)', [
       userId,
       message,
@@ -3713,10 +3713,12 @@ app.post('/api/chat/ai', async (req, res) => {
     res.json({ response: aiResponse });
   } catch (error) {
     console.error('Error in /api/chat/ai endpoint:', error);
-
     res.status(500).json({ error: 'An error occurred while processing your request. Please try again later.' });
   }
 });
+
+
+
 
 
 app.post("/check-convo-count", async (req, res) => {
@@ -12273,13 +12275,108 @@ app.post("/generate-image", async (req, res) => {
   }
 });
 
-// Store speech text
-app.post("/speech", (req, res) => {
-  const { text } = req.body;
-  console.log("Received:", text);
 
+// ✅ Rotate User-Agents to Avoid Detection
+const userAgents = [
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.69 Safari/537.36",
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/537.36 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/537.36",
+];
+
+// ✅ Function to Scrape Bing Search Without API
+const scrapeBing = async (query) => {
+  try {
+    const url = `https://www.bing.com/search?q=${encodeURIComponent(query)}`;
+    const headers = { "User-Agent": userAgents[Math.floor(Math.random() * userAgents.length)] };
+
+    const { data } = await axios.get(url, { headers });
+    const $ = cheerio.load(data);
+    let results = [];
+
+    $(".b_algo").each((index, element) => {
+      const title = $(element).find("h2").text().trim();
+      const link = $(element).find("h2 a").attr("href");
+      if (title && link) {
+        results.push({ title, link });
+      }
+    });
+
+    console.log("Extracted Results:", results);
+    return results;
+  } catch (error) {
+    console.error("Bing scraping error:", error);
+    return [];
+  }
+};
+
+// ✅ Scrape Allowed Websites Only (Wikipedia, arXiv, PubMed, etc.)
+const allowedDomains = ["wikipedia.org", "arxiv.org", "pubmed.ncbi.nlm.nih.gov", "nature.com"];
+
+const scrapePageContent = async (url) => {
+  try {
+    const domain = new URL(url).hostname;
+    if (!allowedDomains.some((d) => domain.includes(d))) {
+      console.log(`Skipping unauthorized domain: ${domain}`);
+      return "This content cannot be scraped.";
+    }
+
+    const headers = { "User-Agent": userAgents[Math.floor(Math.random() * userAgents.length)] };
+    const { data } = await axios.get(url, { headers });
+    const $ = cheerio.load(data);
+
+    // Extract paragraphs
+    let paragraphs = $("p").map((_, el) => $(el).text().trim()).get();
+    let content = paragraphs.join(" ");
+
+    // Limit content to first 500 words
+    content = content.split(" ").slice(0, 500).join(" ") + "...";
+
+    console.log(`Scraped content from ${url}:`, content.substring(0, 100)); // Log first 100 chars
+    return content;
+  } catch (error) {
+    console.error(`Error scraping ${url}:`, error);
+    return "Content not available.";
+  }
+};
+
+// ✅ Scrape JavaScript-Rendered Pages (Optional)
+const scrapeWithPuppeteer = async (url) => {
+  try {
+    const browser = await puppeteer.launch({ headless: "new" });
+    const page = await browser.newPage();
+    await page.setUserAgent(userAgents[Math.floor(Math.random() * userAgents.length)]);
+    await page.goto(url, { waitUntil: "domcontentloaded" });
+
+    let content = await page.evaluate(() =>
+      Array.from(document.querySelectorAll("p"))
+        .map((p) => p.innerText)
+        .join(" ")
+    );
+
+    content = content.split(" ").slice(0, 500).join(" ") + "...";
+    await browser.close();
+    return content;
+  } catch (error) {
+    console.error("Puppeteer error:", error);
+    return "Content not available.";
+  }
+};
+
+// ✅ API Endpoint
+app.get("/search/ai/research", async (req, res) => {
+  const query = req.query.q;
+  if (!query) {
+    return res.status(400).json({ error: "Missing search query" });
+  }
+
+  const results = await scrapeBing(query);
+
+  for (let result of results) {
+    result.content = await scrapePageContent(result.link);
+  }
+
+  res.json(results);
 });
-
 
 // Start the server
 app.listen(PORT, () => {
