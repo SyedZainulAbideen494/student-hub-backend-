@@ -13020,8 +13020,7 @@ app.post("/api/save-details/doxsify", async (req, res) => {
 
 // API Route to Save Medical Details
 app.post("/api/save-medical-details/doxsify", async (req, res) => {
-  const { chronicDiseases, ongoingMedications, allergies, smokingDrinking } = req.body;
-  const token = req.headers.authorization; // Get token from request headers
+  const { chronicDiseases, ongoingMedications, allergies, smokingDrinking, token } = req.body;
 
   const user_id = await getUserIdFromTokenDoxsify(token); // Extract user_id from token
 
