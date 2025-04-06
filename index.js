@@ -151,6 +151,22 @@ connection.getConnection((err) => {
   }
 });
 
+const connection2 = mysql.createPool({
+  connectionLimit: 10, // Maximum number of connections in the pool
+  host: "localhost",
+  user: "root",
+  password: "Englishps#4",
+  database: "healthcare_ai",
+});
+
+connection2.getConnection((err) => {
+  if (err) {
+    console.error("Error connecting to MySQL database: ", err);
+  } else {
+    console.log("Connected to MySQL database doxsify");
+  }
+});
+
 const BASE_URL = 'https://srv594954.hstgr.cloud';
 const FRONTEND_BASE_URL = 'https://edusify.vercel.app'; // Update this if your frontend runs on a different URL
 
@@ -12377,6 +12393,656 @@ app.get("/search/ai/research", async (req, res) => {
 
   res.json(results);
 });
+
+{/* Doxsify backend */}
+
+
+
+// Utility function to extract user ID from token
+const getUserIdFromTokenDoxsify = (token) => {
+  return new Promise((resolve, reject) => {
+    connection2.query('SELECT user_id FROM session WHERE jwt = ?', [token], (err, results) => {
+      if (err) {
+        console.error(`Error fetching user_id for token: ${token}`, err);
+        reject(new Error('Failed to authenticate user.'));
+      }
+
+      if (results.length === 0) {
+        console.error(`Invalid or expired token: ${token}`);
+        reject(new Error('Invalid or expired token.'));
+      } else {
+        resolve(results[0].user_id);
+      }
+    });
+  });
+};
+
+
+app.post('/signup/doxsify', (req, res) => {
+  const { password, email, unique_id, phone_number } = req.body;
+
+  // Query to check if email or phone number already exists
+  const checkQuery = 'SELECT * FROM users WHERE email = ? OR phone_number = ?';
+  connection2.query(checkQuery, [email, phone_number], (checkErr, checkResults) => {
+    if (checkErr) {
+      console.error('Error checking existing user:', checkErr);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+    
+    if (checkResults.length > 0) {
+      return res.status(400).json({ error: 'Email or phone number already in use' });
+    }
+
+    // Proceed with hashing the password and inserting the new user
+    bcrypt.hash(password, saltRounds, (hashErr, hash) => {
+      if (hashErr) {
+        console.error('Error hashing password:', hashErr);
+        return res.status(500).json({ error: 'Internal server error' });
+      }
+
+      const insertQuery = 'INSERT INTO users (password, email, phone_number) VALUES (?, ?, ?)';
+      const values = [hash, email, phone_number];
+
+      connection2.query(insertQuery, values, (insertErr, insertResults) => {
+        if (insertErr) {
+          console.error('Error inserting user:', insertErr);
+          return res.status(500).json({ error: 'Internal server error' });
+        }
+
+        // User successfully registered, now generate JWT token
+        const userId = insertResults.insertId;
+        const token = jwt.sign({ id: userId }, 'jwtsecret', { expiresIn: 86400 }); // 24 hours
+
+        // Insert the token into the session table
+        connection2.query(
+          'INSERT INTO session (user_id, jwt) VALUES (?, ?)',
+          [userId, token],
+          (sessionErr) => {
+            if (sessionErr) {
+              console.error('Error creating session:', sessionErr);
+              return res.status(500).send({ message: 'Error creating session', error: sessionErr });
+            }
+
+            console.log('User registration and session creation successful!');
+            res.json({ auth: true, token: token });
+          }
+        );
+      });
+    });
+  });
+});
+
+
+
+
+app.post("/login/doxsify", (req, res) => {
+  const identifier = req.body.identifier;
+  const password = req.body.password;
+
+  let query;
+  if (identifier.includes('@')) {
+    query = "SELECT * FROM users WHERE email = ?";
+  } else if (!isNaN(identifier)) {
+    query = "SELECT * FROM users WHERE phone_number = ?";
+  } else {
+    query = "SELECT * FROM users WHERE unique_id = ?";
+  }
+
+  connection2.query(query, [identifier], (err, result) => {
+    if (err) return res.status(500).send({ message: "Database error", error: err });
+
+    if (result.length > 0) {
+      bcrypt.compare(password, result[0].password, (error, response) => {
+        if (error) return res.status(500).send({ message: "Password comparison error", error });
+
+        if (response) {
+          // Generate JWT token and return it
+          const token = jwt.sign({ id: result[0].id }, "jwtsecret", { expiresIn: 86400 });
+
+          connection2.query(
+            "INSERT INTO session (user_id, jwt) VALUES (?, ?)",
+            [result[0].id, token],
+            (sessionErr) => {
+              if (sessionErr) return res.status(500).send({ message: "Error creating session", error: sessionErr });
+              res.json({ auth: true, token: token, user: result[0] });
+            }
+          );
+        } else {
+          res.json({ auth: false, message: "Incorrect password" });
+        }
+      });
+    } else {
+      res.json({ auth: false, message: "User not found" });
+    }
+  });
+});
+
+
+
+
+app.post('/api/chat/ai/doxsify', async (req, res) => {
+  const { message, chatHistory, thinkingMode } = req.body; // Receive thinkingMode from frontend
+  const token = req.headers.authorization?.split(" ")[1]; // Extract token from "Bearer <token>"
+
+  if (!token) {
+    return res.status(401).json({ error: 'Unauthorized: Token missing.' });
+  }
+  try {
+    if (!message || typeof message !== 'string' || message.trim() === '') {
+      return res.status(400).json({ error: 'Message cannot be empty.' });
+    }
+
+      // Fetch user ID from token
+      const userId = await getUserIdFromTokenDoxsify(token);
+
+// Fetch user details from the database
+const userDetails = await new Promise((resolve, reject) => {
+  connection2.query('SELECT * FROM user_details WHERE user_id = ?', [userId], (err, results) => {
+      if (err) {
+          console.error(`Error fetching user details for user_id: ${userId}`, err);
+          reject(new Error('Failed to fetch user details.'));
+      } else if (results.length === 0) {
+          console.error(`No user details found for user_id: ${userId}`);
+          reject(new Error('User details not found.'));
+      } else {
+          resolve(results[0]); // Return the first matching user details
+      }
+  });
+});
+
+const { name, gender, weight, height, dob } = userDetails;
+
+// Fetch medical details from the database
+const medicalDetails = await new Promise((resolve, reject) => {
+  connection2.query('SELECT * FROM medical_details WHERE user_id = ? ORDER BY created_at DESC LIMIT 1', [userId], (err, results) => {
+      if (err) {
+          console.error(`Error fetching medical details for user_id: ${userId}`, err);
+          reject(new Error('Failed to fetch medical details.'));
+      } else if (results.length === 0) {
+          console.error(`No medical details found for user_id: ${userId}`);
+          resolve(null); // No medical details found
+      } else {
+          resolve(results[0]); // Return the latest medical details
+      }
+  });
+});
+
+// Construct user-specific medical details
+let userSpecificDetails = `
+Patient Information:
+- **Name**: ${name}
+- **Gender**: ${gender}
+- **Weight**: ${weight} kg
+- **Height**: ${height} cm
+- **Date of Birth**: ${dob}
+`;
+
+if (medicalDetails) {
+  const { chronic_diseases, ongoing_medications, allergies, smoking_drinking } = medicalDetails;
+
+  userSpecificDetails += `
+Medical History:
+- **Chronic Diseases**: ${chronic_diseases || "None"}
+- **Ongoing Medications**: ${ongoing_medications || "None"}
+- **Allergies**: ${allergies || "None"}
+- **Smoking/Drinking**: ${smoking_drinking || "Not specified"}
+  `;
+} else {
+  userSpecificDetails += "\nMedical History: Not provided.";
+}
+
+
+    const modelName = "gemini-2.0-flash"; // Toggle model
+    const today = new Date();
+    const formattedDate = today.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+// Build dynamic system instruction
+const dynamicSystemInstruction = `
+   You are an advanced AI-powered medical assistant, trained to operate as a full-fledged healthcare professional capable of diagnosing, treating, and conducting medical research with near-perfect accuracy.
+
+Your primary mission is to provide comprehensive, evidence-based medical recommendations, based on thorough analysis of medical images, patient history, and scientific literature, while adhering to the highest standards of patient safety, confidentiality, and compliance with healthcare regulations (e.g., HIPAA, GDPR).
+      ${userSpecificDetails} <!-- Include user details dynamically -->
+
+You have the following capabilities:
+
+1. **Medical Image Analysis & Diagnostics:**
+   - Analyze medical images (e.g., X-rays, CT scans, MRIs, ultrasounds, etc.) to detect abnormalities such as tumors, fractures, lesions, infections, and vascular conditions.
+   - Perform multi-dimensional image evaluation, considering patient age, gender, and medical history for more accurate interpretation of the findings.
+   - Classify and quantify detected abnormalities, providing a clear report of the severity and location of the issues.
+
+2. **Diagnosis Assistance:**
+   - Based on the image findings and patient history, you can suggest probable diagnoses, from common conditions to rare pathologies, considering a broad range of medical knowledge.
+   - Cross-reference symptoms, lab results, and medical images to refine diagnoses and provide the most probable causes of symptoms.
+   - Provide differential diagnosis options, explaining the reasoning behind each suggestion, and highlighting which conditions need urgent intervention.
+
+3. **Treatment Planning & Recommendations:**
+   - Offer evidence-based treatment plans tailored to the patient's specific medical condition, taking into account their age, health status, and individual response to previous treatments (if available).
+   - Recommend pharmacological treatments (including doses, routes of administration, contraindications, and side effects) and non-pharmacological therapies (e.g., surgery, physical therapy).
+   - Suggest monitoring protocols, follow-up imaging, and tests to assess the effectiveness of treatments and to guide decision-making in real-time.
+
+4. **Critical Condition Detection:**
+   - Quickly and accurately identify life-threatening conditions such as cancers, strokes, heart attacks, fractures, and vascular issues.
+   - Provide risk assessments, emphasizing critical situations requiring urgent care (e.g., hemorrhages, embolisms, or organ failure).
+   - Generate real-time alerts for emergency care, offering immediate action steps and directing to the relevant medical team.
+
+5. **Integration with Electronic Medical Records (EMR):**
+   - Seamlessly integrate with EMR systems to retrieve relevant patient history, lab results, and prior medical images, ensuring a comprehensive analysis.
+   - Use the patient's medical record to enhance diagnosis and treatment accuracy, ensuring that the recommendations are personalized and based on their specific health context.
+   - Maintain up-to-date medical knowledge, leveraging the latest research to inform decision-making, using credible sources like PubMed and clinical guidelines.
+
+6. **Research and Clinical Decision Support:**
+   - Assist healthcare professionals with clinical decision support by analyzing vast datasets, clinical trials, and research papers to suggest new treatment options or emerging medical technologies.
+   - Conduct ongoing medical research by analyzing clinical data and imaging to identify trends, patterns, and novel medical insights.
+   - Suggest improvements to current treatment regimens based on up-to-date research and evolving medical practices.
+
+7. **Patient Communication & Education:**
+   - Provide patients with understandable, empathetic explanations about their medical conditions, the treatment options available, and potential outcomes.
+   - Ensure patients are informed about risks, benefits, and possible side effects of recommended treatments, empowering them to make educated decisions about their health.
+   - Support informed consent processes by offering clear, concise explanations in patient-friendly language.
+
+8. **Continuous Learning & Improvement:**
+   - Continuously update your medical knowledge and imaging analysis capabilities by learning from new cases, ongoing research, and emerging medical technologies.
+   - Implement feedback from healthcare professionals to refine diagnoses, treatment plans, and overall care delivery.
+   - Conduct self-assessments on the accuracy of diagnoses and recommendations to improve the precision of future interactions.
+------------------------------------------
+🔬 **Additional Advanced Capabilities**
+------------------------------------------
+
+9. **Behavioral & Mental Health Analysis:**
+   - Analyze patterns in language, tone, and clinical history to screen for conditions such as depression, anxiety, PTSD, and bipolar disorder.
+   - Recommend appropriate mental health interventions (therapy types, psychiatric referrals, lifestyle strategies).
+   - Trigger emergency protocols for suicidal ideation or acute psychiatric distress.
+
+10. **Drug Interaction & Allergy Check System:**
+   - Automatically flag drug-drug, drug-food, or drug-condition interactions.
+   - Highlight allergies and contraindications based on the patient's medical record or input.
+   - Classify risk levels (e.g., 🚨 Major, ⚠️ Moderate, ✅ Safe) for each prescribed combination.
+
+11. **Genetic & Genomic Data Integration:**
+   - Analyze genetic profiles (when available) to predict risk factors for hereditary conditions.
+   - Suggest personalized treatment based on pharmacogenomics (e.g., drug metabolism variations).
+   - Integrate genomic biomarkers in disease screening and progression models.
+
+12. **Wearable & Vital Data Sync:**
+   - Integrate with wearables (e.g., Apple Watch, Fitbit, glucose monitors) to monitor vitals in real time.
+   - Provide dynamic feedback based on trends in heart rate, oxygen levels, BP, glucose, sleep quality, etc.
+   - Trigger real-time health alerts for anomalies (e.g., bradycardia, arrhythmia, hypoglycemia).
+
+13. **Explainability Engine (for Doctors & Audits):**
+   - For every recommendation, generate a “Why this?” explanation showing clinical reasoning.
+   - Reference clinical guidelines, studies, or statistical models backing the decision.
+
+14. **Auto-Generated Medical Documents:**
+   - Format responses as:
+     - Prescription notes
+     - Discharge summaries
+     - Referral letters
+     - Case reports
+   - Ensure all documents follow medical-legal formatting suitable for EMR upload or patient handout.
+
+15. **Multilingual & Regional Personalization:**
+   - Explain diagnosis and treatments in regional languages (e.g., Hindi, Tamil, Bengali) to improve accessibility.
+   - Tailor suggestions to local availability of medications, diagnostic labs, or common treatment practices.
+
+16. **Clinical Safeguard System:**
+   - If a recommendation contradicts latest medical guidelines, flag it.
+   - Alert doctors before high-risk prescriptions or procedures with contextual warnings.
+
+17. **Adaptability Mode:**
+   - Continuously evolve by learning from real-world patient outcomes, feedback, and treatment efficacy.
+   - Improve your models over time while staying compliant with all medical data privacy laws.
+
+------------------------------------------
+🎯 **Your Goal**
+------------------------------------------
+To become the most advanced, safe, and reliable AI medical assistant — improving patient outcomes, reducing human error, optimizing healthcare workflows, and becoming an indispensable tool in clinical decision-making.
+
+While performing your duties, ensure to:
+- Prioritize patient safety and compliance with medical ethics.
+- Maintain strict patient privacy and data protection.
+- Clearly communicate when a case requires urgent human or specialist intervention.
+- Take a holistic approach, considering physical, psychological, and social health dimensions.
+- Adapt to individual preferences, cultural context, and personal circumstances when delivering care.
+
+You are a cutting-edge tool designed to **augment** (not replace) medical professionals — a superintelligent clinical ally that ensures medicine is faster, smarter, and safer.
+
+`;
+
+  
+    const model = genAI.getGenerativeModel({
+      model: modelName,
+      safetySettings: safetySettings,
+      systemInstruction: dynamicSystemInstruction
+    });
+
+    const initialChatHistory = [
+      { role: 'user', parts: [{ text: 'Hello' }] },
+      { role: 'model', parts: [{ text: 'Great to meet you. What would you like to know?' }] },
+    ];
+
+    const chat = model.startChat({ history: chatHistory || initialChatHistory });
+
+    console.log(`User asked: ${message}, Thinking Mode: ${thinkingMode}`);
+
+    let aiResponse = '';
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const result = await chat.sendMessage(message);
+        aiResponse = result.response?.text?.() || 'No response from AI.';
+        console.log(`AI responded on attempt ${attempt}`);
+        break;
+      } catch (error) {
+        console.error(`Attempt ${attempt} failed:`, error.message);
+
+        if (attempt === MAX_RETRIES) {
+          throw new Error('AI service failed after multiple attempts.');
+        }
+
+        const delayMs = Math.pow(2, attempt) * 100;
+        console.log(`Retrying in ${delayMs}ms...`);
+        await delay(delayMs);
+      }
+    }
+
+    if (!aiResponse || aiResponse === 'No response from AI.') {
+      return res.status(500).json({ error: 'AI service did not return a response.' });
+    }
+
+
+
+    res.json({ response: aiResponse });
+  } catch (error) {
+    console.error('Error in /api/chat/ai endpoint:', error);
+    res.status(500).json({ error: 'An error occurred while processing your request. Please try again later.' });
+  }
+});
+
+
+
+
+app.post('/api/process-images/doxsify', uploadAI.single('image'), async (req, res) => {
+  try {
+    const { prompt } = req.body;
+    const token = req.headers.authorization?.split(" ")[1]; // Extract token from "Bearer <token>"
+
+    if (!req.file && !prompt) {
+      return res.status(400).json({ error: 'Either image or prompt must be provided.' });
+    }
+ // Fetch user ID from token
+ const userId = await getUserIdFromTokenDoxsify(token);
+// Fetch user details from the database
+const userDetails = await new Promise((resolve, reject) => {
+  connection2.query('SELECT * FROM user_details WHERE user_id = ?', [userId], (err, results) => {
+      if (err) {
+          console.error(`Error fetching user details for user_id: ${userId}`, err);
+          reject(new Error('Failed to fetch user details.'));
+      } else if (results.length === 0) {
+          console.error(`No user details found for user_id: ${userId}`);
+          reject(new Error('User details not found.'));
+      } else {
+          resolve(results[0]); // Return the first matching user details
+      }
+  });
+});
+
+const { name, gender, weight, height, dob } = userDetails;
+
+// Fetch medical details from the database
+const medicalDetails = await new Promise((resolve, reject) => {
+  connection2.query('SELECT * FROM medical_details WHERE user_id = ? ORDER BY created_at DESC LIMIT 1', [userId], (err, results) => {
+      if (err) {
+          console.error(`Error fetching medical details for user_id: ${userId}`, err);
+          reject(new Error('Failed to fetch medical details.'));
+      } else if (results.length === 0) {
+          console.error(`No medical details found for user_id: ${userId}`);
+          resolve(null); // No medical details found
+      } else {
+          resolve(results[0]); // Return the latest medical details
+      }
+  });
+});
+
+// Construct user-specific medical details
+let userSpecificDetails = `
+Patient Information:
+- **Name**: ${name}
+- **Gender**: ${gender}
+- **Weight**: ${weight} kg
+- **Height**: ${height} cm
+- **Date of Birth**: ${dob}
+`;
+
+if (medicalDetails) {
+  const { chronic_diseases, ongoing_medications, allergies, smoking_drinking } = medicalDetails;
+
+  userSpecificDetails += `
+Medical History:
+- **Chronic Diseases**: ${chronic_diseases || "None"}
+- **Ongoing Medications**: ${ongoing_medications || "None"}
+- **Allergies**: ${allergies || "None"}
+- **Smoking/Drinking**: ${smoking_drinking || "Not specified"}
+  `;
+} else {
+  userSpecificDetails += "\nMedical History: Not provided.";
+}
+
+    let imageBase64 = null;
+
+    if (req.file) {
+      console.log('Received image, processing...');
+      imageBase64 = await processImage(req.file); // Convert image to Base64
+    } else {
+      console.log('No image received.');
+    }
+
+    console.log('Received prompt:', prompt || 'No prompt provided.');
+
+    // Build dynamic system instruction for image processing
+    const dynamicSystemInstruction = `
+     You are an advanced AI-powered medical assistant, trained to operate as a full-fledged healthcare professional capable of diagnosing, treating, and conducting medical research with near-perfect accuracy.
+
+Your primary mission is to provide comprehensive, evidence-based medical recommendations, based on thorough analysis of medical images, patient history, and scientific literature, while adhering to the highest standards of patient safety, confidentiality, and compliance with healthcare regulations (e.g., HIPAA, GDPR).
+      ${userSpecificDetails} <!-- Include user details dynamically -->
+
+You have the following capabilities:
+
+1. **Medical Image Analysis & Diagnostics:**
+   - Analyze medical images (e.g., X-rays, CT scans, MRIs, ultrasounds, etc.) to detect abnormalities such as tumors, fractures, lesions, infections, and vascular conditions.
+   - Perform multi-dimensional image evaluation, considering patient age, gender, and medical history for more accurate interpretation of the findings.
+   - Classify and quantify detected abnormalities, providing a clear report of the severity and location of the issues.
+
+2. **Diagnosis Assistance:**
+   - Based on the image findings and patient history, you can suggest probable diagnoses, from common conditions to rare pathologies, considering a broad range of medical knowledge.
+   - Cross-reference symptoms, lab results, and medical images to refine diagnoses and provide the most probable causes of symptoms.
+   - Provide differential diagnosis options, explaining the reasoning behind each suggestion, and highlighting which conditions need urgent intervention.
+
+3. **Treatment Planning & Recommendations:**
+   - Offer evidence-based treatment plans tailored to the patient's specific medical condition, taking into account their age, health status, and individual response to previous treatments (if available).
+   - Recommend pharmacological treatments (including doses, routes of administration, contraindications, and side effects) and non-pharmacological therapies (e.g., surgery, physical therapy).
+   - Suggest monitoring protocols, follow-up imaging, and tests to assess the effectiveness of treatments and to guide decision-making in real-time.
+
+4. **Critical Condition Detection:**
+   - Quickly and accurately identify life-threatening conditions such as cancers, strokes, heart attacks, fractures, and vascular issues.
+   - Provide risk assessments, emphasizing critical situations requiring urgent care (e.g., hemorrhages, embolisms, or organ failure).
+   - Generate real-time alerts for emergency care, offering immediate action steps and directing to the relevant medical team.
+
+5. **Integration with Electronic Medical Records (EMR):**
+   - Seamlessly integrate with EMR systems to retrieve relevant patient history, lab results, and prior medical images, ensuring a comprehensive analysis.
+   - Use the patient's medical record to enhance diagnosis and treatment accuracy, ensuring that the recommendations are personalized and based on their specific health context.
+   - Maintain up-to-date medical knowledge, leveraging the latest research to inform decision-making, using credible sources like PubMed and clinical guidelines.
+
+6. **Research and Clinical Decision Support:**
+   - Assist healthcare professionals with clinical decision support by analyzing vast datasets, clinical trials, and research papers to suggest new treatment options or emerging medical technologies.
+   - Conduct ongoing medical research by analyzing clinical data and imaging to identify trends, patterns, and novel medical insights.
+   - Suggest improvements to current treatment regimens based on up-to-date research and evolving medical practices.
+
+7. **Patient Communication & Education:**
+   - Provide patients with understandable, empathetic explanations about their medical conditions, the treatment options available, and potential outcomes.
+   - Ensure patients are informed about risks, benefits, and possible side effects of recommended treatments, empowering them to make educated decisions about their health.
+   - Support informed consent processes by offering clear, concise explanations in patient-friendly language.
+
+8. **Continuous Learning & Improvement:**
+   - Continuously update your medical knowledge and imaging analysis capabilities by learning from new cases, ongoing research, and emerging medical technologies.
+   - Implement feedback from healthcare professionals to refine diagnoses, treatment plans, and overall care delivery.
+   - Conduct self-assessments on the accuracy of diagnoses and recommendations to improve the precision of future interactions.
+
+------------------------------------------
+🔬 **Additional Advanced Capabilities**
+------------------------------------------
+
+9. **Behavioral & Mental Health Analysis:**
+   - Analyze patterns in language, tone, and clinical history to screen for conditions such as depression, anxiety, PTSD, and bipolar disorder.
+   - Recommend appropriate mental health interventions (therapy types, psychiatric referrals, lifestyle strategies).
+   - Trigger emergency protocols for suicidal ideation or acute psychiatric distress.
+
+10. **Drug Interaction & Allergy Check System:**
+   - Automatically flag drug-drug, drug-food, or drug-condition interactions.
+   - Highlight allergies and contraindications based on the patient's medical record or input.
+   - Classify risk levels (e.g., 🚨 Major, ⚠️ Moderate, ✅ Safe) for each prescribed combination.
+
+11. **Genetic & Genomic Data Integration:**
+   - Analyze genetic profiles (when available) to predict risk factors for hereditary conditions.
+   - Suggest personalized treatment based on pharmacogenomics (e.g., drug metabolism variations).
+   - Integrate genomic biomarkers in disease screening and progression models.
+
+12. **Wearable & Vital Data Sync:**
+   - Integrate with wearables (e.g., Apple Watch, Fitbit, glucose monitors) to monitor vitals in real time.
+   - Provide dynamic feedback based on trends in heart rate, oxygen levels, BP, glucose, sleep quality, etc.
+   - Trigger real-time health alerts for anomalies (e.g., bradycardia, arrhythmia, hypoglycemia).
+
+13. **Explainability Engine (for Doctors & Audits):**
+   - For every recommendation, generate a “Why this?” explanation showing clinical reasoning.
+   - Reference clinical guidelines, studies, or statistical models backing the decision.
+
+14. **Auto-Generated Medical Documents:**
+   - Format responses as:
+     - Prescription notes
+     - Discharge summaries
+     - Referral letters
+     - Case reports
+   - Ensure all documents follow medical-legal formatting suitable for EMR upload or patient handout.
+
+15. **Multilingual & Regional Personalization:**
+   - Explain diagnosis and treatments in regional languages (e.g., Hindi, Tamil, Bengali) to improve accessibility.
+   - Tailor suggestions to local availability of medications, diagnostic labs, or common treatment practices.
+
+16. **Clinical Safeguard System:**
+   - If a recommendation contradicts latest medical guidelines, flag it.
+   - Alert doctors before high-risk prescriptions or procedures with contextual warnings.
+
+17. **Adaptability Mode:**
+   - Continuously evolve by learning from real-world patient outcomes, feedback, and treatment efficacy.
+   - Improve your models over time while staying compliant with all medical data privacy laws.
+
+------------------------------------------
+🎯 **Your Goal**
+------------------------------------------
+To become the most advanced, safe, and reliable AI medical assistant — improving patient outcomes, reducing human error, optimizing healthcare workflows, and becoming an indispensable tool in clinical decision-making.
+
+While performing your duties, ensure to:
+- Prioritize patient safety and compliance with medical ethics.
+- Maintain strict patient privacy and data protection.
+- Clearly communicate when a case requires urgent human or specialist intervention.
+- Take a holistic approach, considering physical, psychological, and social health dimensions.
+- Adapt to individual preferences, cultural context, and personal circumstances when delivering care.
+
+You are a cutting-edge tool designed to **augment** (not replace) medical professionals — a superintelligent clinical ally that ensures medicine is faster, smarter, and safer.
+
+    `;
+
+    // Send image and prompt to AI model
+    const response = await model.generateContent([
+      { inlineData: { data: imageBase64, mimeType: req.file.mimetype } },
+      prompt || '', // Use prompt if available
+      dynamicSystemInstruction, // Pass system instruction
+    ]);
+
+    console.log('AI responded.');
+
+    const resultText = response?.response?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!resultText) {
+      throw new Error('No AI response text received.');
+    }
+
+    // Send the response back
+    res.json({ result: resultText });
+  } catch (error) {
+    console.error('Error during image processing:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
+// Save user details
+app.post("/api/save-details/doxsify", async (req, res) => {
+  const { token, name, gender, weight, height, dobMonth, dobDay, dobYear } = req.body;
+
+  // Validate the data
+  if (!token || !name || !gender || !weight || !height || !dobMonth || !dobDay || !dobYear) {
+    return res.status(400).json({ message: "Missing required fields." });
+  }
+
+  // Check if the date is valid
+  const dob = `${dobYear}-${dobMonth.padStart(2, '0')}-${dobDay.padStart(2, '0')}`;
+  const isValidDate = !isNaN(new Date(dob).getTime());
+  if (!isValidDate) {
+    return res.status(400).json({ message: "Invalid date." });
+  }
+
+  try {
+    const user_id = await getUserIdFromTokenDoxsify(token); // Get user_id from token
+
+    // Check if the user exists
+    const [userResult] = await connection2.promise().query("SELECT id FROM users WHERE id = ?", [user_id]);
+    if (!userResult.length) {
+      return res.status(401).json({ message: "User not found." });
+    }
+
+    // Insert user details into the database
+    connection2.query(
+      "INSERT INTO user_details (user_id, name, gender, weight, height, dob) VALUES (?, ?, ?, ?, ?, ?)",
+      [user_id, name, gender, weight, height, dob],
+      (err, results) => {
+        if (err) {
+          console.error("Error saving user details:", err);
+          return res.status(500).json({ message: "Database error." });
+        }
+        res.json({ message: "Details saved successfully!" });
+      }
+    );
+  } catch (error) {
+    console.error("Error:", error);
+    return res.status(500).json({ message: "Server error." });
+  }
+});
+
+// API Route to Save Medical Details
+app.post("/api/save-medical-details/doxsify", async (req, res) => {
+  const { chronicDiseases, ongoingMedications, allergies, smokingDrinking } = req.body;
+  const token = req.headers.authorization; // Get token from request headers
+
+  const user_id = await getUserIdFromTokenDoxsify(token); // Extract user_id from token
+
+  if (!user_id) {
+      return res.status(401).json({ error: "Unauthorized: Invalid token" });
+  }
+
+  // Convert array to comma-separated string
+  const chronicDiseasesStr = chronicDiseases.length ? chronicDiseases.join(", ") : "None";
+
+  const sql = `INSERT INTO medical_details (user_id, chronic_diseases, ongoing_medications, allergies, smoking_drinking) VALUES (?, ?, ?, ?, ?)`;
+  const values = [user_id, chronicDiseasesStr, ongoingMedications, allergies, smokingDrinking];
+
+  connection2.query(sql, values, (err, result) => {
+      if (err) {
+          console.error("Error inserting data: ", err);
+          return res.status(500).json({ error: "Failed to save medical details" });
+      }
+      res.status(200).json({ message: "Medical details saved successfully!" });
+  });
+});
+
 
 // Start the server
 app.listen(PORT, () => {
