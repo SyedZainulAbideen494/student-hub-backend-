@@ -13017,31 +13017,43 @@ app.post("/api/save-details/doxsify", async (req, res) => {
   }
 });
 
-// API Route to Save Medical Details
 app.post("/api/save-medical-details/doxsify", async (req, res) => {
-  const { chronicDiseases, ongoingMedications, allergies, smokingDrinking } = req.body;
-  const token = req.headers.authorization; // Get token from request headers
+  const { token, chronicDiseases, ongoingMedications, allergies, smokingDrinking } = req.body;
 
-  const user_id = await getUserIdFromTokenDoxsify(token); // Extract user_id from token
+  // Debug logs (can remove later)
+  console.log("🔐 Token received in body:", token);
+  console.log("🩺 Data:", { chronicDiseases, ongoingMedications, allergies, smokingDrinking });
 
-  if (!user_id) {
-      return res.status(401).json({ error: "Unauthorized: Invalid token" });
+  if (!token) {
+    return res.status(400).json({ error: "Token is required" });
   }
 
-  // Convert array to comma-separated string
-  const chronicDiseasesStr = chronicDiseases.length ? chronicDiseases.join(", ") : "None";
+  const user_id = await getUserIdFromTokenDoxsify(token);
 
-  const sql = `INSERT INTO medical_details (user_id, chronic_diseases, ongoing_medications, allergies, smoking_drinking) VALUES (?, ?, ?, ?, ?)`;
+  if (!user_id) {
+    return res.status(401).json({ error: "Unauthorized: Invalid token" });
+  }
+
+  // Validate chronicDiseases
+  const chronicDiseasesStr = Array.isArray(chronicDiseases) ? chronicDiseases.join(", ") : "None";
+
+  const sql = `
+    INSERT INTO medical_details 
+    (user_id, chronic_diseases, ongoing_medications, allergies, smoking_drinking) 
+    VALUES (?, ?, ?, ?, ?)
+  `;
   const values = [user_id, chronicDiseasesStr, ongoingMedications, allergies, smokingDrinking];
 
   connection2.query(sql, values, (err, result) => {
-      if (err) {
-          console.error("Error inserting data: ", err);
-          return res.status(500).json({ error: "Failed to save medical details" });
-      }
-      res.status(200).json({ message: "Medical details saved successfully!" });
+    if (err) {
+      console.error("❌ Error inserting data:", err);
+      return res.status(500).json({ error: "Failed to save medical details" });
+    }
+
+    res.status(200).json({ message: "✅ Medical details saved successfully!" });
   });
 });
+
 
 
 // Start the server
