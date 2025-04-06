@@ -12463,7 +12463,7 @@ app.post('/signup/doxsify', (req, res) => {
               return res.status(500).send({ message: 'Error creating session', error: sessionErr });
             }
 
-            console.log('User registration and session creation successful!');
+            console.log('User registration and session creation successful on doxsify!');
             res.json({ auth: true, token: token });
           }
         );
@@ -12721,7 +12721,7 @@ You are a cutting-edge tool designed to **augment** (not replace) medical profes
 
     const chat = model.startChat({ history: chatHistory || initialChatHistory });
 
-    console.log(`User asked: ${message}, Thinking Mode: ${thinkingMode}`);
+    console.log(`User asked on doxsify: ${message}, Thinking Mode: ${thinkingMode}`);
 
     let aiResponse = '';
 
@@ -12835,7 +12835,7 @@ Medical History:
       console.log('No image received.');
     }
 
-    console.log('Received prompt:', prompt || 'No prompt provided.');
+    console.log('Received prompt doxsify:', prompt || 'No prompt provided.');
 
     // Build dynamic system instruction for image processing
     const dynamicSystemInstruction = `
@@ -13008,6 +13008,7 @@ app.post("/api/save-details/doxsify", async (req, res) => {
           console.error("Error saving user details:", err);
           return res.status(500).json({ message: "Database error." });
         }
+        console.log("✅ user details saved successfully for user ID:", user_id);
         res.json({ message: "Details saved successfully!" });
       }
     );
@@ -13017,43 +13018,32 @@ app.post("/api/save-details/doxsify", async (req, res) => {
   }
 });
 
+// API Route to Save Medical Details
 app.post("/api/save-medical-details/doxsify", async (req, res) => {
-  const { token, chronicDiseases, ongoingMedications, allergies, smokingDrinking } = req.body;
+  const { chronicDiseases, ongoingMedications, allergies, smokingDrinking } = req.body;
+  const token = req.headers.authorization; // Get token from request headers
 
-  // Debug logs (can remove later)
-  console.log("🔐 Token received in body:", token);
-  console.log("🩺 Data:", { chronicDiseases, ongoingMedications, allergies, smokingDrinking });
-
-  if (!token) {
-    return res.status(400).json({ error: "Token is required" });
-  }
-
-  const user_id = await getUserIdFromTokenDoxsify(token);
+  const user_id = await getUserIdFromTokenDoxsify(token); // Extract user_id from token
 
   if (!user_id) {
     return res.status(401).json({ error: "Unauthorized: Invalid token" });
   }
 
-  // Validate chronicDiseases
-  const chronicDiseasesStr = Array.isArray(chronicDiseases) ? chronicDiseases.join(", ") : "None";
+  // Convert array to comma-separated string
+  const chronicDiseasesStr = chronicDiseases.length ? chronicDiseases.join(", ") : "None";
 
-  const sql = `
-    INSERT INTO medical_details 
-    (user_id, chronic_diseases, ongoing_medications, allergies, smoking_drinking) 
-    VALUES (?, ?, ?, ?, ?)
-  `;
+  const sql = `INSERT INTO medical_details (user_id, chronic_diseases, ongoing_medications, allergies, smoking_drinking) VALUES (?, ?, ?, ?, ?)`;
   const values = [user_id, chronicDiseasesStr, ongoingMedications, allergies, smokingDrinking];
 
   connection2.query(sql, values, (err, result) => {
     if (err) {
-      console.error("❌ Error inserting data:", err);
+      console.error("❌ Error inserting data: ", err);
       return res.status(500).json({ error: "Failed to save medical details" });
     }
-
-    res.status(200).json({ message: "✅ Medical details saved successfully!" });
+    console.log("✅ Medical details saved successfully for user ID:", user_id);
+    res.status(200).json({ message: "Medical details saved successfully!" });
   });
 });
-
 
 
 // Start the server
