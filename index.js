@@ -13269,7 +13269,7 @@ app.post('/api/doxsify/reset-password', (req, res) => {
 });
 
 // API Endpoint
-app.post('/api/notify', (req, res) => {
+app.post('/api/notify/doxsify', (req, res) => {
   const { email, phone } = req.body;
   const query = 'INSERT INTO pre_registrations (email, phone) VALUES (?, ?)';
   connection2.query(query, [email, phone], (err) => {
