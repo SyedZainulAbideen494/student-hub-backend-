@@ -13040,6 +13040,36 @@ app.get('/check-subscription/doxsify', async (req, res) => {
   }
 });
 
+app.get('/check-profile-completion', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(401).json({ error: 'Unauthorized' });
+
+    const userId = await getUserIdFromTokenDoxsify(token);
+    if (!userId) return res.status(401).json({ error: 'Invalid token' });
+
+    // Check if user_details exists
+    const [userDetails] = await query2('SELECT * FROM user_details WHERE user_id = ?', [userId]);
+
+    if (!userDetails) {
+      return res.json({ redirect: '/user-flow-data' });
+    }
+
+    // If user_details exists, now check medical_details
+    const [medicalDetails] = await query2('SELECT * FROM medical_details WHERE user_id = ?', [userId]);
+
+    if (!medicalDetails) {
+      return res.json({ redirect: '/user-flow-data-medical' });
+    }
+
+    // All complete
+    return res.json({ redirect: null }); // null means profile is complete
+
+  } catch (err) {
+    console.error('Error in /check-profile-completion:', err);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
 
 
 // Start the server
