@@ -13078,6 +13078,7 @@ app.post("/getUserProfile/doxsify", async (req, res) => {
   try {
     const userDetails = await query2("SELECT * FROM user_details WHERE user_id = ?", [userId]);
     const medicalDetails = await query2("SELECT * FROM medical_details WHERE user_id = ?", [userId]);
+    const subscriptionDetails = await query2("SELECT * FROM subscriptions WHERE user_id = ? ORDER BY payment_date DESC LIMIT 1", [userId]);
 
     if (!userDetails.length) {
       return res.status(404).json({ error: "User not found" });
@@ -13086,6 +13087,7 @@ app.post("/getUserProfile/doxsify", async (req, res) => {
     res.json({
       user: userDetails[0],
       medical: medicalDetails[0] || null,
+      subscription: subscriptionDetails[0] || null
     });
   } catch (err) {
     console.error("❌ Error in /getUserProfile:", err);
@@ -13093,6 +13095,31 @@ app.post("/getUserProfile/doxsify", async (req, res) => {
   }
 });
 
+app.post("/api/verify-token", async (req, res) => {
+  const { token } = req.body;
+
+  if (!token) return res.json({ valid: false });
+
+  try {
+    const userId = await getUserIdFromTokenDoxsify(token);
+
+    if (!userId) return res.json({ valid: false });
+
+    const rows = await query2(
+      "SELECT * FROM session WHERE jwt = ? AND user_id = ?",
+      [token, userId]
+    );
+
+    if (rows.length > 0) {
+      return res.json({ valid: true });
+    } else {
+      return res.json({ valid: false });
+    }
+  } catch (err) {
+    console.error("Token verification error:", err);
+    return res.status(500).json({ valid: false });
+  }
+});
 
 // Start the server
 app.listen(PORT, () => {
