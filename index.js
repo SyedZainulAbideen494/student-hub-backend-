@@ -13121,6 +13121,93 @@ app.post("/api/verify-token", async (req, res) => {
   }
 });
 
+const generateTokenDoxsify = () => crypto.randomBytes(20).toString('hex');
+
+app.post('/api/doxsify/forgot-password', async (req, res) => {
+  try {
+    const { emailOrPhone } = req.body;
+
+    const [userResults] = await connection.promise().query(
+      'SELECT * FROM users WHERE email = ? OR phone_number = ?',
+      [emailOrPhone, emailOrPhone]
+    );
+
+    if (userResults.length === 0)
+      return res.status(404).json({ error: 'User not found' });
+
+    const user = userResults[0];
+    const token = generateTokenDoxsify();
+    const resetLink = `https://doxsify.vercel.app/reset-password/${token}`;
+    const expirationTime = new Date(Date.now() + 3600000); // 1 hour
+
+    await connection2.promise().query(
+      'INSERT INTO doxsify_password_resets (email, token, expires_at) VALUES (?, ?, ?)',
+      [user.email, token, expirationTime]
+    );
+
+    const mailOptions = {
+      to: user.email,
+      from: 'edusyfy@gmail.com',
+      subject: 'Reset Your Doxsify Password',
+      text: `Hi there,\n\nYou requested a password reset for your Doxsify account. Click below to reset it:\n\n${resetLink}\n\nIf this wasn't you, ignore this email.\n\n– Doxsify AI Team`
+    };
+
+    transporter.sendMail(mailOptions, (err, info) => {
+      if (err) {
+        console.log('Email error:', err);
+        return res.status(500).json({ error: 'Failed to send email' });
+      }
+      console.log('Doxsify reset email sent:', info.response);
+      res.status(200).json({ message: 'Reset link sent to your email' });
+    });
+  } catch (err) {
+    console.error('Forgot password error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/doxsify/reset-password', (req, res) => {
+  const { token, password } = req.body;
+
+  connection2.query(
+    'SELECT * FROM doxsify_password_resets WHERE token = ? AND expires_at > NOW()',
+    [token],
+    (err, results) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+      if (results.length === 0)
+        return res.status(400).json({ error: 'Invalid or expired token' });
+
+      const email = results[0].email;
+      const saltRounds = 10;
+
+      bcrypt.hash(password, saltRounds, (hashErr, hash) => {
+        if (hashErr)
+          return res.status(500).json({ error: 'Hashing failed' });
+
+        connection2.query(
+          'UPDATE users SET password = ? WHERE email = ?',
+          [hash, email],
+          (err) => {
+            if (err) return res.status(500).json({ error: 'Update failed' });
+
+            connection2.query(
+              'DELETE FROM doxsify_password_resets WHERE token = ?',
+              [token],
+              (err) => {
+                if (err)
+                  return res.status(500).json({ error: 'Cleanup failed' });
+
+                res.status(200).json({ message: 'Password updated' });
+              }
+            );
+          }
+        );
+      });
+    }
+  );
+});
+
+
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
