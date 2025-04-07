@@ -8864,147 +8864,6 @@ const razorpay = new Razorpay({
   key_secret: 'ec9nrw9RjbIcvpkufzaYxmr6',
 });
 
-app.post("/buy-opulenx", async (req, res) => {
-  try {
-    const { email, name, phone } = req.body; // Collect user details
-
-    const options = {
-      amount: 199900, // ₹4,999 in paise
-      currency: "INR",
-      receipt: `order_${Date.now()}`,
-      notes: { email, name, phone }, // Send user details to Razorpay
-    };
-
-    const order = await razorpay.orders.create(options);
-    res.json({ order });
-  } catch (error) {
-    console.error("Error creating order:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
-app.post("/verify-payment-opulenx", async (req, res) => {
-  try {
-    const { payment_id, order_id, signature } = req.body;
-
-    const expected_signature = crypto
-      .createHmac("sha256", "ec9nrw9RjbIcvpkufzaYxmr6")
-      .update(`${order_id}|${payment_id}`)
-      .digest("hex");
-
-    if (expected_signature !== signature) {
-      console.warn(`❌ Signature mismatch for Order ID: ${order_id}`);
-      return res.status(400).json({ error: "Signature mismatch" });
-    }
-
-    // Fetch order details from Razorpay
-    const order = await razorpay.orders.fetch(order_id);
-    const { email, name, phone } = order.notes; // Get user details
-
-    // Generate a unique 6-digit ID
-    const userId = Math.floor(100000 + Math.random() * 900000);
-
-    // Store payment details in the database
-    const sql = `INSERT INTO opulenx_purchases (order_id, payment_id, signature, email, name, phone, amount, status, user_id)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, 'Completed', ?)`; // Store the user ID
-
-    connection.query(sql, [order_id, payment_id, signature, email, name, phone, order.amount, userId], (err, result) => {
-      if (err) {
-        console.error("❌ Database error:", err);
-        return res.status(500).json({ error: "Database error" });
-      }
-
-      console.log(`✅ Payment Verified! 
-      - User: ${name} (${email}, ${phone})
-      - Order ID: ${order_id}
-      - Payment ID: ${payment_id}
-      - Amount: ₹${(order.amount / 100).toFixed(2)}
-      - Assigned User ID: ${userId}`);
-
-      const mailOptions = {
-        from: '"OpulenX Elite Club" <edusyfy@gmail.com>',
-        to: email,
-        subject: "🔱 Your OpulenX Elite Status is Verified!",
-        html: `
-          <div style="font-family: Arial, sans-serif; text-align: center; background: #0D0D0D; padding: 40px; color: #FFF; border-radius: 10px; max-width: 500px; margin: auto; box-shadow: 0px 0px 15px rgba(255, 215, 0, 0.3);">
-            
-            <h1 style="color: gold; font-size: 26px; margin-bottom: 10px;">🎩 Welcome to OpulenX Elite</h1>
-            
-            <p style="font-size: 16px; opacity: 0.9;">You are now officially part of the **most exclusive club**.</p>
-      
-            <div style="border: 2px solid gold; padding: 15px; border-radius: 8px; margin: 20px 0; background: rgba(255, 215, 0, 0.1);">
-              <p style="margin: 5px 0;"><strong>👑 Elite ID:</strong> ${userId}</p>
-              <p style="margin: 5px 0;"><strong>📜 Order ID:</strong> ${order_id}</p>
-              <p style="margin: 5px 0;"><strong>💳 Payment ID:</strong> ${payment_id}</p>
-              <p style="margin: 5px 0;"><strong>💰 Amount Paid:</strong> ₹${(order.amount / 100).toFixed(2)}</p>
-            </div>
-      
-            <p style="font-size: 14px; opacity: 0.8;">Your status is now **Elite.** Nothing more, nothing less.</p>
-      
-            <div style="margin-top: 20px;">
-              <a href="https://opulenx.vercel.app/search" style="display: inline-block; padding: 12px 24px; background: gold; color: #000; text-decoration: none; border-radius: 5px; font-weight: bold; transition: 0.3s;">
-                View Your Status
-              </a>
-            </div>
-      
-            <p style="margin-top: 20px; font-size: 12px; opacity: 0.6;">This is an automated email. No need to reply.</p>
-          </div>
-        `,
-      };
-      
-
-      transporter.sendMail(mailOptions, (error, info) => {
-        if (error) {
-          console.error("❌ Email sending failed:", error);
-        } else {
-          console.log(`📧 Email sent: ${info.response}`);
-        }
-      });
-
-      res.json({ success: true, userId }); // Send user ID in the response
-    });
-
-  } catch (error) {
-    console.error("❌ Error in verify-payment:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
-
-
-app.get("/search-elite-pass", async (req, res) => {
-  try {
-    const { query } = req.query; // Can be userId, email, or phone
-
-    if (!query) {
-      return res.status(400).json({ error: "Query parameter is required" });
-    }
-
-    const sql = `
-      SELECT user_id, name, status, created_at 
-      FROM opulenx_purchases 
-      WHERE user_id = ? OR email = ? OR phone = ?
-      LIMIT 1
-    `;
-
-    connection.query(sql, [query, query, query], (err, results) => {
-      if (err) {
-        console.error("❌ Database error:", err);
-        return res.status(500).json({ error: "Database error" });
-      }
-
-      if (results.length > 0) {
-        console.log(`✅ Elite Pass Found: ${results[0].name} (User ID: ${results[0].user_id})`);
-        res.json(results[0]); // Return user details
-      } else {
-        console.log(`❌ No Elite Pass found for query: ${query}`);
-        res.json({ status: "Poor" }); // No elite pass found
-      }
-    });
-  } catch (error) {
-    console.error("❌ Error in search API:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
-
 
 
 app.post('/buy-premium', async (req, res) => {
@@ -12417,6 +12276,20 @@ const getUserIdFromTokenDoxsify = (token) => {
   });
 };
 
+// Promisify query function
+const query2 = (sql, params) => {
+  return new Promise((resolve, reject) => {
+    connection2.query(sql, params, (error, results) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve(results);
+      }
+    });
+  });
+};
+
+
 
 app.post('/signup/doxsify', (req, res) => {
   const { password, email, unique_id, phone_number } = req.body;
@@ -13043,6 +12916,130 @@ app.post("/api/save-medical-details/doxsify", async (req, res) => {
     res.status(200).json({ message: "Medical details saved successfully!" });
   });
 });
+
+
+
+app.post('/buy-premium/doxsify', async (req, res) => {
+  try {
+    const { amount, currency, subscription_plan, token, duration } = req.body;
+    
+    const userId = await getUserIdFromTokenDoxsify(token);
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const options = {
+      amount: amount * 100, 
+      currency,
+      receipt: `order_rcptid_${Math.floor(Math.random() * 100000)}`,
+      notes: { subscription_plan, userId, duration },
+    };
+
+    razorpay.orders.create(options, (err, order) => {
+      if (err) return res.status(500).json({ error: err });
+      res.json({ order });
+    });
+
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+
+app.post('/verify-payment/doxsify', async (req, res) => {
+  try {
+    const { payment_id, order_id, signature, token, subscription_plan, duration } = req.body;
+
+    const userId = await getUserIdFromTokenDoxsify(token);
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const body = `${order_id}|${payment_id}`;
+    const expected_signature = crypto
+      .createHmac('sha256', 'ec9nrw9RjbIcvpkufzaYxmr6') // Replace with your Razorpay secret
+      .update(body)
+      .digest('hex');
+
+    if (expected_signature !== signature) {
+      console.error('Signature mismatch');
+      return res.status(400).json({ success: false });
+    }
+
+    // ✅ Expiry date calculation for monthly and yearly plans only
+    const expiryDate = new Date();
+    if (duration === 'monthly') expiryDate.setMonth(expiryDate.getMonth() + 1);
+    else if (duration === 'yearly') expiryDate.setFullYear(expiryDate.getFullYear() + 1);
+    else return res.status(400).json({ error: 'Invalid duration' });
+
+    const queryText = `
+      INSERT INTO subscriptions (user_id, subscription_plan, payment_status, payment_date, expiry_date)
+      VALUES (?, ?, ?, NOW(), ?)
+    `;
+
+    await query2(queryText, [userId, subscription_plan, 'success', expiryDate]);
+    console.log(`✅ User ${userId} got doxisfy for ${duration}.`);
+
+    res.json({ success: true });
+
+  } catch (error) {
+    console.error("Error in /verify-payment/doxsify:", error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+const removeExpiredSubscriptionsDoxsify = () => {
+  const currentDateTime = new Date(); // Get current timestamp
+
+  // Delete subscriptions where expiry_date (including time) has passed
+  const deleteQuery = `
+    DELETE FROM subscriptions 
+    WHERE expiry_date <= ?`;
+
+  connection2.query(deleteQuery, [currentDateTime], (err, results) => {
+    if (err) {
+      console.error(`[${currentDateTime.toISOString()}] Error deleting expired subscriptions:`, err);
+    } else {
+      if (results.affectedRows > 0) {
+        console.log(`Deleted ${results.affectedRows} expired subscriptions.`);
+      }
+    }
+  });
+};
+
+// Run the cron job every minute to check for exact expiry time
+cron.schedule('* * * * *', () => {
+  removeExpiredSubscriptionsDoxsify();
+});
+
+
+app.get('/check-subscription/doxsify', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) return res.status(401).json({ error: "Unauthorized: Token missing" });
+
+    const userId = await getUserIdFromTokenDoxsify(token);
+    if (!userId) return res.status(401).json({ error: "Unauthorized: Invalid token" });
+
+    const [result] = await query2(
+      `SELECT subscription_plan, expiry_date FROM subscriptions
+       WHERE user_id = ? AND expiry_date > NOW()
+       ORDER BY expiry_date DESC LIMIT 1`,
+      [userId]
+    );
+
+    if (!result) {
+      return res.json({ active: false, subscription_plan: null });
+    }
+
+    return res.json({
+      active: true,
+      subscription_plan: result.subscription_plan,
+      expires_on: result.expiry_date,
+    });
+
+  } catch (err) {
+    console.error("Error in /check-subscription/doxsify:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 
 
 // Start the server
