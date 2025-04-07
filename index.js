@@ -13071,6 +13071,28 @@ app.get('/check-profile-completion', async (req, res) => {
   }
 });
 
+app.post("/getUserProfile/doxsify", async (req, res) => {
+  const { token } = req.body;
+  const userId = await getUserIdFromTokenDoxsify(token);
+
+  try {
+    const userDetails = await query2("SELECT * FROM user_details WHERE user_id = ?", [userId]);
+    const medicalDetails = await query2("SELECT * FROM medical_details WHERE user_id = ?", [userId]);
+
+    if (!userDetails.length) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    res.json({
+      user: userDetails[0],
+      medical: medicalDetails[0] || null,
+    });
+  } catch (err) {
+    console.error("❌ Error in /getUserProfile:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 
 // Start the server
 app.listen(PORT, () => {
