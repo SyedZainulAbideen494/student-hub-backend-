@@ -12468,6 +12468,8 @@ Medical History:
     const modelName = "gemini-2.0-flash"; // Toggle model
     const today = new Date();
     const formattedDate = today.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+
+
 // Build dynamic system instruction
 const dynamicSystemInstruction = `
    You are an advanced AI-powered medical assistant, trained to operate as a full-fledged healthcare professional capable of diagnosing, treating, and conducting medical research with near-perfect accuracy.
@@ -12621,7 +12623,17 @@ You are a cutting-edge tool designed to **augment** (not replace) medical profes
       return res.status(500).json({ error: 'AI service did not return a response.' });
     }
 
-
+    connection2.query(
+      'INSERT INTO ai_history (user_id, user_message, ai_message) VALUES (?, ?, ?)',
+      [userId, message || '[Image Only]', aiResponse],
+      (err, results) => {
+        if (err) {
+          console.error('Failed to save AI history:', err);
+        } else {
+          console.log('AI history saved for user:', userId);
+        }
+      }
+    );
 
     res.json({ response: aiResponse });
   } catch (error) {
@@ -12837,6 +12849,18 @@ You are a cutting-edge tool designed to **augment** (not replace) medical profes
     if (!resultText) {
       throw new Error('No AI response text received.');
     }
+// Save to ai_history table
+connection2.query(
+  'INSERT INTO ai_history (user_id, user_message, ai_message) VALUES (?, ?, ?)',
+  [userId, prompt || '[Image Only]', resultText],
+  (err, results) => {
+    if (err) {
+      console.error('Failed to save AI history:', err);
+    } else {
+      console.log('AI history saved for user:', userId);
+    }
+  }
+);
 
     // Send the response back
     res.json({ result: resultText });
