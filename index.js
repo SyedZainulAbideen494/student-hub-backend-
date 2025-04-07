@@ -13268,6 +13268,20 @@ app.post('/api/doxsify/reset-password', (req, res) => {
   );
 });
 
+// API Endpoint
+app.post('/api/notify', (req, res) => {
+  const { email, phone } = req.body;
+  const query = 'INSERT INTO pre_registrations (email, phone) VALUES (?, ?)';
+  connection2.query(query, [email, phone], (err) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).send('Error saving to database');
+    }
+    console.log('user pre-registered on doxsify', email, phone)
+    res.status(200).send('Success');
+  });
+});
+
 
 // Start the server
 app.listen(PORT, () => {
