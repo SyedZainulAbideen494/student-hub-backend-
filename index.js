@@ -13303,6 +13303,12 @@ app.post('/api/notify/doxsify', (req, res) => {
 });
 
 
+// Endpoint to log download requests
+app.post('/api/log-download/doxsify', (req, res) => {
+  console.log('Download requested for doxsify:', req.body);
+  res.status(200).send({ message: 'Download request logged' });
+});
+
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
