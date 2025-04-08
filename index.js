@@ -12748,7 +12748,7 @@ Medical History:
 
     console.log('Received prompt doxsify:', prompt || 'No prompt provided.');
 
-    const dynamicSystemInstruction = `
+    const dynamicSystemInstructionForImg = `
 
     🧠  Doxsify AI — Autonomous Clinical Intelligence System
     
