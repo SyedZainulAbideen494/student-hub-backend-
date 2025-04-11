@@ -11539,81 +11539,36 @@ app.post("/api/notes/generate/from-magic", async (req, res) => {
 
 
 app.post('/check-subscription/trial', async (req, res) => {
-  const { token } = req.body; 
+  const { token } = req.body;
 
   if (!token) {
-      return res.status(400).json({ message: 'Token is required' });
+    return res.status(400).json({ message: 'Token is required' });
   }
 
   try {
-      const userId = await getUserIdFromToken(token);
+    const userId = await getUserIdFromToken(token);
 
-      // Check for an active premium subscription
-      const subscriptionQuery = 'SELECT * FROM subscriptions WHERE user_id = ?';
-      connection.query(subscriptionQuery, [userId], (err, results) => {
-          if (err) {
-              console.error("❌ Database error (subscriptions):", err);
-              return res.status(500).json({ message: 'Database error', error: err });
-          }
+    const subscriptionQuery = 'SELECT * FROM subscriptions WHERE user_id = ?';
+    connection.query(subscriptionQuery, [userId], (err, results) => {
+      if (err) {
+        console.error("❌ Database error (subscriptions):", err);
+        return res.status(500).json({ message: 'Database error', error: err });
+      }
 
-          if (results.length > 0 && new Date(results[0].expiry_date) > new Date()) {
-              return res.json({ status: 'premium' }); // Already premium
-          }
+      const hasValidPremium = results.length > 0 && new Date(results[0].expiry_date) > new Date();
 
-          // Check if user already claimed a free trial
-          const trialQuery = 'SELECT * FROM free_trials WHERE user_id = ?';
-          connection.query(trialQuery, [userId], (err, trialResults) => {
-              if (err) {
-                  console.error("❌ Database error (free_trials):", err);
-                  return res.status(500).json({ message: 'Database error', error: err });
-              }
-
-              if (trialResults.length > 0) {
-                  return res.json({ status: 'redirect_subscription' }); // Trial already claimed
-              }
-
-              // Grant 2-day free trial
-              const expiryDate = new Date();
-              expiryDate.setDate(expiryDate.getDate() + 3);
-
-              console.log(`Granting 3-day free trial to user ${userId}`);
-
-              // Insert into free_trials
-              const insertTrialQuery = `
-                  INSERT INTO free_trials (user_id, expires_at) 
-                  VALUES (?, ?)
-                  ON DUPLICATE KEY UPDATE expires_at = VALUES(expires_at)
-              `;
-
-              connection.query(insertTrialQuery, [userId, expiryDate], (err) => {
-                  if (err) {
-                      console.error("❌ Database error (insert free_trials):", err);
-                      return res.status(500).json({ message: 'Database error', error: err });
-                  }
-
-                  // Insert into subscriptions
-                  const insertSubscriptionQuery = `
-                      INSERT INTO subscriptions (user_id, subscription_plan, payment_status, payment_date, expiry_date)
-                      VALUES (?, 'trial', 'free', NOW(), ?)
-                      ON DUPLICATE KEY UPDATE expiry_date = VALUES(expiry_date)
-                  `;
-
-                  connection.query(insertSubscriptionQuery, [userId, expiryDate], (err) => {
-                      if (err) {
-                          console.error("❌ Database error (insert subscriptions):", err);
-                          return res.status(500).json({ message: 'Database error', error: err });
-                      }
-
-                      return res.json({ status: 'trial_granted' });
-                  });
-              });
-          });
-      });
+      if (hasValidPremium) {
+        return res.json({ status: 'premium' });
+      } else {
+        return res.json({ status: 'redirect_subscription' });
+      }
+    });
   } catch (error) {
-      console.error("❌ Error processing token:", error);
-      return res.status(500).json({ message: 'Error processing token', error });
+    console.error("❌ Error processing token:", error);
+    return res.status(500).json({ message: 'Error processing token', error });
   }
 });
+
 
 const fetchImages = async (searchQuery) => {
   try {
