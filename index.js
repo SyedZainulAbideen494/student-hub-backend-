@@ -56,7 +56,7 @@ const safetySettings = [
 ];
 
 const model = genAI.getGenerativeModel({
-  model: "gemini-2.0-flash",
+  model: "gemini-2.5-pro-exp-03-25",
   safetySettings: safetySettings,
   systemInstruction: "You are Edusify, an AI-powered productivity assistant designed to help students manage their academic tasks, study materials, and stay organized. Your mission is to provide tailored assistance and streamline the study experience with a wide range of features.\n\n" +
   
@@ -8109,28 +8109,66 @@ app.post('/api/notes/generate', async (req, res) => {
     // Get today's date in YYYY-MM-DD format
     const todayDate = new Date().toISOString().split('T')[0];
 
-    // Initialize the prompt with basic structure
-    let prompt = `Generate notes on the topic "${topic}". Format the notes in HTML using only <p>, <li>, <ul>, <h1>, <h2>, and <h3> tags. The notes should be detailed, structured, and easy to read.`;
+    let prompt = `
+    You are an expert educator and master note designer for premium study apps. Generate top-tier, deeply informative, and visually stunning notes on the topic:  "${topic}". 
+   
+These notes will be used in a high-end study app and must meet the following standards:
 
-    // Handle specific types of notes requested by the user
-    Object.keys(types).forEach(type => {
-      if (types[type]) { // Check if the type is true
-        if (type === 'summary') {
-          prompt += ' Provide a brief summary of the topic.';
-        } else if (type === 'detailed') {
-          prompt += ' Provide a detailed explanation of the topic, including key concepts and important details.';
-        } else if (type === 'question-and-answer') {
-          prompt += ' Include potential questions and answers related to the topic.';
-        } else if (type === 'key points') {
-          prompt += ' Include key points that summarize the most important aspects of the topic.';
-        } else if (type === 'subtopics') {
-          prompt += ' Break down the topic into relevant subtopics with explanations.';
-        } else if (type === 'important questions') {
-          prompt += ' Provide a list of important questions related to the topic that may be asked during exams or discussions.';
-        }
-      }
-    });
+1. **Output must be in clean, semantic, modern HTML (NO markdown).**
+2. **Visually aesthetic and responsive for both desktop and mobile**.
+3. Use the following HTML tags for layout, readability, and structure:
+   - <section>, <article>, <header>, <footer>, <div>
+   - <h1>, <h2>, <h3>, <h4>, <p>, <ul>, <ol>, <li>, <blockquote>, <code>, <pre>, <strong>, <em>, <hr>, <br>
+4. Apply **minimal but elegant inline styling** for layout, color, spacing, fonts, and emphasis:
+   - Use soft pastel backgrounds (e.g., light lavender, mint, blush).
+   - Use subtle box shadows and rounded corners for sections.
+   - Use modern fonts like 'Segoe UI', 'Inter', or 'Helvetica Neue'.
+   - Add margin and padding to improve visual breathing space.
+   - Use aesthetic <code> blocks with light backgrounds.
+5. **Visually break content** using:
+   - <br> for spacing,
+   - <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ddd;"> for elegant dividers,
+   - Headings with different font sizes and weights.
+6. Ensure all content is:
+   - **Easy to skim** with visual cues (bullets, bold text),
+   - **Deep enough** to fully understand the topic,
+   - **Formatted beautifully for display in the Edusify app**.
+7. Use inline <style> only if needed for custom visuals (avoid <style> blocks unless essential).
+8. Format Q&A sections with a custom class <section class="qa">, where:
+   - Each question is bold and optionally prefixed with "Q:".
+   - Each answer is clear, concise, and helpful.
+   - Use blockquote or light-colored backgrounds to make the section pop.
 
+Customize the notes based on the following requested content types:
+`;
+
+Object.keys(types).forEach(type => {
+  if (types[type]) {
+    if (type === 'summary') {
+      prompt += '\n- Add a short, friendly motivational <section class="summary"> at the top, summarizing what the topic is about and why it matters.';
+    } else if (type === 'detailed') {
+      prompt += '\n- Include a richly formatted <section class="detailed"> with deep concept explanations, formulas, examples, and visuals if relevant.';
+    } else if (type === 'question-and-answer') {
+      prompt += '\n- Add a <section class="qa"> with 5–10 thoughtful, exam-style Q&A pairs to test understanding.';
+    } else if (type === 'key points') {
+      prompt += '\n- Include a <section class="keypoints"> with stylish bullet points summarizing the most critical takeaways.';
+    } else if (type === 'subtopics') {
+      prompt += '\n- Break the content into 3–6 <article> elements with subheadings and structured flow between ideas.';
+    } else if (type === 'important questions') {
+      prompt += '\n- End with a <section class="important-questions"> titled "📌 Important Questions", listing potential exam questions in an <ul>.';
+    }
+  }
+});
+
+prompt += `
+End the content with a <footer> that contains a soft call-to-action or motivational quote like:
+
+<em>"Physics is like climbing a mountain. The view from the top makes all the effort worthwhile."</em>
+
+Ensure the final HTML is **beautiful, well-structured, copy-paste ready**, and suitable for integration into a luxury, aesthetic study app like Edusify.
+
+If relevant, include formula blocks using <code> or <pre> tags for emphasis. Style section backgrounds softly and keep tone highly motivational but conceptually accurate.
+`;
     console.log('Generating notes with prompt:', prompt);
 
     // Function to attempt generating notes and retry on failure
