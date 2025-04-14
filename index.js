@@ -3600,7 +3600,7 @@ app.post('/api/chat/ai', async (req, res) => {
       return res.status(401).json({ error: 'Invalid token or user not authenticated.' });
     }
 
-    const modelName = thinkingMode ? "gemini-2.5-pro-exp-03-25" : "gemini-2.5-pro-exp-03-25"; // Toggle model
+    const modelName = thinkingMode ? "gemini-2.0-flash" : "gemini-2.0-flash"; // Toggle model
 
      // Fetch user data
      const userData = await Promise.all([
