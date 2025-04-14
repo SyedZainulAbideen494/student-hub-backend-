@@ -8610,11 +8610,16 @@ app.post("/api/saveGoal", async (req, res) => {
     
 
     console.log("Generating study plan with AI");
-
     // AI Integration Logic
     const generateStudyPlanWithRetry = async () => {
       let attempts = 0;
       const MAX_RETRIES = 10;
+
+      // Model declaration inside the API
+      const model = genAI.getGenerativeModel({
+        model: "gemini-2.0-flash",
+        safetySettings: safetySettings,
+      });
 
       while (attempts < MAX_RETRIES) {
         try {
@@ -8644,6 +8649,7 @@ app.post("/api/saveGoal", async (req, res) => {
 
     // Get the study plan by calling the retry function
     const studyPlan = await generateStudyPlanWithRetry();
+
 
     // Insert the study plan into the database
     const studyPlanQuery = "INSERT INTO study_plans (user_id, study_plan) VALUES (?, ?)";
