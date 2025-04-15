@@ -8113,7 +8113,8 @@ app.post('/api/notes/generate', async (req, res) => {
     You are an expert educator and master note designer for premium study apps. Generate top-tier, deeply informative, and visually stunning notes on the topic:  "${topic}". 
    
 These notes will be used in a high-end study app and must meet the following standards:
-
+  - Use **deep backgrounds** (#0a0a0a, #111) with **soft pastel highlights** (neon green, blush pink, soft violet).
+   - Use **text colors like #e0e0e0**, and accent colors sparingly.
 1. **Output must be in clean, semantic, modern HTML (NO markdown).**
 2. **Visually aesthetic and responsive for both desktop and mobile**.
 3. Use the following HTML tags for layout, readability, and structure:
