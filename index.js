@@ -11707,7 +11707,7 @@ app.post("/api/chat/assignment", async (req, res) => {
         <head>
           <style>
             body { font-family: Arial, sans-serif; line-height: 1.6; margin: 20px; }
-            h1, h2, h3 { color: #333; }
+            h1, h2, h3 { color: white; }
             img { max-width: 100%; height: auto; margin: 10px 0; }
             .download-img { display: block; margin-top: 5px; text-decoration: none; color: blue; }
           </style>
@@ -13301,7 +13301,6 @@ app.post('/api/notify/doxsify', (req, res) => {
     res.status(200).send('Success');
   });
 });
-
 
 // Endpoint to log download requests
 app.post('/api/log-download/doxsify', (req, res) => {
