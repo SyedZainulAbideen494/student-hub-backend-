@@ -524,6 +524,34 @@ const verifyjwt = (req, res) => {
 app.get("/userAuth", verifyjwt, (req, res) => {});
 
 
+
+function generateOTP() {
+  const digits = '0123456789';
+  let otp = '';
+  for (let i = 0; i < 6; i++) {
+      otp += digits[Math.floor(Math.random() * 10)];
+  }
+  return otp;
+}
+
+// Route to end the current event
+const transporterSec = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+      user: 'edusiyfy@gmail.com',
+      pass: 'hvht twsf ejma juft',
+  },
+});
+
+
+// Route to end the current event
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+      user: 'edusyfy@gmail.com',
+      pass: 'xqfw mmov xlrg gukf',
+  },
+});
 // Simplified Login Route (no OTP)
 app.post("/login", (req, res) => {
   const identifier = req.body.identifier;
@@ -565,6 +593,58 @@ app.post("/login", (req, res) => {
       res.json({ auth: false, message: "User not found" });
     }
   });
+});
+
+
+// OTP verification route
+app.post("/verify-otp", (req, res) => {
+  const phone = req.body.phone;
+  const otp = req.body.otp;
+
+  if (!phone || !otp) return res.status(400).send({ message: "Phone and OTP are required" });
+
+  connection.query(
+      "SELECT * FROM 2fa WHERE phone_number = ? AND otp = ? AND active = 1 AND created_at >= NOW() - INTERVAL 2 MINUTE",
+      [phone, otp],
+      (err, result) => {
+          if (err) return res.status(500).send({ message: "Database error while verifying OTP", error: err });
+
+          if (result.length > 0) {
+              connection.query(
+                  "SELECT * FROM users WHERE phone_number = ?",
+                  [phone],
+                  (userErr, userResult) => {
+                      if (userErr) return res.status(500).send({ message: "Database error while fetching user details", error: userErr });
+
+                      if (userResult.length > 0) {
+                          const userId = userResult[0].id;
+                          connection.query(
+                              "UPDATE 2fa SET active = 0 WHERE phone_number = ? AND otp = ?",
+                              [phone, otp],
+                              (updateErr) => {
+                                  if (updateErr) return res.status(500).send({ message: "Error updating OTP status", error: updateErr });
+
+                                  const token = jwt.sign({ id: userId }, "jwtsecret", { expiresIn: 86400 });
+                                  connection.query(
+                                      "INSERT INTO session (user_id, jwt) VALUES (?, ?)",
+                                      [userId, token],
+                                      (sessionErr) => {
+                                          if (sessionErr) return res.status(500).send({ message: "Error creating session", error: sessionErr });
+                                          res.json({ auth: true, token: token, result: userResult });
+                                      }
+                                  );
+                              }
+                          );
+                      } else {
+                          res.status(404).send({ message: "User not found" });
+                      }
+                  }
+              );
+          } else {
+              res.json({ auth: false, message: "Invalid OTP or OTP expired" });
+          }
+      }
+  );
 });
 
 app.post('/add/tasks', async (req, res) => {
