@@ -524,26 +524,7 @@ const verifyjwt = (req, res) => {
 app.get("/userAuth", verifyjwt, (req, res) => {});
 
 
-
-function generateOTP() {
-  const digits = '0123456789';
-  let otp = '';
-  for (let i = 0; i < 6; i++) {
-      otp += digits[Math.floor(Math.random() * 10)];
-  }
-  return otp;
-}
-
-// Route to end the current event
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-      user: 'edusyfy@gmail.com',
-      pass: 'xqfw mmov xlrg gukf',
-  },
-});
-
-// Login route
+// Simplified Login Route (no OTP)
 app.post("/login", (req, res) => {
   const identifier = req.body.identifier;
   const password = req.body.password;
@@ -565,37 +546,15 @@ app.post("/login", (req, res) => {
         if (error) return res.status(500).send({ message: "Password comparison error", error });
 
         if (response) {
-          // Correct password
-          const otp = generateOTP();
+          const userId = result[0].id;
+          const token = jwt.sign({ id: userId }, "jwtsecret", { expiresIn: 86400 });
+
           connection.query(
-            "INSERT INTO 2fa (phone_number, otp, active) VALUES (?, ?, 1)",
-            [result[0].phone_number, otp],
-            (err, otpResult) => {
-              if (err) return res.status(500).send({ message: "Error generating OTP", error: err });
-
-              // Send OTP via Email
-              const mailOptions = {
-                from: 'edusyfy@gmail.com',
-                to: result[0].email,
-                subject: 'Your OTP for Secure Login',
-                html: `
-                  <p>Hello ${result[0].unique_id},</p>
-                  <p>We’ve received a login request for your account. To complete the login process, please use the One-Time Password (OTP) below:</p>
-                  <h2>${otp}</h2>
-                  <p>Enter this OTP on the login page to complete the process.</p>
-                  <p>If you did not request this login, please ignore this email.</p>
-                  <p>Best regards,<br>Edusify</p>
-                `
-              };
-
-              transporter.sendMail(mailOptions, (err, info) => {
-                if (err) {
-                  console.log('Error sending email:', err);
-                  return res.status(500).send({ message: "Error sending OTP email" });
-                }
-                console.log('Email sent:', info.response);
-                res.json({ auth: true, message: "OTP sent for verification", phone: result[0].phone_number, email: result[0].email });
-              });
+            "INSERT INTO session (user_id, jwt) VALUES (?, ?)",
+            [userId, token],
+            (sessionErr) => {
+              if (sessionErr) return res.status(500).send({ message: "Error creating session", error: sessionErr });
+              res.json({ auth: true, token: token, result: result[0] });
             }
           );
         } else {
@@ -606,57 +565,6 @@ app.post("/login", (req, res) => {
       res.json({ auth: false, message: "User not found" });
     }
   });
-});
-
-// OTP verification route
-app.post("/verify-otp", (req, res) => {
-  const phone = req.body.phone;
-  const otp = req.body.otp;
-
-  if (!phone || !otp) return res.status(400).send({ message: "Phone and OTP are required" });
-
-  connection.query(
-      "SELECT * FROM 2fa WHERE phone_number = ? AND otp = ? AND active = 1 AND created_at >= NOW() - INTERVAL 2 MINUTE",
-      [phone, otp],
-      (err, result) => {
-          if (err) return res.status(500).send({ message: "Database error while verifying OTP", error: err });
-
-          if (result.length > 0) {
-              connection.query(
-                  "SELECT * FROM users WHERE phone_number = ?",
-                  [phone],
-                  (userErr, userResult) => {
-                      if (userErr) return res.status(500).send({ message: "Database error while fetching user details", error: userErr });
-
-                      if (userResult.length > 0) {
-                          const userId = userResult[0].id;
-                          connection.query(
-                              "UPDATE 2fa SET active = 0 WHERE phone_number = ? AND otp = ?",
-                              [phone, otp],
-                              (updateErr) => {
-                                  if (updateErr) return res.status(500).send({ message: "Error updating OTP status", error: updateErr });
-
-                                  const token = jwt.sign({ id: userId }, "jwtsecret", { expiresIn: 86400 });
-                                  connection.query(
-                                      "INSERT INTO session (user_id, jwt) VALUES (?, ?)",
-                                      [userId, token],
-                                      (sessionErr) => {
-                                          if (sessionErr) return res.status(500).send({ message: "Error creating session", error: sessionErr });
-                                          res.json({ auth: true, token: token, result: userResult });
-                                      }
-                                  );
-                              }
-                          );
-                      } else {
-                          res.status(404).send({ message: "User not found" });
-                      }
-                  }
-              );
-          } else {
-              res.json({ auth: false, message: "Invalid OTP or OTP expired" });
-          }
-      }
-  );
 });
 
 app.post('/add/tasks', async (req, res) => {
@@ -3141,12 +3049,12 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     // Send the email in a non-blocking way
     const mailOptions = {
       to: user.email,
-      from: 'edusyfy@gmail.com',
+      from: 'edusiyfy@gmail.com',
       subject: 'Password Reset Request',
       text: `Hi ${user.name || 'there'},\n\nWe received a request to reset your password. You can reset it by clicking on the link below:\n\n${resetLink}\n\nIf you did not request this, please ignore this email.\n\nBest regards,\nYour Edusify Team`
     };
 
-    transporter.sendMail(mailOptions, (err, info) => {
+    transporterSec.sendMail(mailOptions, (err, info) => {
       if (err) {
         console.log('Error sending email:', err);
         return res.status(500).json({ error: 'Error sending email' });
@@ -7664,14 +7572,6 @@ app.get('/user-resources/:userId', async (req, res) => {
   }
 });
 
-// Route to end the current event
-const transporterSec = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-      user: 'edusiyfy@gmail.com',
-      pass: 'hvht twsf ejma juft',
-  },
-});
 
 // Route to fetch all journals
 app.get('/journals', async (req, res) => {
