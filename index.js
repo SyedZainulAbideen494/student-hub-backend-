@@ -5560,66 +5560,6 @@ app.put('/api/birthday', async (req, res) => {
 
 
 
-
-const sendBirthdayEmail = async (user) => {
-  const { email, unique_id, birthday } = user;
-
-  const emailBody = `
-  <html>
-    <body style="font-family: Arial, sans-serif; background-color: #000000; padding: 20px;">
-      <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 30px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);">
-        <h2 style="color: #000000; text-align: center; font-size: 28px; font-weight: bold;">Happy Birthday, ${unique_id}!</h2>
-        <p style="font-size: 16px; color: #000000; text-align: center; margin-top: 10px;">We at Edusify wish you a wonderful day full of joy and success. 🎉</p>
-        <p style="font-size: 16px; color: #000000; text-align: center; margin-top: 10px;">May this year bring you all the happiness and achievements you deserve!</p>
-        <div style="text-align: center; margin-top: 30px;">
-          <a href="https://edusify.vercel.app" style="background-color: #000000; color: #ffffff; text-decoration: none; padding: 14px 20px; border-radius: 8px; font-size: 18px; font-weight: bold; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2); transition: background-color 0.3s;">
-            Click for Surprise
-          </a>
-        </div>
-      </div>
-    </body>
-  </html>
-`;
-
-
-
-  try {
-    await transporter.sendMail({
-      from: 'edusyfy@gmail.com', // Your sending email
-      to: email,
-      subject: `Happy Birthday, ${unique_id}! 🎉`,
-      html: emailBody,
-    });
-    console.log(`Birthday email sent to ${unique_id} (${email})`); // Log the user who got the email
-  } catch (error) {
-    console.error('Error sending email:', error);
-  }
-};
-
-// Function to check for users with today's birthday
-const checkAndSendBirthdayEmails = async () => {
-  const today = new Date().toISOString().split('T')[0]; // Get today's date in YYYY-MM-DD format
-
-  try {
-    // Fetch users with today's birthday from the database (make sure to replace with actual query function)
-    const today = new Date();
-    const month = today.getMonth() + 1; // JavaScript months are zero-indexed, so add 1
-    const date = today.getDate();
-    
-    // Modify your query to match the month and day, ignoring the year
-    const rows = await query('SELECT * FROM users WHERE MONTH(birthday) = ? AND DAY(birthday) = ?', [month, date]);
-    
-
-    rows.forEach((user) => {
-      sendBirthdayEmail(user); // Send email to each user with today's birthday
-    });
-  } catch (error) {
-    console.error('Error fetching users:', error);
-  }
-};
-
-cron.schedule('0 0 * * *', checkAndSendBirthdayEmails); // '0 0 * * *' means 12:00 AM every day
-
 app.post('/api/reports/generate', async (req, res) => {
   const { token } = req.body; // Token from the frontend
 
