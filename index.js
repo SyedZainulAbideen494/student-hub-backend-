@@ -450,7 +450,7 @@ app.post('/generate-alternatives', (req, res) => {
 app.post('/signup', (req, res) => {
   const { password, email, unique_id, phone_number } = req.body;
 
-  // Query to check if email or phone number already exists
+  // Check if email or phone number already exists
   const checkQuery = 'SELECT * FROM users WHERE email = ? OR phone_number = ?';
   connection.query(checkQuery, [email, phone_number], (checkErr, checkResults) => {
     if (checkErr) {
@@ -462,7 +462,7 @@ app.post('/signup', (req, res) => {
       return res.status(400).json({ error: 'Email or phone number already in use' });
     }
 
-    // Proceed with hashing the password and inserting the new user
+    // Hash password and insert new user
     bcrypt.hash(password, saltRounds, (hashErr, hash) => {
       if (hashErr) {
         console.error('Error hashing password:', hashErr);
@@ -478,11 +478,11 @@ app.post('/signup', (req, res) => {
           return res.status(500).json({ error: 'Internal server error' });
         }
 
-        // User successfully registered, now generate JWT token
+        // Generate JWT token
         const userId = insertResults.insertId;
         const token = jwt.sign({ id: userId }, 'jwtsecret', { expiresIn: 86400 }); // 24 hours
 
-        // Insert the token into the session table
+        // Create session
         connection.query(
           'INSERT INTO session (user_id, jwt) VALUES (?, ?)',
           [userId, token],
@@ -492,20 +492,8 @@ app.post('/signup', (req, res) => {
               return res.status(500).send({ message: 'Error creating session', error: sessionErr });
             }
 
-            // Insert subscription with 1-hour expiry
-            const subscriptionQuery = `
-              INSERT INTO subscriptions (user_id, subscription_plan, payment_status, payment_date, expiry_date)
-              VALUES (?, 'Monthly Plan', 'Paid', NOW(), DATE_ADD(NOW(), INTERVAL 1 HOUR))
-            `;
-            connection.query(subscriptionQuery, [userId], (subscriptionErr) => {
-              if (subscriptionErr) {
-                console.error('Error inserting subscription:', subscriptionErr);
-                return res.status(500).send({ message: 'Error inserting subscription', error: subscriptionErr });
-              }
-
-              console.log('User registration, session creation, and subscription successful!');
-              res.json({ auth: true, token: token });
-            });
+            console.log('User registration and session creation successful!');
+            res.json({ auth: true, token: token });
           }
         );
       });
