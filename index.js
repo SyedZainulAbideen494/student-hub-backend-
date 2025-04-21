@@ -12186,6 +12186,8 @@ app.post('/api/quiz-from-topic-subject', async (req, res) => {
   let statusCode = 200;
 
   try {
+    console.log(`Received request - Subject: ${subject}, Topic: ${topic}, API Key: ${apiKey}`);
+
     // 1. Validate API key
     const rows = await query(
       'SELECT * FROM api_keys WHERE `key` = ?',
@@ -12276,6 +12278,7 @@ Rules:
       'INSERT INTO api_logs (api_key, endpoint, response_time_ms, status_code, cost) VALUES (?, ?, ?, ?, ?)',
       [apiKey, endpoint, responseTime, statusCode, cost]
     );
+    console.log('Success: Quiz generated successfully.');
 
     // 5. Respond
     res.json({ success: true, quiz: quizQuestions });
@@ -12305,6 +12308,7 @@ app.post('/api/quiz-from-exam', async (req, res) => {
   let statusCode = 200;
 
   try {
+    console.log(`Received request - Exam: ${examType}, API Key: ${apiKey}`);
     // Step 1: Validate API key
     const [rows] = await connection.promise().query(
       'SELECT * FROM api_keys WHERE `key` = ?',
@@ -12424,6 +12428,7 @@ Rules:
       'INSERT INTO api_logs (api_key, endpoint, response_time_ms, status_code, cost) VALUES (?, ?, ?, ?, ?)',
       [apiKey, endpoint, responseTime, statusCode, cost]
     );
+    console.log('Success: Quiz generated successfully.');
 
     // Step 6: Respond
     res.json({ success: true, quiz });
@@ -12452,6 +12457,7 @@ app.post('/api/quiz-from-pdf', uploadPDF.single('pdf'), async (req, res) => {
   const cost = 2.5;
 
   try {
+    console.log(`Received request - quiz from PDF, API Key: ${apiKey}`);
     // Step 1: Validate API key and check credit balance
     const rows = await query('SELECT * FROM api_keys WHERE `key` = ?', [apiKey]);
 
@@ -12534,6 +12540,7 @@ app.post('/api/quiz-from-pdf', uploadPDF.single('pdf'), async (req, res) => {
       'INSERT INTO api_logs (api_key, endpoint, response_time_ms, status_code, cost) VALUES (?, ?, ?, ?, ?)',
       [apiKey, endpoint, responseTime, statusCode, cost]
     );
+    console.log('Success: Quiz generated successfully.');
 
     // Step 7: Return response
     res.json({ success: true, quiz: quizQuestions });
@@ -12561,6 +12568,8 @@ app.post('/api/quiz-from-text', async (req, res) => {
   const cost = 1.5;
 
   try {
+    console.log(`Received request - quiz from TEXT: ${notes}, API Key: ${apiKey}`);
+
     const rows = await query('SELECT * FROM api_keys WHERE `key` = ?', [apiKey]);
 
     if (!rows.length) {
@@ -12631,6 +12640,7 @@ app.post('/api/quiz-from-text', async (req, res) => {
       'INSERT INTO api_logs (api_key, endpoint, response_time_ms, status_code, cost) VALUES (?, ?, ?, ?, ?)',
       [apiKey, endpoint, responseTime, statusCode, cost]
     );
+    console.log('Success: Quiz generated successfully.');
 
     res.json({ success: true, quiz: quizQuestions });
 
@@ -12657,6 +12667,8 @@ app.post('/api/flashcards-from-topic', async (req, res) => {
   const cost = 1.5;
 
   try {
+    console.log(`Received request - flashcards: ${subject}, Topic: ${topic}, API Key: ${apiKey}`);
+
     const rows = await query('SELECT * FROM api_keys WHERE `key` = ?', [apiKey]);
 
     if (!rows.length) {
@@ -12712,7 +12724,7 @@ app.post('/api/flashcards-from-topic', async (req, res) => {
       'INSERT INTO api_logs (api_key, endpoint, response_time_ms, status_code, cost) VALUES (?, ?, ?, ?, ?)',
       [apiKey, endpoint, responseTime, statusCode, cost]
     );
-
+    console.log('Success: flashcards generated successfully.');
     res.json({ success: true, flashcards });
 
   } catch (error) {
@@ -12739,6 +12751,7 @@ app.post('/api/flashcards-from-pdf', uploadPDF.single('pdf'), async (req, res) =
   const cost = 2.5;
 
   try {
+    console.log(`Received request - flashcards from PDF, API Key: ${apiKey}`);
     const rows = await query('SELECT * FROM api_keys WHERE `key` = ?', [apiKey]);
     if (!rows.length) {
       statusCode = 401;
@@ -12804,6 +12817,7 @@ app.post('/api/flashcards-from-pdf', uploadPDF.single('pdf'), async (req, res) =
       'INSERT INTO api_logs (api_key, endpoint, response_time_ms, status_code, cost) VALUES (?, ?, ?, ?, ?)',
       [apiKey, endpoint, responseTime, statusCode, cost]
     );
+    console.log('Success: flashcards generated successfully.');
 
     res.json({ success: true, flashcards });
 
@@ -12831,6 +12845,8 @@ app.post('/api/flashcards-from-text', async (req, res) => {
   let statusCode = 200;
 
   try {
+    console.log(`Received request flashcards from TEXT: ${text}, API Key: ${apiKey}`);
+
     // 1. Validate API key
     const rows = await query(
       'SELECT * FROM api_keys WHERE `key` = ?',
@@ -12923,7 +12939,7 @@ Rules:
       'INSERT INTO api_logs (api_key, endpoint, response_time_ms, status_code, cost) VALUES (?, ?, ?, ?, ?)',
       [apiKey, endpoint, responseTime, statusCode, cost]
     );
-
+    console.log('Success: flashcards generated successfully.');
     // 6. Return the generated flashcards
     res.json({ success: true, flashcards });
 
@@ -12990,6 +13006,7 @@ app.post('/generate-api-key', async (req, res) => {
       if (err) {
         return res.status(500).json({ error: 'Error generating API key' });
       }
+      console.log(`Generated API key for user: ${userId}`);
       return res.status(200).json({
         message: 'API key generated successfully',
         key: apiKey,
@@ -13121,7 +13138,7 @@ app.post("/verify-order/api", async (req, res) => {
       `UPDATE api_keys SET credit = credit + ? WHERE user_id = ?`,
       [amount, userId]
     );
-
+    console.log(`${userId} topped up: ₹${amount} for API`);
     res.json({ success: true });
   } catch (err) {
     console.error("Database error:", err);
