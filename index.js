@@ -12172,6 +12172,1021 @@ app.get("/search/ai/research", async (req, res) => {
   res.json(results);
 });
 
+
+
+
+{/* API for Eusify */}
+
+app.post('/api/quiz-from-topic-subject', async (req, res) => {
+  const { apiKey, subject, topic } = req.body;
+
+  const endpoint = '/api/quiz-from-topic-subject';
+  const cost = 1.5;
+  const startTime = Date.now();
+  let statusCode = 200;
+
+  try {
+    // 1. Validate API key
+    const rows = await query(
+      'SELECT * FROM api_keys WHERE `key` = ?',
+      [apiKey]
+    );
+
+    if (!rows.length) {
+      statusCode = 401;
+      return res.status(statusCode).json({ error: 'Invalid API key' });
+    }
+
+    const user = rows[0];
+
+    if (user.credit < cost) {
+      statusCode = 402;
+      return res.status(statusCode).json({ error: 'Insufficient credits. Top up to continue.' });
+    }
+
+    // 2. Prompt
+    const prompt = `
+Generate a valid JSON array of 15 multiple-choice questions for the following:
+- Subject: ${subject}
+- Topic: ${topic}
+
+Each question must strictly follow this format:
+[
+  {
+    "question": "string",
+    "options": ["string", "string", "string", "string"],
+    "correct_answer": "string"
+  }
+]
+
+Rules:
+1. Return only the JSON array without any explanations, comments, or markdown.
+2. The "question" field can include alphanumeric characters and basic punctuation.
+3. Each "options" array must have exactly 4 unique strings.
+4. Ensure the JSON is properly formatted and parsable without errors.
+    `.trim();
+
+    const MAX_RETRIES = 3;
+
+    const generateQuizWithRetry = async () => {
+      let attempts = 0;
+
+      while (attempts < MAX_RETRIES) {
+        try {
+          const chat = model.startChat({
+            history: [
+              { role: 'user', parts: [{ text: 'Hello' }] },
+              { role: 'model', parts: [{ text: 'I can help generate quizzes for your study!' }] },
+            ],
+          });
+
+          const result = await chat.sendMessage(prompt);
+          const rawResponse = await result.response.text();
+
+          const sanitizedResponse = rawResponse
+            .replace(/```(?:json)?/g, '')
+            .trim();
+
+          try {
+            const quizQuestions = JSON.parse(sanitizedResponse);
+            return quizQuestions;
+          } catch (parseError) {
+            console.error('JSON parse error:', parseError);
+            throw new Error('Invalid JSON from AI');
+          }
+        } catch (error) {
+          attempts++;
+          if (attempts === MAX_RETRIES) throw error;
+          await delay(2000);
+        }
+      }
+    };
+
+    const quizQuestions = await generateQuizWithRetry();
+
+    // 3. Deduct credits
+    await query(
+      'UPDATE api_keys SET credit = credit - ? WHERE id = ?',
+      [cost, user.id]
+    );
+
+    // 4. Log usage
+    const responseTime = Date.now() - startTime;
+    await query(
+      'INSERT INTO api_logs (api_key, endpoint, response_time_ms, status_code, cost) VALUES (?, ?, ?, ?, ?)',
+      [apiKey, endpoint, responseTime, statusCode, cost]
+    );
+
+    // 5. Respond
+    res.json({ success: true, quiz: quizQuestions });
+
+  } catch (error) {
+    console.error('Error in /api/quiz-from-topic-subject:', error);
+    statusCode = 500;
+    const responseTime = Date.now() - startTime;
+
+    // Log failed attempt (cost = 0)
+    await query(
+      'INSERT INTO api_logs (api_key, endpoint, response_time_ms, status_code, cost) VALUES (?, ?, ?, ?, ?)',
+      [apiKey, endpoint, responseTime, statusCode, 0]
+    );
+
+    res.status(statusCode).json({ error: 'Failed to generate quiz' });
+  }
+});
+
+
+app.post('/api/quiz-from-exam', async (req, res) => {
+  const { apiKey, examType } = req.body;
+
+  const startTime = Date.now();
+  const endpoint = '/api/quiz-from-exam';
+  const cost = 8;
+  let statusCode = 200;
+
+  try {
+    // Step 1: Validate API key
+    const [rows] = await connection.promise().query(
+      'SELECT * FROM api_keys WHERE `key` = ?',
+      [apiKey]
+    );
+
+    if (!rows.length) {
+      statusCode = 401;
+      return res.status(statusCode).json({ error: 'Invalid API key' });
+    }
+
+    const user = rows[0];
+
+    if (user.credit < cost) {
+      statusCode = 402;
+      return res.status(statusCode).json({ error: 'Insufficient credits. Top up to continue.' });
+    }
+
+    // Step 2: Difficulty level prompt
+    const difficultyMapping = {
+      NEET: "Medical-level conceptual MCQs, multi-step application, assertion-trap questions",
+      JEE: "Advanced problem-solving MCQs, physics/math-heavy, tricky conceptual traps",
+      UPSC: "Deep analytical MCQs, historical case studies, multiple-correct logic-based questions",
+      GATE: "Engineering-level conceptual MCQs with applied numerical problem-solving",
+      CAT: "Toughest Quantitative Aptitude, tricky Logical Reasoning, high-stakes Data Interpretation",
+      GMAT: "Advanced Verbal Reasoning, Quant traps, logic-heavy decision-making MCQs",
+      GRE: "Tricky Analytical Reasoning, deep vocabulary MCQs, passage-based inference MCQs",
+      SAT: "High-school level logical & conceptual MCQs with complex wording",
+      CLAT: "Legal MCQs with case-law reasoning, logical argumentation",
+      Banking: "Financial Aptitude MCQs, heavy numerical-based reasoning",
+      SSC: "Toughest General Knowledge MCQs, historical traps, multiple-correct logic",
+      CUET: "University entrance-level hardcore subject-based reasoning MCQs"
+    };
+
+    const difficulty = difficultyMapping[examType] || "High-level competitive MCQs with multi-step reasoning";
+    const generatedQuestions = new Set();
+
+    const generateQuizBatch = async (batchSize) => {
+      const prompt = `
+Generate exactly ${batchSize} extremely HARDCORE MCQs with tricky traps, multi-step reasoning, and highest difficulty level for a ${examType} exam.
+
+- Exam Type: ${examType}
+- Difficulty Level: ${difficulty}
+
+### Output (Strict JSON array only):
+[
+  {
+    "question": "string",
+    "options": ["string", "string", "string", "string"],
+    "correct_answer": "string"
+  }
+]
+
+Rules:
+1. Only return valid JSON array of ${batchSize} objects.
+2. Each question should require deep conceptual understanding or tricky logic.
+3. No explanation or markdown — just pure JSON.
+      `.trim();
+
+      let attempts = 0;
+      const MAX_RETRIES = 3;
+
+      while (attempts < MAX_RETRIES) {
+        try {
+          const chat = model.startChat({
+            history: [
+              { role: 'user', parts: [{ text: 'Hello' }] },
+              { role: 'model', parts: [{ text: 'I can generate high-quality quizzes for competitive exams!' }] },
+            ],
+          });
+
+          const result = await chat.sendMessage(prompt);
+          const rawResponse = await result.response.text();
+
+          const sanitized = rawResponse
+            .replace(/```(?:json)?/g, '')
+            .replace(/\,[\s\r\n]*\]/g, ']')
+            .trim();
+
+          let quizQuestions = JSON.parse(sanitized);
+
+          quizQuestions = quizQuestions.filter(q => !generatedQuestions.has(q.question));
+          quizQuestions.forEach(q => generatedQuestions.add(q.question));
+
+          if (Array.isArray(quizQuestions) && quizQuestions.length === batchSize) {
+            return quizQuestions;
+          } else {
+            console.error('Incorrect number of questions. Retrying...');
+            attempts++;
+          }
+        } catch (err) {
+          console.error(`Attempt ${attempts + 1} failed:`, err);
+          attempts++;
+          await delay(2000);
+        }
+      }
+
+      throw new Error('Failed to generate quiz batch after multiple attempts');
+    };
+
+    // Step 3: Generate 5 batches of 10 = 50 questions
+    let quiz = [];
+    for (let i = 0; i < 5; i++) {
+      const batch = await generateQuizBatch(10);
+      quiz = quiz.concat(batch);
+    }
+
+    // Step 4: Deduct credits
+    await connection.promise().query(
+      'UPDATE api_keys SET credit = credit - ? WHERE id = ?',
+      [cost, user.id]
+    );
+
+    // Step 5: Log usage
+    const responseTime = Date.now() - startTime;
+    await connection.promise().query(
+      'INSERT INTO api_logs (api_key, endpoint, response_time_ms, status_code, cost) VALUES (?, ?, ?, ?, ?)',
+      [apiKey, endpoint, responseTime, statusCode, cost]
+    );
+
+    // Step 6: Respond
+    res.json({ success: true, quiz });
+
+  } catch (err) {
+    console.error('Error in /api/quiz-from-exam:', err);
+    statusCode = 500;
+    const responseTime = Date.now() - startTime;
+
+    await connection.promise().query(
+      'INSERT INTO api_logs (api_key, endpoint, response_time_ms, status_code, cost) VALUES (?, ?, ?, ?, ?)',
+      [apiKey, endpoint, responseTime, statusCode, 0.00]
+    );
+
+    res.status(statusCode).json({ error: 'Failed to generate quiz' });
+  }
+});
+
+
+app.post('/api/quiz-from-pdf', uploadPDF.single('pdf'), async (req, res) => {
+  const { apiKey } = req.body;
+
+  const startTime = Date.now();
+  let statusCode = 200;
+  const endpoint = '/api/quiz-from-pdf';
+  const cost = 2.5;
+
+  try {
+    // Step 1: Validate API key and check credit balance
+    const rows = await query('SELECT * FROM api_keys WHERE `key` = ?', [apiKey]);
+
+    if (!rows.length) {
+      statusCode = 401;
+      return res.status(statusCode).json({ error: 'Invalid API key' });
+    }
+
+    const user = rows[0];
+
+    if (user.credit < cost) {
+      statusCode = 402;
+      return res.status(statusCode).json({ error: 'Insufficient credits. Top up to continue.' });
+    }
+
+    // Step 2: Extract text from the uploaded PDF
+    const pdfPath = req.file.path;
+    const pdfText = await pdfParse(fs.readFileSync(pdfPath)).then((data) => data.text);
+
+    if (!pdfText) {
+      statusCode = 400;
+      return res.status(statusCode).json({ error: 'Failed to extract text from PDF' });
+    }
+
+    // Step 3: AI prompt
+    const prompt = `
+      Generate a valid JSON array of 15 multiple-choice questions from the following text:
+
+      - Text: "${pdfText}"
+
+      Each question must strictly follow this format:
+      [
+        {
+          "question": "string",
+          "options": ["string", "string", "string", "string"],
+          "correct_answer": "string"
+        }
+      ]
+
+      Rules:
+      1. Return only the JSON array without any explanations or comments.
+      2. Ensure each question and options are meaningful and unique.
+      3. Format the JSON properly.
+    `.trim();
+
+    // Step 4: Retry logic
+    const generateQuizWithRetry = async () => {
+      let attempts = 0;
+
+      while (attempts < MAX_RETRIES) {
+        try {
+          const chat = model.startChat({
+            history: [
+              { role: 'user', parts: [{ text: 'Hello' }] },
+              { role: 'model', parts: [{ text: 'I can help generate quizzes from text!' }] },
+            ],
+          });
+
+          const result = await chat.sendMessage(prompt);
+          const rawResponse = await result.response.text();
+
+          const sanitizedResponse = rawResponse.replace(/```(?:json)?/g, '').trim();
+          return JSON.parse(sanitizedResponse);
+        } catch (error) {
+          attempts++;
+          if (attempts === MAX_RETRIES) throw new Error('Failed after multiple attempts');
+          await delay(2000);
+        }
+      }
+    };
+
+    const quizQuestions = await generateQuizWithRetry();
+
+    // Step 5: Deduct credit
+    await query('UPDATE api_keys SET credit = credit - ? WHERE id = ?', [cost, user.id]);
+
+    // Step 6: Log usage
+    const responseTime = Date.now() - startTime;
+    await query(
+      'INSERT INTO api_logs (api_key, endpoint, response_time_ms, status_code, cost) VALUES (?, ?, ?, ?, ?)',
+      [apiKey, endpoint, responseTime, statusCode, cost]
+    );
+
+    // Step 7: Return response
+    res.json({ success: true, quiz: quizQuestions });
+
+  } catch (error) {
+    console.error('Error in quiz generation:', error);
+    statusCode = 500;
+    const responseTime = Date.now() - startTime;
+
+    await query(
+      'INSERT INTO api_logs (api_key, endpoint, response_time_ms, status_code, cost) VALUES (?, ?, ?, ?, ?)',
+      [apiKey, endpoint, responseTime, statusCode, 0.00]
+    );
+
+    res.status(statusCode).json({ error: 'Failed to generate quiz' });
+  }
+});
+
+
+app.post('/api/quiz-from-text', async (req, res) => {
+  const { apiKey, notes } = req.body;
+  const startTime = Date.now();
+  let statusCode = 200;
+  const endpoint = '/api/quiz-from-text';
+  const cost = 1.5;
+
+  try {
+    const rows = await query('SELECT * FROM api_keys WHERE `key` = ?', [apiKey]);
+
+    if (!rows.length) {
+      statusCode = 401;
+      return res.status(statusCode).json({ error: 'Invalid API key' });
+    }
+
+    const user = rows[0];
+
+    if (user.credit < cost) {
+      statusCode = 402;
+      return res.status(statusCode).json({ error: 'Insufficient credits. Top up to continue.' });
+    }
+
+    const prompt = `
+      Generate a valid JSON array of 15 multiple-choice questions based on the following notes:
+
+      Notes:
+      ${notes}
+
+      Each question must strictly follow this format:
+      [
+        {
+          "question": "string",
+          "options": ["string", "string", "string", "string"],
+          "correct_answer": "string"
+        }
+      ]
+
+      Rules:
+      1. Return only the JSON array without any explanations, comments, or markdown.
+      2. Each question and options must be meaningful, unique, and relevant to the notes.
+      3. The JSON must be properly formatted and parsable.
+    `.trim();
+
+    const generateQuizWithRetry = async () => {
+      let attempts = 0;
+
+      while (attempts < MAX_RETRIES) {
+        try {
+          const chat = model.startChat({
+            history: [
+              { role: 'user', parts: [{ text: 'Hello' }] },
+              { role: 'model', parts: [{ text: 'Let’s generate a quiz from your notes!' }] },
+            ],
+          });
+
+          const result = await chat.sendMessage(prompt);
+          const rawResponse = await result.response.text();
+
+          const sanitizedResponse = rawResponse.replace(/```(?:json)?/g, '').trim();
+
+          return JSON.parse(sanitizedResponse);
+        } catch (error) {
+          attempts++;
+          if (attempts === MAX_RETRIES) throw new Error('Failed after multiple attempts');
+          await delay(2000);
+        }
+      }
+    };
+
+    const quizQuestions = await generateQuizWithRetry();
+
+    await query('UPDATE api_keys SET credit = credit - ? WHERE id = ?', [cost, user.id]);
+
+    const responseTime = Date.now() - startTime;
+    await query(
+      'INSERT INTO api_logs (api_key, endpoint, response_time_ms, status_code, cost) VALUES (?, ?, ?, ?, ?)',
+      [apiKey, endpoint, responseTime, statusCode, cost]
+    );
+
+    res.json({ success: true, quiz: quizQuestions });
+
+  } catch (error) {
+    console.error('Error in public quiz-from-notes API:', error);
+    statusCode = 500;
+    const responseTime = Date.now() - startTime;
+
+    await query(
+      'INSERT INTO api_logs (api_key, endpoint, response_time_ms, status_code, cost) VALUES (?, ?, ?, ?, ?)',
+      [apiKey, endpoint, responseTime, statusCode, 0.00]
+    );
+
+    res.status(statusCode).json({ error: 'Failed to generate quiz' });
+  }
+});
+
+
+app.post('/api/flashcards-from-topic', async (req, res) => {
+  const { apiKey, subject, topic } = req.body;
+  const startTime = Date.now();
+  let statusCode = 200;
+  const endpoint = '/api/flashcards-from-topic';
+  const cost = 1.5;
+
+  try {
+    const rows = await query('SELECT * FROM api_keys WHERE `key` = ?', [apiKey]);
+
+    if (!rows.length) {
+      statusCode = 401;
+      return res.status(statusCode).json({ error: 'Invalid API key' });
+    }
+
+    const user = rows[0];
+
+    if (user.credit < cost) {
+      statusCode = 402;
+      return res.status(statusCode).json({ error: 'Insufficient credits. Top up to continue.' });
+    }
+
+    const prompt = `
+      Generate 15 flashcards for the subject: ${subject} and topic: ${topic}. 
+      Each flashcard should be a JSON object with 'question' and 'answer' fields.
+      Please do not include any additional text or formatting other than the required fields.
+    `.trim();
+
+    const generateFlashcardsWithRetry = async () => {
+      let attempts = 0;
+
+      while (attempts < MAX_RETRIES) {
+        try {
+          const chat = model.startChat({
+            history: [
+              { role: 'user', parts: [{ text: 'Hello' }] },
+              { role: 'model', parts: [{ text: 'Let’s generate flashcards!' }] },
+            ],
+          });
+
+          const result = await chat.sendMessage(prompt);
+          const rawResponse = await result.response.text();
+
+          const sanitizedResponse = rawResponse.replace(/```(?:json)?/g, '').trim();
+
+          return JSON.parse(sanitizedResponse);
+        } catch (error) {
+          attempts++;
+          if (attempts === MAX_RETRIES) throw new Error('Failed after multiple attempts');
+          await delay(2000);
+        }
+      }
+    };
+
+    const flashcards = await generateFlashcardsWithRetry();
+
+    await query('UPDATE api_keys SET credit = credit - ? WHERE id = ?', [cost, user.id]);
+
+    const responseTime = Date.now() - startTime;
+    await query(
+      'INSERT INTO api_logs (api_key, endpoint, response_time_ms, status_code, cost) VALUES (?, ?, ?, ?, ?)',
+      [apiKey, endpoint, responseTime, statusCode, cost]
+    );
+
+    res.json({ success: true, flashcards });
+
+  } catch (error) {
+    console.error('Error in public flashcards generation API:', error);
+    statusCode = 500;
+    const responseTime = Date.now() - startTime;
+
+    await query(
+      'INSERT INTO api_logs (api_key, endpoint, response_time_ms, status_code, cost) VALUES (?, ?, ?, ?, ?)',
+      [apiKey, endpoint, responseTime, statusCode, 0.00]
+    );
+
+    res.status(statusCode).json({ error: 'Failed to generate flashcards' });
+  }
+});
+
+
+
+app.post('/api/flashcards-from-pdf', uploadPDF.single('pdf'), async (req, res) => {
+  const { apiKey } = req.body;
+  const startTime = Date.now(); // ⏱️ Track start time
+  let statusCode = 200;
+  const endpoint = '/api/flashcards-from-pdf';
+  const cost = 2.5;
+
+  try {
+    const rows = await query('SELECT * FROM api_keys WHERE `key` = ?', [apiKey]);
+    if (!rows.length) {
+      statusCode = 401;
+      return res.status(statusCode).json({ error: 'Invalid API key' });
+    }
+
+    const user = rows[0];
+
+    if (user.credit < cost) {
+      statusCode = 402;
+      return res.status(statusCode).json({ error: 'Insufficient credits. Top up to continue.' });
+    }
+
+    const pdfPath = req.file.path;
+    const pdfText = await pdfParse(fs.readFileSync(pdfPath)).then((data) => data.text);
+    if (!pdfText) {
+      statusCode = 400;
+      return res.status(statusCode).json({ error: 'Failed to extract text from PDF' });
+    }
+
+    const prompt = `
+      Generate a valid JSON array of flashcards from the following text max 50 questions:
+      - Text: "${pdfText}"
+      Each flashcard must strictly follow this format:
+      [
+        { "question": "string", "answer": "string" }
+      ]
+      Rules:
+      1. Return only the JSON array without any explanations or comments.
+      2. Ensure each question and answer is meaningful and unique.
+      3. Format the JSON properly.
+    `.trim();
+
+    const generateFlashcardsWithRetry = async () => {
+      let attempts = 0;
+      while (attempts < MAX_RETRIES) {
+        try {
+          const chat = model.startChat({
+            history: [
+              { role: 'user', parts: [{ text: 'Hello' }] },
+              { role: 'model', parts: [{ text: 'I can help generate flashcards from text!' }] },
+            ],
+          });
+          const result = await chat.sendMessage(prompt);
+          const rawResponse = await result.response.text();
+          const sanitized = rawResponse.replace(/```(?:json)?/g, '').trim();
+
+          return JSON.parse(sanitized);
+        } catch (err) {
+          attempts++;
+          if (attempts === MAX_RETRIES) throw new Error('AI generation failed after retries');
+          await delay(2000);
+        }
+      }
+    };
+
+    const flashcards = await generateFlashcardsWithRetry();
+
+    await query('UPDATE api_keys SET credit = credit - ? WHERE id = ?', [cost, user.id]);
+
+    const responseTime = Date.now() - startTime;
+    await query(
+      'INSERT INTO api_logs (api_key, endpoint, response_time_ms, status_code, cost) VALUES (?, ?, ?, ?, ?)',
+      [apiKey, endpoint, responseTime, statusCode, cost]
+    );
+
+    res.json({ success: true, flashcards });
+
+  } catch (error) {
+    console.error('Error in flashcard generation:', error);
+    statusCode = 500;
+    const responseTime = Date.now() - startTime;
+
+    await query(
+      'INSERT INTO api_logs (api_key, endpoint, response_time_ms, status_code, cost) VALUES (?, ?, ?, ?, ?)',
+      [apiKey, endpoint, responseTime, statusCode, 0.00]
+    );
+
+    res.status(statusCode).json({ error: 'Failed to generate flashcards' });
+  }
+});
+
+
+app.post('/api/flashcards-from-text', async (req, res) => {
+  const { apiKey, text } = req.body;
+
+  const endpoint = '/api/flashcards-from-text';
+  const cost = 1.5;
+  const startTime = Date.now();
+  let statusCode = 200;
+
+  try {
+    // 1. Validate API key
+    const rows = await query(
+      'SELECT * FROM api_keys WHERE `key` = ?',
+      [apiKey]
+    );
+
+    if (!rows.length) {
+      statusCode = 401;
+      return res.status(statusCode).json({ error: 'Invalid API key' });
+    }
+
+    const user = rows[0];
+
+    if (user.credit < cost) {
+      statusCode = 402;
+      return res.status(statusCode).json({ error: 'Insufficient credits. Top up to continue.' });
+    }
+
+    // 2. Define AI prompt for generating flashcards from the text
+    const prompt = `
+Generate a valid JSON array of flashcards based on the following notes:
+- text: ${text}
+
+Each flashcard should follow this format:
+[
+  {
+    "question": "string",
+    "answer": "string"
+  }
+]
+
+Rules:
+1. Ensure the flashcards are accurate, concise, and relevant to the subject.
+2. Return only the JSON array without any explanations or comments.
+3. Format the JSON properly.
+    `.trim();
+
+    const MAX_RETRIES = 3;
+
+    // 3. Retry logic for AI generation
+    const generateFlashcardsWithRetry = async () => {
+      let attempts = 0;
+
+      while (attempts < MAX_RETRIES) {
+        try {
+          const chat = model.startChat({
+            history: [
+              { role: 'user', parts: [{ text: 'Hello' }] },
+              { role: 'model', parts: [{ text: 'Let’s generate flashcards!' }] },
+            ],
+          });
+
+          const result = await chat.sendMessage(prompt);
+          const rawResponse = await result.response.text();
+
+          // Clean up unwanted formatting
+          const sanitizedResponse = rawResponse
+            .replace(/```(?:json)?/g, '')
+            .trim();
+
+          let flashcards;
+          try {
+            flashcards = JSON.parse(sanitizedResponse);
+          } catch (parseError) {
+            console.error('JSON parse error:', parseError);
+            throw new Error('Invalid JSON from AI');
+          }
+
+          return flashcards;
+        } catch (error) {
+          attempts++;
+          if (attempts === MAX_RETRIES) throw error;
+          await new Promise(resolve => setTimeout(resolve, 2000)); // Wait before retry
+        }
+      }
+    };
+
+    // 4. Generate flashcards and deduct credits
+    const flashcards = await generateFlashcardsWithRetry();
+
+    // Deduct the required credits from the user's account
+    await query(
+      'UPDATE api_keys SET credit = credit - ? WHERE id = ?',
+      [cost, user.id]
+    );
+
+    // 5. Log usage
+    const responseTime = Date.now() - startTime;
+    await query(
+      'INSERT INTO api_logs (api_key, endpoint, response_time_ms, status_code, cost) VALUES (?, ?, ?, ?, ?)',
+      [apiKey, endpoint, responseTime, statusCode, cost]
+    );
+
+    // 6. Return the generated flashcards
+    res.json({ success: true, flashcards });
+
+  } catch (error) {
+    console.error('Error in /api/flashcards-from-text:', error);
+    statusCode = 500;
+    const responseTime = Date.now() - startTime;
+
+    // Log failed attempt (cost = 0)
+    await query(
+      'INSERT INTO api_logs (api_key, endpoint, response_time_ms, status_code, cost) VALUES (?, ?, ?, ?, ?)',
+      [apiKey, endpoint, responseTime, statusCode, 0]
+    );
+
+    res.status(statusCode).json({ error: 'Failed to generate flashcards' });
+  }
+});
+
+
+// Route to check if the user already has an API key
+app.post('/check-api-key', async (req, res) => {
+  try {
+    const { token } = req.body;
+
+    // Get user ID from the token
+    const userId = await getUserIdFromToken(token);
+
+    // Check if the user already has an API key
+    connection.query('SELECT * FROM api_keys WHERE user_id = ?', [userId], (err, results) => {
+      if (err) {
+        return res.status(500).json({ error: 'Error fetching API key' });
+      }
+
+      if (results.length > 0) {
+        // API key exists, return it
+        return res.status(200).json({
+          message: 'API key exists',
+          key: results[0].key,
+          action: 'regenerate',
+        });
+      } else {
+        // No API key exists
+        return res.status(200).json({
+          message: 'No API key found',
+          action: 'generate',
+        });
+      }
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+
+// Route to generate or regenerate API key
+app.post('/generate-api-key', async (req, res) => {
+  try {
+    const { token } = req.body;
+    const userId = await getUserIdFromToken(token);
+    const apiKey = `edusify_live_sk-${Math.random().toString(36).substring(2, 15)}`;
+    const createdAt = new Date();
+
+    connection.query('INSERT INTO api_keys (`key`, user_id, created_at) VALUES (?, ?, ?)', [apiKey, userId, createdAt], (err, result) => {
+      if (err) {
+        return res.status(500).json({ error: 'Error generating API key' });
+      }
+      return res.status(200).json({
+        message: 'API key generated successfully',
+        key: apiKey,
+        action: 'generate',
+      });
+    });
+    
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Route to fetch the user's API key
+app.post('/get-api-key', async (req, res) => {
+  try {
+    const { token } = req.body;
+
+    // Get userId from token (make sure this function is working correctly)
+    const userId = await getUserIdFromToken(token);
+
+    // Query the API key from the database
+    connection.query('SELECT `key` FROM api_keys WHERE user_id = ?', [userId], (err, results) => {
+      if (err) {
+        console.error('Database error:', err);
+        return res.status(500).json({ error: 'Failed to fetch API key' });
+      }
+
+      if (results.length === 0) {
+        return res.status(404).json({ error: 'No API key found for this user' });
+      }
+
+      return res.status(200).json({
+        message: 'API key fetched successfully',
+        key: results[0].key,
+      });
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.post('/api/get-usage-logs', async (req, res) => {
+  const { token } = req.body;
+
+  try {
+    // Step 1: Get the userId from the token (assuming the helper function is available)
+    const userId = await getUserIdFromToken(token);
+    if (!userId) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+
+    // Step 2: Fetch the api_key for this user
+    const rows = await query('SELECT `key` FROM api_keys WHERE user_id = ?', [userId]);
+    if (!rows.length) {
+      return res.status(404).json({ error: 'API key not found for this user' });
+    }
+
+    const apiKey = rows[0].key;
+
+    // Step 3: Fetch logs for the associated api_key
+    const logs = await query(
+      'SELECT * FROM api_logs WHERE api_key = ? ORDER BY created_at DESC',
+      [apiKey]
+    );
+
+    // Step 4: Return the logs
+    res.json({
+      success: true,
+      logs: logs.map(log => ({
+        timestamp: log.created_at,
+        endpoint: log.endpoint,
+        status: log.status_code,
+        cost: log.cost,
+        response_time: log.response_time_ms,
+      })),
+    });
+  } catch (error) {
+    console.error('Error fetching usage logs:', error);
+    res.status(500).json({ error: 'Failed to fetch usage logs' });
+  }
+});
+
+app.post("/create-order/api", async (req, res) => {
+  const { amount, token } = req.body;
+
+  if (amount < 50 || amount > 10000) {
+    return res.status(400).json({ error: "Amount must be between ₹50 and ₹10,000." });
+  }
+
+  const userId = await getUserIdFromToken(token);
+  if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+  const options = {
+    amount: amount * 100,
+    currency: "INR",
+    receipt: `credit_${Date.now()}`,
+    notes: { userId },
+  };
+
+  razorpay.orders.create(options, (err, order) => {
+    if (err) return res.status(500).json({ error: "Failed to create order" });
+    res.json({ order });
+  });
+});
+
+app.post("/verify-order/api", async (req, res) => {
+  const { payment_id, order_id, signature, token, amount } = req.body;
+
+  const userId = await getUserIdFromToken(token);
+  if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+  const expected = crypto
+    .createHmac("sha256", "ec9nrw9RjbIcvpkufzaYxmr6")
+    .update(`${order_id}|${payment_id}`)
+    .digest("hex");
+
+  if (expected !== signature) return res.status(400).json({ error: "Invalid signature" });
+
+  try {
+    // Insert into billing logs
+    await query(
+      `INSERT INTO billing_logs (user_id, amount, payment_id, order_id, created_at)
+       VALUES (?, ?, ?, ?, NOW())`,
+      [userId, amount, payment_id, order_id]
+    );
+
+    // Update credits in api_keys
+    await query(
+      `UPDATE api_keys SET credit = credit + ? WHERE user_id = ?`,
+      [amount, userId]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Database error:", err);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+
+app.post("/get-billing-logs", (req, res) => {
+  const { token } = req.body;
+  if (!token) return res.status(400).json({ error: "Token is required" });
+
+  getUserIdFromToken(token).then((userId) => {
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+
+    query(
+      `SELECT id, user_id, amount, payment_id, order_id, created_at 
+       FROM billing_logs 
+       WHERE user_id = ?`,
+      [userId]
+    ).then((result) => {
+
+      return res.json({ logs: result || [] }); // Directly return the result
+    }).catch((err) => {
+      console.error("DB error:", err);
+      return res.status(500).json({ error: "Internal Server Error" });
+    });
+
+  }).catch((err) => {
+    console.error("Token error:", err);
+    return res.status(500).json({ error: "Internal Server Error" });
+  });
+});
+
+app.post('/get-credit', async (req, res) => {
+  const { token } = req.body;
+
+  if (!token) {
+    return res.status(400).json({ error: 'Token is required' });
+  }
+
+  try {
+    const userId = await getUserIdFromToken(token);
+
+    const query = 'SELECT credit FROM api_keys WHERE user_id = ?';
+
+    connection.query(query, [userId], (err, result) => {
+      if (err) {
+        return res.status(500).json({ error: 'Database error', details: err });
+      }
+
+      if (result.length === 0) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      res.status(200).json({ credit: result[0].credit });
+    });
+
+  } catch (error) {
+    res.status(401).json({ error: error.message });
+  }
+});
+
+
 {/* Doxsify backend */}
 
 
