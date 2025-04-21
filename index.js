@@ -12186,7 +12186,7 @@ app.post('/api/quiz-from-topic-subject', async (req, res) => {
   let statusCode = 200;
 
   try {
-    console.log(`Received request - Subject: ${subject}, Topic: ${topic}, API Key: ${apiKey}`);
+    console.log(`Received request - quiz from Subject: ${subject}, Topic: ${topic}, API Key: ${apiKey}`);
 
     // 1. Validate API key
     const rows = await query(
@@ -12308,7 +12308,7 @@ app.post('/api/quiz-from-exam', async (req, res) => {
   let statusCode = 200;
 
   try {
-    console.log(`Received request - Exam: ${examType}, API Key: ${apiKey}`);
+    console.log(`Received request - quiz for Exam: ${examType}, API Key: ${apiKey}`);
     // Step 1: Validate API key
     const [rows] = await connection.promise().query(
       'SELECT * FROM api_keys WHERE `key` = ?',
