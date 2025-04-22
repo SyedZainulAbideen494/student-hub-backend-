@@ -446,7 +446,6 @@ app.post('/generate-alternatives', (req, res) => {
   const alternatives = generateAlternatives(unique_id);
   res.status(200).json({ alternatives });
 });
-
 app.post('/signup', (req, res) => {
   const { password, email, unique_id, phone_number } = req.body;
 
@@ -478,7 +477,6 @@ app.post('/signup', (req, res) => {
           return res.status(500).json({ error: 'Internal server error' });
         }
 
-        // Generate JWT token
         const userId = insertResults.insertId;
         const token = jwt.sign({ id: userId }, 'jwtsecret', { expiresIn: 86400 }); // 24 hours
 
@@ -492,16 +490,26 @@ app.post('/signup', (req, res) => {
               return res.status(500).send({ message: 'Error creating session', error: sessionErr });
             }
 
-            console.log('User registration and session creation successful!');
-            res.json({ auth: true, token: token });
+            // Insert subscription
+            const subscriptionQuery = `
+              INSERT INTO subscriptions (user_id, subscription_plan, payment_status, payment_date, expiry_date)
+              VALUES (?, '1-Day Plan', 'Paid', NOW(), DATE_ADD(NOW(), INTERVAL 1 DAY))
+            `;
+            connection.query(subscriptionQuery, [userId], (subErr) => {
+              if (subErr) {
+                console.error('Error creating subscription:', subErr);
+                return res.status(500).send({ message: 'Error creating subscription', error: subErr });
+              }
+
+              console.log('User registration, session, and subscription successful!');
+              res.json({ auth: true, token: token });
+            });
           }
         );
       });
     });
   });
 });
-
-
 
 
 const verifyjwt = (req, res) => {
