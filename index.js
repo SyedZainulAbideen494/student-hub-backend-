@@ -8037,66 +8037,88 @@ app.post('/api/notes/generate', async (req, res) => {
     const todayDate = new Date().toISOString().split('T')[0];
 
     let prompt = `
-    You are an expert educator and master note designer for premium study apps. Generate top-tier, deeply informative, and visually stunning notes on the topic:  "${topic}". 
-   
-These notes will be used in a high-end study app and must meet the following standards:
-  - Use **deep backgrounds** (#0a0a0a, #111) with **soft pastel highlights** (neon green, blush pink, soft violet).
-   - Use **text colors like #e0e0e0**, and accent colors sparingly.
-1. **Output must be in clean, semantic, modern HTML (NO markdown).**
-2. **Visually aesthetic and responsive for both desktop and mobile**.
-3. Use the following HTML tags for layout, readability, and structure:
-   - <section>, <article>, <header>, <footer>, <div>
-   - <h1>, <h2>, <h3>, <h4>, <p>, <ul>, <ol>, <li>, <blockquote>, <code>, <pre>, <strong>, <em>, <hr>, <br>
-4. Apply **minimal but elegant inline styling** for layout, color, spacing, fonts, and emphasis:
-   - Use soft pastel backgrounds (e.g., light lavender, mint, blush).
-   - Use subtle box shadows and rounded corners for sections.
-   - Use modern fonts like 'Segoe UI', 'Inter', or 'Helvetica Neue'.
-   - Add margin and padding to improve visual breathing space.
-   - Use aesthetic <code> blocks with light backgrounds.
-5. **Visually break content** using:
-   - <br> for spacing,
-   - <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ddd;"> for elegant dividers,
-   - Headings with different font sizes and weights.
-6. Ensure all content is:
-   - **Easy to skim** with visual cues (bullets, bold text),
-   - **Deep enough** to fully understand the topic,
-   - **Formatted beautifully for display in the Edusify app**.
-7. Use inline <style> only if needed for custom visuals (avoid <style> blocks unless essential).
-8. Format Q&A sections with a custom class <section class="qa">, where:
-   - Each question is bold and optionally prefixed with "Q:".
-   - Each answer is clear, concise, and helpful.
-   - Use blockquote or light-colored backgrounds to make the section pop.
-
-Customize the notes based on the following requested content types:
-`;
-
-Object.keys(types).forEach(type => {
-  if (types[type]) {
-    if (type === 'summary') {
-      prompt += '\n- Add a short, friendly motivational <section class="summary"> at the top, summarizing what the topic is about and why it matters.';
-    } else if (type === 'detailed') {
-      prompt += '\n- Include a richly formatted <section class="detailed"> with deep concept explanations, formulas, examples, and visuals if relevant.';
-    } else if (type === 'question-and-answer') {
-      prompt += '\n- Add a <section class="qa"> with 5–10 thoughtful, exam-style Q&A pairs to test understanding.';
-    } else if (type === 'key points') {
-      prompt += '\n- Include a <section class="keypoints"> with stylish bullet points summarizing the most critical takeaways.';
-    } else if (type === 'subtopics') {
-      prompt += '\n- Break the content into 3–6 <article> elements with subheadings and structured flow between ideas.';
-    } else if (type === 'important questions') {
-      prompt += '\n- End with a <section class="important-questions"> titled "📌 Important Questions", listing potential exam questions in an <ul>.';
-    }
-  }
-});
-
-prompt += `
-End the content with a <footer> that contains a soft call-to-action or motivational quote like:
-
-<em>"Physics is like climbing a mountain. The view from the top makes all the effort worthwhile."</em>
-
-Ensure the final HTML is **beautiful, well-structured, copy-paste ready**, and suitable for integration into a luxury, aesthetic study app like Edusify.
-
-If relevant, include formula blocks using <code> or <pre> tags for emphasis. Style section backgrounds softly and keep tone highly motivational but conceptually accurate.
-`;
+    You are the AI behind Edusify — a luxury study app known for creating the most visually stunning, deeply educational, long-form notes in the world.
+    
+    The user has entered a topic ${topic}. You must now generate a **masterpiece of educational content** from it. Assume they want the **most detailed, beautiful, exam-ready HTML notes ever written**.
+    
+    🔥 Your mission:
+    Turn the topic into an epic, multi-section HTML document:
+    - **Deep content**: Treat it like a full chapter of a premium textbook.
+    - **Structured layout**: Use headers, subheaders, sections, and spacing.
+    - **Beautiful formatting**: Elegant, soft colors, dark theme, pastel highlights.
+    - **Responsive and copy-paste ready**.
+    
+    🎯 Must-follow formatting rules:
+    
+    1. Use **semantic HTML** only — no markdown.
+    2. Use these layout tags to create clear visual and structural hierarchy:
+       - <section>, <article>, <div>, <header>, <footer>
+       - <h1> for the topic title
+       - <h2> for main sections (e.g., Introduction, Applications)
+       - <h3> and <h4> for subtopics and deeper breakdowns
+       - <p> only inside structured <article> or <section>, never raw
+       - <ul>, <ol>, <li>, <blockquote>, <code>, <pre>, <hr> where appropriate
+    
+    3. Apply **luxury design**:
+       - Dark background (#0a0a0a or #111), light text (#e0e0e0)
+       - Pastel accents (neon green, blush pink, soft violet) used sparingly
+       - Use inline style only when necessary (for example: rounded boxes, box shadows, pastel backgrounds)
+       - Use clean modern fonts: 'Inter', 'Segoe UI', 'Helvetica Neue'
+       - Add generous spacing with margins and padding
+    
+    📚 Content structure to ALWAYS include:
+    
+    <header>
+      <h1>Title of the Topic</h1>
+    </header>
+    
+    <section class="summary">
+      <h2>Introduction</h2>
+      - Friendly, motivational summary of the topic’s purpose and value.
+      - Connect to real-world or future relevance.
+    
+    <section class="detailed">
+      <h2>Concept Breakdown</h2>
+      - Use <article> for each core concept, theory, formula, or idea.
+      - Use <h3> and <h4> to break down parts.
+      - Each article must be 5+ paragraphs minimum — rich with explanations, analogies, and edge cases.
+    
+    <section class="keypoints">
+      <h2>Key Takeaways</h2>
+      <ul>
+        <li>Short but deep reminders of critical facts</li>
+        <li>Styled for skimming and review</li>
+      </ul>
+    
+    <section class="qa">
+      <h2>Q&A Section</h2>
+      <article>
+        <strong>Q: What is quantum entanglement?</strong>
+        <blockquote>A: Two particles share a state across distance, so measuring one instantly affects the other.</blockquote>
+      </article>
+      (Add 5–10 such QA pairs)
+    
+    <section class="important-questions">
+      <h2>📌 Important Questions</h2>
+      <ul>
+        <li>Explain the principle of superposition.</li>
+        <li>How is quantum computing different from classical computing?</li>
+        ...
+      </ul>
+    
+    <footer>
+      <hr style="margin: 2rem 0; border: none; border-top: 1px solid #444;">
+      <p style="font-style: italic;">"True mastery comes when learning becomes a lifestyle, not a task."</p>
+    </footer>
+    
+    🚨 Final rule: 
+    **NEVER** output flat or shallow notes.
+    - Even if the topic is small, treat it like a PhD thesis.
+    - Use formatting to *guide the eyes*, *support retention*, and *maximize impact*.
+    
+    You are both the **educator** and the **UI/UX designer** of these notes.
+    `;
+    
     console.log('Generating notes with prompt:', prompt);
 
     // Function to attempt generating notes and retry on failure
