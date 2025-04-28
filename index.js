@@ -8042,89 +8042,124 @@ app.post('/api/notes/generate', async (req, res) => {
     const todayDate = new Date().toISOString().split('T')[0];
 
     let prompt = `
-    You are the AI behind Edusify — a luxury study app known for creating the most visually stunning, deeply educational, long-form notes in the world.
-    
-    The user has entered a topic ${topic}. You must now generate a **masterpiece of educational content** from it. Assume they want the **most detailed, beautiful, exam-ready HTML notes ever written**.
-    
-    🔥 Your mission:
-    Turn the topic into an epic, multi-section HTML document:
-    - **Deep content**: Treat it like a full chapter of a premium textbook.
-    - **Structured layout**: Use headers, subheaders, sections, and spacing.
-    - **Beautiful formatting**: Elegant, soft colors, dark theme, pastel highlights.
-    - **Responsive and copy-paste ready**.
-    
-    🎯 Must-follow formatting rules:
-    
-    1. Use **semantic HTML** only — no markdown.
-    2. Use these layout tags to create clear visual and structural hierarchy:
-       - <section>, <article>, <div>, <header>, <footer>
-       - <h1> for the topic title
-       - <h2> for main sections (e.g., Introduction, Applications)
-       - <h3> and <h4> for subtopics and deeper breakdowns
-       - <p> only inside structured <article> or <section>, never raw
-       - <ul>, <ol>, <li>, <blockquote>, <code>, <pre>, <hr> where appropriate
-    
-    3. Apply **luxury design**:
-       - Dark background (#0a0a0a or #111), light text (#e0e0e0)
-       - Pastel accents (neon green, blush pink, soft violet) used sparingly
-       - Use inline style only when necessary (for example: rounded boxes, box shadows, pastel backgrounds)
-       - Use clean modern fonts: 'Inter', 'Segoe UI', 'Helvetica Neue'
-       - Add generous spacing with margins and padding
-    
-    📚 Content structure to ALWAYS include:
-    
-    <header>
-      <h1>Title of the Topic</h1>
-    </header>
-    
-    <section class="summary">
-      <h2>Introduction</h2>
-      - Friendly, motivational summary of the topic’s purpose and value.
-      - Connect to real-world or future relevance.
-    
-    <section class="detailed">
-      <h2>Concept Breakdown</h2>
-      - Use <article> for each core concept, theory, formula, or idea.
-      - Use <h3> and <h4> to break down parts.
-      - Each article must be 5+ paragraphs minimum — rich with explanations, analogies, and edge cases.
-    
-    <section class="keypoints">
-      <h2>Key Takeaways</h2>
-      <ul>
-        <li>Short but deep reminders of critical facts</li>
-        <li>Styled for skimming and review</li>
-      </ul>
-    
-    <section class="qa">
-      <h2>Q&A Section</h2>
-      <article>
-        <strong>Q: What is quantum entanglement?</strong>
-        <blockquote>A: Two particles share a state across distance, so measuring one instantly affects the other.</blockquote>
-      </article>
-      (Add 5–10 such QA pairs)
-    
-    <section class="important-questions">
-      <h2>📌 Important Questions</h2>
-      <ul>
-        <li>Explain the principle of superposition.</li>
-        <li>How is quantum computing different from classical computing?</li>
-        ...
-      </ul>
-    
-    <footer>
-      <hr style="margin: 2rem 0; border: none; border-top: 1px solid #444;">
-      <p style="font-style: italic;">"True mastery comes when learning becomes a lifestyle, not a task."</p>
-    </footer>
-    
-    🚨 Final rule: 
-    **NEVER** output flat or shallow notes.
-    - Even if the topic is small, treat it like a PhD thesis.
-    - Use formatting to *guide the eyes*, *support retention*, and *maximize impact*.
-    
-    You are both the **educator** and the **UI/UX designer** of these notes.
+
+You are an expert educational content designer.
+
+Task: 
+Generate a complete, extremely detailed, beautiful HTML document for the chapter "${topic}", aimed at students who want crystal-clear understanding, exam success, and memorable learning.
+
+Requirements:
+
+1. **Proper Structure:**
+    - Use <h1> for the main topic title.
+    - Use <h2> for each major section.
+    - Use <h3> for important subtopics under each section.
+    - Under each heading/subheading, write deeply explained concepts inside <p> tags.
+
+2. **Style and Aesthetic:**
+    - Apply inline styles:
+        - Heading (<h1>, <h2>, <h3>) color: #fff (pure white).
+        - Paragraph (<p>) color: #ddd (soft white).
+        - Font-family: 'Poppins', sans-serif for all text.
+        - Font-weight: 400 for normal text, 600+ for headings.
+        - Background-color: #121212 (dark gray) for the entire page.
+        - Text shadow for headings: 1px 1px 5px rgba(255, 255, 255, 0.1) for a soft glowing effect.
+        - For <p> tags, apply line-height: 1.6 for better readability.
+        - Use a smooth gradient for headings, e.g., linear-gradient(to right, #00c6ff, #0072ff), for a modern glow effect.
+
+    - Keep it easy to read on a dark background, Pinterest-style soft aesthetic.
+    - Space the sections properly: visually breathable, calm.
+    - Add subtle hover effects for interactive elements like links and buttons.
+
+3. **Special Formatting:**
+    - If there’s any important **formula, equation, or key definition**, put it inside a <pre><code>...</code></pre> block for better visual separation.
+    - Use <ul> and <li> for lists if needed.
+    - Bold important words using <b> inside paragraphs when necessary.
+    - Add soft glows around formulas or key definitions to make them stand out.
+
+4. **Study Tips, Examples & Fun:**
+    - **Funny and Memorable Examples**: Include relatable and funny examples that help students visualize and remember concepts. Use humor to keep the learning engaging.
+    - **Cool Analogies**: Create analogies that connect the subject matter to real-life scenarios or pop culture references to make complex ideas easier to grasp.
+    - **Study Tips**: Add actionable tips for studying the topic, like how to break down the material or create associations to remember difficult concepts.
+    - **Humorous Side Notes**: Where appropriate, throw in quirky notes to add some lightheartedness, making it feel like the content is talking directly to the student.
+
+5. **Final Sections:**
+    - After full content, include these sections clearly separated:
+        - <h2>Summary</h2> with bullet points inside <ul>.
+        - <h2>Key Terms</h2> with definitions.
+        - <h2>Fun Facts</h2> with short interesting points and real-life connections to the subject.
+
+6. **Tone and Language:**
+    - Keep the tone professional yet lightly motivating, with an approachable feel.
+    - Language should feel friendly, clean, and smart — neither childish nor overly formal.
+    - The notes should feel like a "cheat code" to help students easily excel in exams while feeling motivated and confident.
+
+7. **General Rules:**
+    - Output beautiful, clean, semantic HTML only (no unnecessary divs or spans).
+    - Every section should feel separate and easy to navigate visually.
+    - No long continuous walls of only <p> tags without headings.
+    - Formulas and key ideas must *pop out* visually through formatting.
+
+---
+**How Structure Should Look:**
+
+<h1 style="color: #fff; font-family: 'Poppins', sans-serif; font-weight: 700; text-shadow: 1px 1px 5px rgba(255, 255, 255, 0.1); background: linear-gradient(to right, #00c6ff, #0072ff); padding: 10px 20px; border-radius: 5px;">Kinematics: Motion in One Direction</h1>
+
+<p style="color: #ddd; font-family: 'Poppins', sans-serif; line-height: 1.6;">Welcome to the world of motion! In this chapter, we study how objects move without worrying about the forces behind the motion. Think of it as a dance party for objects. But instead of beats, they move based on equations!</p>
+
+<h2 style="color: #fff; font-family: 'Poppins', sans-serif; font-weight: 600; background: linear-gradient(to right, #00c6ff, #0072ff); padding: 10px; border-radius: 5px;">Understanding Displacement and Distance</h2>
+
+<h3 style="color: #fff; font-family: 'Poppins', sans-serif; font-weight: 600;">Displacement</h3>
+<p style="color: #ddd; font-family: 'Poppins', sans-serif; line-height: 1.6;">Displacement is a <b>vector quantity</b> that refers to the change in position of an object. It's not just how far an object has moved, but also the direction. If you walk to the store and then back, your displacement is zero. You're basically doing a loop-de-loop in the world of physics.</p>
+
+<h3 style="color: #fff; font-family: 'Poppins', sans-serif; font-weight: 600;">Distance</h3>
+<p style="color: #ddd; font-family: 'Poppins', sans-serif; line-height: 1.6;">Distance is a <b>scalar quantity</b>, meaning it only counts how far you've traveled, no matter the direction. So if you walked to the store and back, your distance would be double what your displacement is. Basically, distance loves to count everything; it's the overachiever of the two!</p>
+
+<h2 style="color: #fff; font-family: 'Poppins', sans-serif; font-weight: 600; background: linear-gradient(to right, #00c6ff, #0072ff); padding: 10px; border-radius: 5px;">Speed, Velocity, and Acceleration</h2>
+
+<h3 style="color: #fff; font-family: 'Poppins', sans-serif; font-weight: 600;">Speed</h3>
+<p style="color: #ddd; font-family: 'Poppins', sans-serif; line-height: 1.6;">Speed is how fast something is going without caring about direction. Think of it like a race car that speeds around the track but doesn't care which lane it’s in. Speed = Distance / Time.</p>
+
+<pre><code style="color: #ddd; font-family: 'Poppins', sans-serif; background: #2a2a2a; padding: 10px; border-radius: 5px; box-shadow: 0px 0px 5px rgba(255, 255, 255, 0.1);">
+Speed = Total Distance / Total Time
+</code></pre>
+
+<h3 style="color: #fff; font-family: 'Poppins', sans-serif; font-weight: 600;">Velocity</h3>
+<p style="color: #ddd; font-family: 'Poppins', sans-serif; line-height: 1.6;">Velocity is speed with direction. So, if you’re in a race and turn left, you've now got velocity! It's speed’s more sophisticated, GPS-savvy sibling. It's basically the same thing, but with a hint of direction.</p>
+
+<h2 style="color: #fff; font-family: 'Poppins', sans-serif; font-weight: 600; background: linear-gradient(to right, #00c6ff, #0072ff); padding: 10px; border-radius: 5px;">Summary</h2>
+<ul style="color: #ddd; font-family: 'Poppins', sans-serif; line-height: 1.6;">
+    <li>Displacement is directional; distance is not.</li>
+    <li>Speed is scalar; velocity is vectorial.</li>
+    <li>Acceleration measures changes in velocity, like when you're speeding up your favorite playlist.</li>
+</ul>
+
+<h2 style="color: #fff; font-family: 'Poppins', sans-serif; font-weight: 600; background: linear-gradient(to right, #00c6ff, #0072ff); padding: 10px; border-radius: 5px;">Key Terms</h2>
+<ul style="color: #ddd; font-family: 'Poppins', sans-serif; line-height: 1.6;">
+    <li><b>Displacement:</b> Change in position with direction.</li>
+    <li><b>Speed:</b> Rate of covering distance.</li>
+    <li><b>Velocity:</b> Speed with direction.</li>
+</ul>
+
+<h2 style="color: #fff; font-family: 'Poppins', sans-serif; font-weight: 600; background: linear-gradient(to right, #00c6ff, #0072ff); padding: 10px; border-radius: 5px;">Fun Facts</h2>
+<ul style="color: #ddd; font-family: 'Poppins', sans-serif; line-height: 1.6;">
+    <li>The fastest land animal, the cheetah, can accelerate faster than a sports car! Next time you’re late for class, just pretend you're a cheetah!</li>
+    <li>Ever wondered why you can’t run as fast as the speed of light? Well, let’s just say that’s because we’re not quite there yet. But hey, who knows?</li>
+</ul>
+
+---
+
+Final Reminder:
+- Follow the structure style above closely.
+- Maintain visual beauty, section separation, and readability.
+
     `;
     
-    console.log('Generating notes with prompt:', prompt);
+    
+      
+    
+    
+    console.log('Generating notes for topic', topic);
 
     // Function to attempt generating notes and retry on failure
     const generateNotesWithRetry = async () => {
