@@ -10800,22 +10800,109 @@ app.post("/api/mindmaps/generate", async (req, res) => {
               - Additional Instructions: ${instructions || "None provided"}
             
               The JSON structure should be:
-              {
-                "nodes": [
-                  {
-                    "id": number,
-                    "label": "string",
-                    "x": number,
-                    "y": number
-                  }
-                ],
-                "edges": [
-                  {
-                    "from": number,
-                    "to": number
-                  }
-                ]
-              }
+          {
+  "nodes": [
+    {
+      "id": 1,
+      "label": "Main Topic",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": 2,
+      "label": "Major Topic 1",
+      "x": 500,
+      "y": 0
+    },
+    {
+      "id": 3,
+      "label": "Major Topic 2",
+      "x": 250,
+      "y": 400
+    },
+    {
+      "id": 4,
+      "label": "Major Topic 3",
+      "x": -250,
+      "y": 400
+    },
+    {
+      "id": 5,
+      "label": "Subtopic 1.1",
+      "x": 650,
+      "y": -100
+    },
+    {
+      "id": 6,
+      "label": "Subtopic 1.2",
+      "x": 650,
+      "y": 100
+    },
+    {
+      "id": 7,
+      "label": "Subtopic 2.1",
+      "x": 350,
+      "y": 500
+    },
+    {
+      "id": 8,
+      "label": "Subtopic 2.2",
+      "x": 150,
+      "y": 500
+    },
+    {
+      "id": 9,
+      "label": "Subtopic 3.1",
+      "x": -150,
+      "y": 500
+    },
+    {
+      "id": 10,
+      "label": "Subtopic 3.2",
+      "x": -350,
+      "y": 500
+    }
+  ],
+  "edges": [
+    {
+      "from": 1,
+      "to": 2
+    },
+    {
+      "from": 1,
+      "to": 3
+    },
+    {
+      "from": 1,
+      "to": 4
+    },
+    {
+      "from": 2,
+      "to": 5
+    },
+    {
+      "from": 2,
+      "to": 6
+    },
+    {
+      "from": 3,
+      "to": 7
+    },
+    {
+      "from": 3,
+      "to": 8
+    },
+    {
+      "from": 4,
+      "to": 9
+    },
+    {
+      "from": 4,
+      "to": 10
+    }
+  ]
+}
+
             
               **Rules:**
               1. The structure must be **circular**, ensuring balanced spacing between nodes.  
