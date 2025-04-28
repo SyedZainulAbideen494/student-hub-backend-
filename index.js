@@ -482,20 +482,34 @@ app.post('/signup', (req, res) => {
         const userId = insertResults.insertId;
         const token = jwt.sign({ id: userId }, 'jwtsecret', { expiresIn: 86400 }); // 24 hours
 
-        // Create session
-        connection.query(
-          'INSERT INTO session (user_id, jwt) VALUES (?, ?)',
-          [userId, token],
-          (sessionErr) => {
-            if (sessionErr) {
-              console.error('Error creating session:', sessionErr);
-              return res.status(500).send({ message: 'Error creating session', error: sessionErr });
-            }
+        // Insert subscription for 1-day premium plan
+        const subscriptionQuery = `
+          INSERT INTO subscriptions (user_id, subscription_plan, payment_status, payment_date, expiry_date)
+          VALUES (?, ?, ?, NOW(), DATE_ADD(NOW(), INTERVAL 1 DAY))
+        `;
+        const subscriptionValues = [userId, '1-Day Plan', 'Paid'];
 
-            console.log('User registration and session creation successful!');
-            res.json({ auth: true, token: token });
+        connection.query(subscriptionQuery, subscriptionValues, (subscriptionErr, subscriptionResults) => {
+          if (subscriptionErr) {
+            console.error('Error inserting subscription:', subscriptionErr);
+            return res.status(500).json({ error: 'Internal server error' });
           }
-        );
+
+          // Create session
+          connection.query(
+            'INSERT INTO session (user_id, jwt) VALUES (?, ?)',
+            [userId, token],
+            (sessionErr) => {
+              if (sessionErr) {
+                console.error('Error creating session:', sessionErr);
+                return res.status(500).send({ message: 'Error creating session', error: sessionErr });
+              }
+
+              console.log('User registration, subscription, and session creation successful!');
+              res.json({ auth: true, token: token });
+            }
+          );
+        });
       });
     });
   });
