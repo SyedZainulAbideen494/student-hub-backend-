@@ -8607,7 +8607,7 @@ app.post("/api/saveGoal", async (req, res) => {
 
       // Model declaration inside the API
       const model = genAI.getGenerativeModel({
-        model: "gemini-2.0-flash",
+        model: "gemini-1.5-flash",
         safetySettings: safetySettings,
       });
 
