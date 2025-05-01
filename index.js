@@ -34,7 +34,7 @@ const { exec } = require("child_process");
 const puppeteer = require("puppeteer");
 const { YoutubeTranscript } = require("youtube-transcript");
 // Initialize Google Generative AI
-const genAI = new GoogleGenerativeAI('AIzaSyAhvINxPJMSHqKFA-oyBxEsuYxwBZtgPhA');
+const genAI = new GoogleGenerativeAI('AIzaSyDTipI4ybT5vNwpUrF5dg5TST1Apt0wSbs');
 
 const safetySettings = [
   {
@@ -56,7 +56,7 @@ const safetySettings = [
 ];
 
 const model = genAI.getGenerativeModel({
-  model: "gemini-1.5-pro",
+  model: "gemini-1.5-flash",
   safetySettings: safetySettings,
   systemInstruction: "You are Edusify, an AI-powered productivity assistant designed to help students manage their academic tasks, study materials, and stay organized. Your mission is to provide tailored assistance and streamline the study experience with a wide range of features.\n\n" +
   
@@ -12329,7 +12329,208 @@ app.get("/search/ai/research", async (req, res) => {
   res.json(results);
 });
 
+app.post('/api/exam-mode/generate', async (req, res) => {
+  const { subject, topic, token } = req.body;
 
+  console.log(`[ExamMode] 🔵 Request received for subject: "${subject}", topic: "${topic}"`);
+
+  try {
+    const userId = await getUserIdFromToken(token);
+    if (!userId) {
+      console.log(`[ExamMode] 🔴 Invalid token or user not found`);
+      return res.status(401).json({ error: 'Invalid token or user not found' });
+    }
+
+    console.log(`[ExamMode] ✅ User authenticated: userId = ${userId}`);
+
+    const smartNotesPrompt = `
+    You're an elite AI tutor generating high-quality HTML notes for top-performing students who are preparing for exams at the last minute. Your job is to distill the topic "${topic}" into:
+    
+    1. Highly organized, concise, and structured revision notes.
+    2. Prioritize concepts most likely to appear in exams based on past trends.
+    3. Use clear subheadings, short paragraphs, bullet points, and high contrast formatting.
+    4. Bold key terms, use color highlights (if supported), and add quick tips or shortcuts where possible.
+    5. Include a 3-line summary box at the top called "Quick Recap".
+    6. Add a section at the end titled "Likely Confusions" with clarifications.
+    7. Output strictly valid HTML content only.
+    `;
+      
+    const formulasPrompt = `
+    You're an AI study assistant crafting a last-minute exam cheat sheet for the topic "${topic}". Generate a sleek HTML section containing:
+    
+    1. All **key formulas**, **definitions**, and **constants** used in the topic.
+    2. Use logical grouping with subheadings (e.g., "Motion Equations", "Electrostatics Formulas").
+    3. Highlight formulas in a formula-style block with clear formatting (centered or boxed if possible).
+    4. Bold variables, underline constants, and briefly explain each formula’s meaning or when to use it.
+    5. Include a section at the end titled "Trick Points & Common Mistakes".
+    6. Keep layout clean, compact, and easy to memorize visually.
+    7. Return strictly well-formatted HTML only.
+    `;
+    
+    
+    const predictedQuestionsPrompt = `Generate 10 predicted exam questions for the topic "${topic}" based on past trends. Format as HTML bullet points or numbered list.`;
+  
+  
+    const quizPrompt = `
+      Generate a valid JSON array of 15 multiple-choice questions for the following:
+      - Subject: ${subject}
+      - Topic: ${topic}
+
+      Each question must strictly follow this format:
+      [
+        {
+          "question": "string",
+          "options": ["string", "string", "string", "string"],
+          "correct_answer": "string"
+        }
+      ]
+
+      Return only the JSON array. No explanations or markdown.
+    `.trim();
+
+    const generateTextFromAI = async (prompt, extractHTML = false) => {
+      const chat = model.startChat({
+        history: [
+          { role: 'user', parts: [{ text: 'Hello' }] },
+          { role: 'model', parts: [{ text: 'What can I help you with today?' }] },
+        ],
+      });
+
+      const result = await chat.sendMessage(prompt);
+      const raw = await result.response.text();
+
+      if (!extractHTML) return raw;
+
+      const htmlMatch = raw.match(/<p[\s\S]*?<\/p>/g); // You can improve this further
+      return htmlMatch ? htmlMatch.join('') : raw;
+    };
+
+    const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+    // Step 1: Generate Smart Notes
+    console.log(`[ExamMode] ✏️ Generating Smart Notes...`);
+    const smartNotesHTML = await generateTextFromAI(smartNotesPrompt, true);
+    const [smartNotesResult] = await connection.promise().query(
+      `INSERT INTO flashcards (user_id, title, description, headings, is_ai) VALUES (?, ?, ?, ?, ?)`,
+      [userId, `${topic} - Smart Notes`, `Smart Notes on ${topic}`, smartNotesHTML, 1]
+    );
+    const smartNotesId = smartNotesResult.insertId;
+    console.log(`[ExamMode] ✅ Smart Notes saved with ID: ${smartNotesId}`);
+
+    await delay(2000);
+
+    // Step 2: Generate Key Formulas + Definitions
+    console.log(`[ExamMode] 🧮 Generating Key Formulas and Definitions...`);
+    const formulaNotesHTML = await generateTextFromAI(formulasPrompt, true);
+    const [formulasResult] = await connection.promise().query(
+      `INSERT INTO flashcards (user_id, title, description, headings, is_ai) VALUES (?, ?, ?, ?, ?)`,
+      [userId, `${topic} - Key Formulas & Definitions`, `Formulas + Definitions for ${topic}`, formulaNotesHTML, 1]
+    );
+    const keyFormulasId = formulasResult.insertId;
+    console.log(`[ExamMode] ✅ Formulas saved with ID: ${keyFormulasId}`);
+
+    await delay(2000);
+
+    // Step 3: Generate Predicted Questions
+    console.log(`[ExamMode] 📚 Generating Predicted Questions...`);
+    const predictedQuestionsHTML = await generateTextFromAI(predictedQuestionsPrompt, true);
+    const [predictedResult] = await connection.promise().query(
+      `INSERT INTO flashcards (user_id, title, description, headings, is_ai) VALUES (?, ?, ?, ?, ?)`,
+      [userId, `${topic} - Predicted Questions`, `Predicted Questions for ${topic}`, predictedQuestionsHTML, 1]
+    );
+    const predictedQuestionsId = predictedResult.insertId;
+    console.log(`[ExamMode] ✅ Predicted Questions saved with ID: ${predictedQuestionsId}`);
+
+    await delay(2000);
+
+    // Step 4: Generate Quiz
+    console.log(`[ExamMode] 🧠 Generating Quiz...`);
+    let quizData;
+    let attempts = 0;
+    while (attempts < 3) {
+      try {
+        const chat = model.startChat({
+          history: [
+            { role: 'user', parts: [{ text: 'Hello' }] },
+            { role: 'model', parts: [{ text: 'I can help generate quizzes!' }] },
+          ],
+        });
+        const result = await chat.sendMessage(quizPrompt);
+        const raw = (await result.response.text()).replace(/```(?:json)?/g, '').trim();
+        quizData = JSON.parse(raw);
+        console.log(`[ExamMode] ✅ Quiz JSON parsed successfully`);
+        break;
+      } catch {
+        attempts++;
+        console.log(`[ExamMode] ⚠️ Attempt ${attempts} to generate valid quiz failed`);
+        if (attempts === 3) throw new Error('Failed to generate valid quiz after 3 attempts');
+        await delay(2000);
+      }
+    }
+
+    const [quizResult] = await connection.promise().query(
+      `INSERT INTO quizzes (title, description, creator_id, is_ai) VALUES (?, ?, ?, ?)`,
+      [`${subject} - ${topic} Quiz`, `Quiz on ${topic}`, userId, 1]
+    );
+    const quizId = quizResult.insertId;
+
+    for (const q of quizData) {
+      const [questionResult] = await connection.promise().query(
+        'INSERT INTO questions (quiz_id, question_text) VALUES (?, ?)',
+        [quizId, q.question]
+      );
+      const questionId = questionResult.insertId;
+      for (const option of q.options) {
+        await connection.promise().query(
+          'INSERT INTO answers (question_id, answer_text, is_correct) VALUES (?, ?, ?)',
+          [questionId, option, option === q.correct_answer]
+        );
+      }
+    }
+    console.log(`[ExamMode] ✅ Quiz saved with ID: ${quizId}`);
+
+     // Step 5: Save in exam_predictor
+     const [examPredictorResult] = await connection.promise().query(
+      `INSERT INTO exam_predictor (user_id, notes_id, quiz_id, smart_notes_id, predicted_questions_id)
+       VALUES (?, ?, ?, ?, ?)`,
+      [userId, keyFormulasId, quizId, smartNotesId, predictedQuestionsId]
+    );
+    const examPredictorId = examPredictorResult.insertId;
+
+    console.log(`[ExamMode] 🎉 All data saved. Exam mode generation complete!`);
+
+    // Respond with all IDs and the exam_predictor ID
+    res.json({
+      message: 'Exam mode content generated successfully!',
+      quizId,
+      smartNotesId,
+      keyFormulasId,
+      predictedQuestionsId,
+      examPredictorId // Send the ID of the created exam_predictor
+    });
+
+  } catch (error) {
+    console.error(`[ExamMode] ❌ Error during generation:`, error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/exam-mode/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const [examData] = await connection.promise().query(
+      `SELECT * FROM exam_predictor WHERE id = ?`, [id]
+    );
+    if (examData.length === 0) {
+      return res.status(404).json({ error: 'Exam data not found' });
+    }
+
+    res.json(examData[0]);
+  } catch (err) {
+    console.error('Error fetching exam data:', err);
+    res.status(500).json({ error: 'Failed to fetch exam data' });
+  }
+});
 
 
 {/* API for Eusify */}
