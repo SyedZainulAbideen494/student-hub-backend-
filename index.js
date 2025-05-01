@@ -12491,9 +12491,9 @@ app.post('/api/exam-mode/generate', async (req, res) => {
 
      // Step 5: Save in exam_predictor
      const [examPredictorResult] = await connection.promise().query(
-      `INSERT INTO exam_predictor (user_id, notes_id, quiz_id, smart_notes_id, predicted_questions_id)
+      `INSERT INTO exam_predictor (user_id, notes_id, quiz_id, smart_notes_id, predicted_questions_id, subject, topic)
        VALUES (?, ?, ?, ?, ?)`,
-      [userId, keyFormulasId, quizId, smartNotesId, predictedQuestionsId]
+      [userId, keyFormulasId, quizId, smartNotesId, predictedQuestionsId, subject, topic]
     );
     const examPredictorId = examPredictorResult.insertId;
 
@@ -12512,6 +12512,30 @@ app.post('/api/exam-mode/generate', async (req, res) => {
   } catch (error) {
     console.error(`[ExamMode] ❌ Error during generation:`, error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/get-packs', async (req, res) => {
+  const { token } = req.body;
+
+  try {
+    // Get the user ID from the token
+    const userId = await getUserIdFromToken(token);
+    if (!userId) {
+      return res.status(401).json({ message: 'Invalid token' });
+    }
+
+    // Fetch exam predictor packs for the user
+    const packs = await query(
+      'SELECT id, subject, topic, created_at FROM exam_predictor WHERE user_id = ? ORDER BY created_at DESC',
+      [userId]
+    );
+
+    // Return the fetched packs
+    return res.status(200).json({ packs });
+  } catch (err) {
+    console.error('Error fetching exam packs:', err);
+    return res.status(500).json({ message: 'Server error' });
   }
 });
 
