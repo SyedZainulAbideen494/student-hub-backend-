@@ -12492,7 +12492,7 @@ app.post('/api/exam-mode/generate', async (req, res) => {
      // Step 5: Save in exam_predictor
      const [examPredictorResult] = await connection.promise().query(
       `INSERT INTO exam_predictor (user_id, notes_id, quiz_id, smart_notes_id, predicted_questions_id, subject, topic)
-       VALUES (?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ? ,?)`,
       [userId, keyFormulasId, quizId, smartNotesId, predictedQuestionsId, subject, topic]
     );
     const examPredictorId = examPredictorResult.insertId;
