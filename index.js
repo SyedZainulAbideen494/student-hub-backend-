@@ -12650,6 +12650,110 @@ app.get('/api/exam-mode/:id', async (req, res) => {
   }
 });
 
+app.post('/api/career-ai/recommendation', async (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'No token provided' });
+
+  try {
+    const userId = await getUserIdFromToken(token);
+    const { answers } = req.body;
+
+    if (!answers) {
+      return res.status(400).json({ error: 'Answers not provided' });
+    }
+
+    const prompt = `
+You are an exceptionally talented career guide AI, and your job is to analyze a user's quiz answers and suggest a unique career that aligns with their personality, strengths, and aspirations. Think outside the box and choose a career that might surprise them but also feel completely accurate, like something they *wish* they had thought of themselves.
+
+Provide a recommendation that includes the following:
+- **Career**: The most suitable, exciting, and modern career path for the user (anything from any field in the world — tech, arts, business, medicine, engineering, or something unconventional). It should feel unexpected, but perfect for the user.
+- **Reason**: A personal, tailored explanation of why this career suits the user based on their answers. Make it feel like the AI truly understands the user’s personality and aspirations.
+- **Catchy Title**: A title that will make the user excited and proud to share their result on social media. This should be something that could go viral and make people go, "Wow, that's cool!"
+- **Inspirational Quote**: An inspiring quote that adds a human touch to the career recommendation. It should sound like something they could put in their bio or share with their friends.
+- **Background Theme**: A unique, engaging UI background idea that fits the career. This background should be something shareable and intriguing, like "Futuristic AI Lab" or "Creative Studio with Neon Lights."
+- **Emoji**: A fun and fitting emoji that complements the vibe of the career.
+- **Hashtags**: Suggest a few hashtags that the user can use to share their result on social media, creating a sense of excitement and community.
+
+User's Quiz Answers:
+${JSON.stringify(answers, null, 2)}
+
+Your response should only be a valid JSON like:
+{
+  "career": "Virtual Reality Architect",
+  "reason": "With your passion for technology, design, and innovation, you're a perfect fit for crafting immersive worlds in virtual reality. Your creativity and problem-solving skills will take VR to the next level.",
+  "catchy_title": "Welcome to the Future: Your New Career as a VR Architect!",
+  "quote": "Create worlds that people can't wait to step into. The future of VR is waiting for you.",
+  "background_theme": "Futuristic VR design lab with glowing holograms and immersive screens.",
+  "emoji": "🌐",
+  "hashtag": "#VRArchitect #FutureBuilder #TechRevolution"
+}
+`;
+
+    // AI Integration
+    const generateCareerWithRetry = async () => {
+      let attempts = 0;
+      const MAX_RETRIES = 3;
+
+      while (attempts < MAX_RETRIES) {
+        try {
+          const chat = model.startChat({ history: [] });
+          const result = await chat.sendMessage(prompt);
+          const raw = await result.response.text();
+
+          const sanitized = raw.replace(/```(json)?/g, '').trim();
+          const careerSuggestion = JSON.parse(sanitized);
+
+          return careerSuggestion;
+        } catch (err) {
+          attempts++;
+          if (attempts === MAX_RETRIES) throw new Error('AI failed to respond with valid JSON');
+          await new Promise(resolve => setTimeout(resolve, 1500));
+        }
+      }
+    };
+
+    const careerResult = await generateCareerWithRetry();
+
+    // Insert into the career_recommendations table
+    const { career, reason, style, emoji, catchy_title, quote, background_image, hashtag } = careerResult;
+    const matchPercentage = 94; // This could be dynamic based on some calculations or API feedback
+
+    const sql = `INSERT INTO career_recommendations 
+                 (user_id, career, reason, style, emoji, catchy_title, quote, background_image, hashtag, match_percentage)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+
+    const result = await query(sql, [userId, career, reason, style, emoji, catchy_title, quote, background_image, hashtag, matchPercentage]);
+
+    // Send the generated career result along with the career_match_id
+    res.json({
+      ...careerResult,
+      career_match_id: result.insertId,  // Send the inserted career match ID
+    });
+
+  } catch (err) {
+    console.error('Career AI Error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+
+app.get('/api/career-ai/result/:id', async (req, res) => {
+  const id = req.params.id;
+
+  try {
+    const result = await query('SELECT * FROM career_recommendations WHERE id = ?', [id]);
+
+    if (result.length === 0) {
+      return res.status(404).json({ error: 'No career recommendation found for this user' });
+    }
+
+    res.json(result[0]);
+  } catch (err) {
+    console.error('Error fetching career recommendation:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 
 {/* API for Eusify */}
 
