@@ -12665,34 +12665,34 @@ app.post('/api/career-ai/recommendation', async (req, res) => {
     console.log(`🧠 Career generation started for user ID: ${userId}`);
 
     const prompt = `
-    You are a world-class AI career visionary. Your task is to analyze the user's quiz answers and suggest a career path that fits their unique qualities. If their answers indicate an interest in healthcare, bio-sciences, or technology, you should suggest **specific medical careers** (e.g., Cardiologist, Neurologist, Surgeon, etc.) or related fields in **biotech**.
+    You are an exceptionally talented AI career coach. Based on the user's quiz answers, your task is to recommend a unique and exciting career path that aligns with their personality, values, and aspirations.
     
-    If the user shows strong interest in biology and health sciences, provide traditional medical roles (like doctors, surgeons, specialists), but avoid overloading with "bio" careers unless it’s directly aligned with their answers. Ensure the suggestions feel **authentic**, **exciting**, and **aligned with the user’s strengths**.
+    Be imaginative — the result should feel surprising, modern, and perfectly tailored, as if the user just discovered their true calling.
     
-    Your output must ONLY be a valid JSON with the following keys:
+    Your response **must** be in **valid JSON** format with the following keys:
     
-    - **career**: A specific career in medicine (e.g., Cardiologist, Neurologist, Surgeon) or a related field (e.g., Biotech Entrepreneur, Medical Researcher, etc.) based on the user's answers. Ensure it fits their strengths.
-    - **reason**: A personalized, emotionally intelligent explanation of why this career fits the user. Provide insights into their motivations, skills, or interests that align with this field.
-    - **catchy_title**: A bold, viral-style headline that would encourage social sharing. Make it exciting and inspiring.
-    - **quote**: A motivational quote related to the career, something users would be proud to share.
-    - **background_theme**: A vivid theme that represents the career (e.g. "Surgical Precision Operating Room", "Neuroscientific Research Lab", "Heart Surgery Theatre").
-    - **emoji**: One relevant emoji to enhance the vibe of the career suggestion.
-    - **hashtag**: 1–3 catchy hashtags for users to share on social media.
+    - **career**: A modern, exciting, and suitable career path (can be from any field: tech, design, business, medicine, arts, science, or something unconventional).
+    - **reason**: A short but deeply personalized explanation of why this career fits the user's personality and answers. Make it feel emotionally intelligent and insightful.
+    - **catchy_title**: A bold, exciting social-media-style headline that feels share-worthy and viral.
+    - **quote**: An inspirational quote the user might add to their bio, profile, or post.
+    - **background_theme**: A visually compelling background idea that will be used in the UI (e.g. “Futuristic Neon Lab” or “Nature-Inspired Tech Studio”). This should fit the vibe of the career.
+    - **emoji**: A relevant, fun emoji to represent the career visually.
+    - **hashtag**: A few engaging hashtags for users to share their result on social media (1–3, space-separated).
     
-    User's Quiz Answers:
+    User’s Quiz Answers:
     ${JSON.stringify(answers, null, 2)}
     
-    Return ONLY a clean JSON response in this format:
+    Respond ONLY with a clean and valid JSON object like:
     {
-      "career": "Cardiologist",
-      "reason": "Your passion for science and helping others, combined with your analytical skills, make cardiology the perfect fit. You thrive on precision and have a strong desire to save lives and improve heart health.",
-      "catchy_title": "Be the Heartbeat of Healthcare – Become a Cardiologist ❤️",
-      "quote": "The heart is the center of life – and you have the power to keep it beating.",
-      "background_theme": "Modern operating room with heart monitoring systems and high-tech diagnostic tools",
-      "emoji": "❤️",
-      "hashtag": "#HeartDoctor #SaveLives #Cardiology"
+      "career": "Virtual Reality Architect",
+      "reason": "With your passion for technology, design, and innovation, you're a perfect fit for crafting immersive worlds in virtual reality. Your creativity and problem-solving skills will take VR to the next level.",
+      "catchy_title": "Welcome to the Future: Your New Career as a VR Architect!",
+      "quote": "Create worlds that people can't wait to step into. The future of VR is waiting for you.",
+      "background_theme": "Futuristic VR design lab with glowing holograms and immersive screens.",
+      "emoji": "🌐",
+      "hashtag": "#VRArchitect #FutureBuilder #TechRevolution"
     }
-`    
+    `;
     
 
     const generateCareerWithRetry = async () => {
