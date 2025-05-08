@@ -12665,37 +12665,34 @@ app.post('/api/career-ai/recommendation', async (req, res) => {
     console.log(`🧠 Career generation started for user ID: ${userId}`);
 
     const prompt = `
-    You are a world-class AI career visionary. Your task is to analyze the user's quiz answers and suggest a career that feels **surprisingly perfect** — something they never expected, but instantly clicks.
+    You are a world-class AI career visionary. Your task is to analyze the user's quiz answers and suggest a career path that fits their unique qualities. If their answers indicate an interest in healthcare, bio-sciences, or technology, you should suggest **specific medical careers** (e.g., Cardiologist, Neurologist, Surgeon, etc.) or related fields in **biotech**.
     
-    Be bold, imaginative, and insightful. Avoid generic or repetitive suggestions (like always using "biotech" or "bio-tech" when someone selects "Biology & Health"). Instead, think **outside the box** — find intersections that feel **modern, fresh, and socially exciting** across **multiple fields**. Consider **hybrid, innovative careers** or **entirely new concepts** that span industries like tech, arts, business, design, media, social good, and more. Examples could include careers like **"Digital Nomad Storyteller," "Eco-Blockchain Strategist," "VR Mood Architect," or "AI-Powered Sustainability Designer."**
+    If the user shows strong interest in biology and health sciences, provide traditional medical roles (like doctors, surgeons, specialists), but avoid overloading with "bio" careers unless it’s directly aligned with their answers. Ensure the suggestions feel **authentic**, **exciting**, and **aligned with the user’s strengths**.
     
     Your output must ONLY be a valid JSON with the following keys:
     
-    - **career**: A unique, modern, and exciting career path that aligns deeply with the user's values, strengths, and interests. It should come from any field — tech, arts, business, science, design, social good, media, etc. It should feel **unexpected but perfect**.
-    - **reason**: A short, emotionally intelligent explanation of why this career path fits the user. It should resonate with their quiz responses and feel personal, like the AI truly "gets them."
-    - **catchy_title**: A bold, viral-style social media headline. Think: “You Were Born for This 🔥” or “This AI Knew My Dream Job Before I Did.”
-    - **quote**: An inspiring quote the user would be proud to share in a story or profile bio.
-    - **background_theme**: A vivid, visual background idea to be used for designing the UI (e.g. "Cosmic Control Room", "Minimalist Startup Loft", "Neon Jungle Tech Temple").
-    - **emoji**: One relevant emoji that enhances the vibe of the career.
-    - **hashtag**: 1–3 catchy hashtags that would trend if users shared this result online.
+    - **career**: A specific career in medicine (e.g., Cardiologist, Neurologist, Surgeon) or a related field (e.g., Biotech Entrepreneur, Medical Researcher, etc.) based on the user's answers. Ensure it fits their strengths.
+    - **reason**: A personalized, emotionally intelligent explanation of why this career fits the user. Provide insights into their motivations, skills, or interests that align with this field.
+    - **catchy_title**: A bold, viral-style headline that would encourage social sharing. Make it exciting and inspiring.
+    - **quote**: A motivational quote related to the career, something users would be proud to share.
+    - **background_theme**: A vivid theme that represents the career (e.g. "Surgical Precision Operating Room", "Neuroscientific Research Lab", "Heart Surgery Theatre").
+    - **emoji**: One relevant emoji to enhance the vibe of the career suggestion.
+    - **hashtag**: 1–3 catchy hashtags for users to share on social media.
     
-    Avoid repeating traditional or expected careers (like doctor, engineer, biologist, etc.). Instead, suggest hybrid careers that blend different sectors, or careers that merge **bio/health** with **other fields** like **AI, design, business**, or **social impact**. The focus should be on modern, innovative, and non-traditional roles.
-    
-    User’s Quiz Answers:
+    User's Quiz Answers:
     ${JSON.stringify(answers, null, 2)}
     
     Return ONLY a clean JSON response in this format:
     {
-      "career": "NeuroSocial Entrepreneur",
-      "reason": "You combine a deep understanding of human behavior with a passion for shaping the future of society. This career allows you to create meaningful social impact using neurotech, AI, and innovative business models that align with both progress and compassion.",
-      "catchy_title": "Creating Tomorrow’s World with Brainpower & Business 🧠💡",
-      "quote": "True innovation lies at the intersection of science and empathy.",
-      "background_theme": "Futuristic urban office with neuro-interface tech and holographic screens",
-      "emoji": "💭",
-      "hashtag": "#NeuroImpact #BrainTech #NextGenEntrepreneur"
+      "career": "Cardiologist",
+      "reason": "Your passion for science and helping others, combined with your analytical skills, make cardiology the perfect fit. You thrive on precision and have a strong desire to save lives and improve heart health.",
+      "catchy_title": "Be the Heartbeat of Healthcare – Become a Cardiologist ❤️",
+      "quote": "The heart is the center of life – and you have the power to keep it beating.",
+      "background_theme": "Modern operating room with heart monitoring systems and high-tech diagnostic tools",
+      "emoji": "❤️",
+      "hashtag": "#HeartDoctor #SaveLives #Cardiology"
     }
-    `
-    
+`    
     
 
     const generateCareerWithRetry = async () => {
