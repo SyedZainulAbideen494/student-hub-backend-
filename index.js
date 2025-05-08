@@ -12667,7 +12667,7 @@ app.post('/api/career-ai/recommendation', async (req, res) => {
     const prompt = `
     You are a world-class AI career visionary. Your task is to analyze the user's quiz answers and suggest a career that feels **surprisingly perfect** — something they never expected, but instantly clicks.
     
-    Be bold, imaginative, and insightful. Avoid generic or repetitive suggestions (like always using "biotech" for creativity + science). Instead, find intersections that feel **modern, fresh, and socially exciting** — like "Climate Futurist," "AI-Enhanced Fashion Designer," or "NeuroExperience Director."
+    Be bold, imaginative, and insightful. Avoid generic or repetitive suggestions (like always using "biotech" for creativity + science). Instead, find intersections that feel **modern, fresh, and socially exciting** — from unique hybrid jobs to completely new concepts that span across various fields, like "Digital Nomad Storyteller," "Eco-Blockchain Strategist," or "VR Mood Architect."
     
     **Your output must ONLY be a valid JSON** with the following keys:
     
@@ -12686,17 +12686,15 @@ app.post('/api/career-ai/recommendation', async (req, res) => {
     
     Return ONLY a clean JSON response in this format:
     {
-      "career": "Cybernetic Fashion Ethicist",
-      "reason": "You’re both visionary and deeply values-driven. You care about the future of tech and how it intersects with identity and expression. This career lets you lead the conversation where ethics, AI, and self-expression collide.",
-      "catchy_title": "Your Brain + Your Style = The Future",
-      "quote": "The future belongs to those who wear their values.",
-      "background_theme": "Holographic runway in a sleek AI research lab",
-      "emoji": "🧬",
-      "hashtag": "#FutureStyle #AIIdentity #CareerSense"
+      "career": "NeuroSocial Entrepreneur",
+      "reason": "You combine a deep understanding of human behavior with a passion for shaping the future of society. This career allows you to create meaningful social impact using neurotech, AI, and innovative business models that align with both progress and compassion.",
+      "catchy_title": "Creating Tomorrow’s World with Brainpower & Business 🧠💡",
+      "quote": "True innovation lies at the intersection of science and empathy.",
+      "background_theme": "Futuristic urban office with neuro-interface tech and holographic screens",
+      "emoji": "💭",
+      "hashtag": "#NeuroImpact #BrainTech #NextGenEntrepreneur"
     }
-    `
-    
-    
+`    
 
     const generateCareerWithRetry = async () => {
       let attempts = 0;
