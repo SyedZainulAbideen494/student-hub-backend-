@@ -12667,19 +12667,19 @@ app.post('/api/career-ai/recommendation', async (req, res) => {
     const prompt = `
     You are a world-class AI career visionary. Your task is to analyze the user's quiz answers and suggest a career that feels **surprisingly perfect** — something they never expected, but instantly clicks.
     
-    Be bold, imaginative, and insightful. Avoid generic or repetitive suggestions (like always using "biotech" for creativity + science). Instead, find intersections that feel **modern, fresh, and socially exciting** — from unique hybrid jobs to completely new concepts that span across various fields, like "Digital Nomad Storyteller," "Eco-Blockchain Strategist," or "VR Mood Architect."
+    Be bold, imaginative, and insightful. Avoid generic or repetitive suggestions (like always using "biotech" or "bio-tech" when someone selects "Biology & Health"). Instead, think **outside the box** — find intersections that feel **modern, fresh, and socially exciting** across **multiple fields**. Consider **hybrid, innovative careers** or **entirely new concepts** that span industries like tech, arts, business, design, media, social good, and more. Examples could include careers like **"Digital Nomad Storyteller," "Eco-Blockchain Strategist," "VR Mood Architect," or "AI-Powered Sustainability Designer."**
     
-    **Your output must ONLY be a valid JSON** with the following keys:
+    Your output must ONLY be a valid JSON with the following keys:
     
-    - **career**: A unique, modern, and exciting career path that aligns deeply with the user's values, strengths, and interests (can come from any field — tech, arts, business, science, design, social good, media, etc.). It should feel unexpected but perfect.
-    - **reason**: A short, emotionally intelligent explanation of why this path fits the user. It should feel deeply personal — like the AI "gets them."
+    - **career**: A unique, modern, and exciting career path that aligns deeply with the user's values, strengths, and interests. It should come from any field — tech, arts, business, science, design, social good, media, etc. It should feel **unexpected but perfect**.
+    - **reason**: A short, emotionally intelligent explanation of why this career path fits the user. It should resonate with their quiz responses and feel personal, like the AI truly "gets them."
     - **catchy_title**: A bold, viral-style social media headline. Think: “You Were Born for This 🔥” or “This AI Knew My Dream Job Before I Did.”
     - **quote**: An inspiring quote the user would be proud to share in a story or profile bio.
     - **background_theme**: A vivid, visual background idea to be used for designing the UI (e.g. "Cosmic Control Room", "Minimalist Startup Loft", "Neon Jungle Tech Temple").
     - **emoji**: One relevant emoji that enhances the vibe of the career.
     - **hashtag**: 1–3 catchy hashtags that would trend if users shared this result online.
     
-    Avoid repeating careers. Surprise the user. Make it fun to share.
+    Avoid repeating traditional or expected careers (like doctor, engineer, biologist, etc.). Instead, suggest hybrid careers that blend different sectors, or careers that merge **bio/health** with **other fields** like **AI, design, business**, or **social impact**. The focus should be on modern, innovative, and non-traditional roles.
     
     User’s Quiz Answers:
     ${JSON.stringify(answers, null, 2)}
@@ -12694,7 +12694,9 @@ app.post('/api/career-ai/recommendation', async (req, res) => {
       "emoji": "💭",
       "hashtag": "#NeuroImpact #BrainTech #NextGenEntrepreneur"
     }
-`    
+    `
+    
+    
 
     const generateCareerWithRetry = async () => {
       let attempts = 0;
