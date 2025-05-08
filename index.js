@@ -12665,34 +12665,37 @@ app.post('/api/career-ai/recommendation', async (req, res) => {
     console.log(`🧠 Career generation started for user ID: ${userId}`);
 
     const prompt = `
-    You are an exceptionally talented AI career coach. Based on the user's quiz answers, your task is to recommend a unique and exciting career path that aligns with their personality, values, and aspirations.
+    You are a world-class AI career visionary. Your task is to analyze the user's quiz answers and suggest a career that feels **surprisingly perfect** — something they never expected, but instantly clicks.
     
-    Be imaginative — the result should feel surprising, modern, and perfectly tailored, as if the user just discovered their true calling.
+    Be bold, imaginative, and insightful. Avoid generic or repetitive suggestions (like always using "biotech" for creativity + science). Instead, find intersections that feel **modern, fresh, and socially exciting** — like "Climate Futurist," "AI-Enhanced Fashion Designer," or "NeuroExperience Director."
     
-    Your response **must** be in **valid JSON** format with the following keys:
+    **Your output must ONLY be a valid JSON** with the following keys:
     
-    - **career**: A modern, exciting, and suitable career path (can be from any field: tech, design, business, medicine, arts, science, or something unconventional).
-    - **reason**: A short but deeply personalized explanation of why this career fits the user's personality and answers. Make it feel emotionally intelligent and insightful.
-    - **catchy_title**: A bold, exciting social-media-style headline that feels share-worthy and viral.
-    - **quote**: An inspirational quote the user might add to their bio, profile, or post.
-    - **background_theme**: A visually compelling background idea that will be used in the UI (e.g. “Futuristic Neon Lab” or “Nature-Inspired Tech Studio”). This should fit the vibe of the career.
-    - **emoji**: A relevant, fun emoji to represent the career visually.
-    - **hashtag**: A few engaging hashtags for users to share their result on social media (1–3, space-separated).
+    - **career**: A unique, modern, and exciting career path that aligns deeply with the user's values, strengths, and interests (can come from any field — tech, arts, business, science, design, social good, media, etc.). It should feel unexpected but perfect.
+    - **reason**: A short, emotionally intelligent explanation of why this path fits the user. It should feel deeply personal — like the AI "gets them."
+    - **catchy_title**: A bold, viral-style social media headline. Think: “You Were Born for This 🔥” or “This AI Knew My Dream Job Before I Did.”
+    - **quote**: An inspiring quote the user would be proud to share in a story or profile bio.
+    - **background_theme**: A vivid, visual background idea to be used for designing the UI (e.g. "Cosmic Control Room", "Minimalist Startup Loft", "Neon Jungle Tech Temple").
+    - **emoji**: One relevant emoji that enhances the vibe of the career.
+    - **hashtag**: 1–3 catchy hashtags that would trend if users shared this result online.
+    
+    Avoid repeating careers. Surprise the user. Make it fun to share.
     
     User’s Quiz Answers:
     ${JSON.stringify(answers, null, 2)}
     
-    Respond ONLY with a clean and valid JSON object like:
+    Return ONLY a clean JSON response in this format:
     {
-      "career": "Virtual Reality Architect",
-      "reason": "With your passion for technology, design, and innovation, you're a perfect fit for crafting immersive worlds in virtual reality. Your creativity and problem-solving skills will take VR to the next level.",
-      "catchy_title": "Welcome to the Future: Your New Career as a VR Architect!",
-      "quote": "Create worlds that people can't wait to step into. The future of VR is waiting for you.",
-      "background_theme": "Futuristic VR design lab with glowing holograms and immersive screens.",
-      "emoji": "🌐",
-      "hashtag": "#VRArchitect #FutureBuilder #TechRevolution"
+      "career": "Cybernetic Fashion Ethicist",
+      "reason": "You’re both visionary and deeply values-driven. You care about the future of tech and how it intersects with identity and expression. This career lets you lead the conversation where ethics, AI, and self-expression collide.",
+      "catchy_title": "Your Brain + Your Style = The Future",
+      "quote": "The future belongs to those who wear their values.",
+      "background_theme": "Holographic runway in a sleek AI research lab",
+      "emoji": "🧬",
+      "hashtag": "#FutureStyle #AIIdentity #CareerSense"
     }
-    `;
+    `
+    
     
 
     const generateCareerWithRetry = async () => {
