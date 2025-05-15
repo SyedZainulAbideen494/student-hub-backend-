@@ -8936,7 +8936,9 @@ app.post('/verify-payment', async (req, res) => {
       if (duration === 'daily') expiryDate.setDate(expiryDate.getDate() + 1);
       else if (duration === 'weekly') expiryDate.setDate(expiryDate.getDate() + 7);
       else if (duration === 'monthly') expiryDate.setDate(expiryDate.getDate() + 30);
-      else if (duration === '6months') expiryDate.setDate(expiryDate.getDate() + 180);      
+      else if (duration === '6months') expiryDate.setDate(expiryDate.getDate() + 180);
+      else if (duration === 'yearly') expiryDate.setFullYear(expiryDate.getFullYear() + 1);
+        
 
       const queryText = `
         INSERT INTO subscriptions (user_id, subscription_plan, payment_status, payment_date, expiry_date)
