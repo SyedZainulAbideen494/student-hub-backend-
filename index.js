@@ -34,7 +34,7 @@ const { exec } = require("child_process");
 const puppeteer = require("puppeteer");
 const { YoutubeTranscript } = require("youtube-transcript");
 // Initialize Google Generative AI
-const genAI = new GoogleGenerativeAI('AIzaSyDTipI4ybT5vNwpUrF5dg5TST1Apt0wSbs');
+const genAI = new GoogleGenerativeAI('AIzaSyAhvINxPJMSHqKFA-oyBxEsuYxwBZtgPhA');
 
 const safetySettings = [
   {
