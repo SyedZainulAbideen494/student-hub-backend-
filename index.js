@@ -14230,6 +14230,33 @@ app.post("/api/verify-token/forma", async (req, res) => {
   }
 });
 
+app.post("/api/user-ratings/forma", async (req, res) => {
+  const { token } = req.body;
+
+  if (!token) {
+    return res.status(400).json({ error: "Token is required" });
+  }
+
+  try {
+    const userId = await getUserIdFromTokenForma(token);
+
+    if (!userId) {
+      return res.status(401).json({ error: "Invalid or expired token" });
+    }
+
+    const ratings = await query2(
+      "SELECT * FROM ratings WHERE user_id = ? ORDER BY created_at DESC",
+      [userId]
+    );
+
+    return res.json({ ratings });
+  } catch (err) {
+    console.error("Error fetching user ratings:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+
 const generateTokenFroma = () => crypto.randomBytes(20).toString('hex');
 
 app.post('/api/forma/forgot-password', async (req, res) => {
