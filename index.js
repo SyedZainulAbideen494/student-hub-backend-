@@ -13923,7 +13923,7 @@ app.post("/login/forma", (req, res) => {
 
 const storageForma = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, path.join(__dirname, 'public')); // save directly in public/
+    cb(null, path.join(__dirname, '/root/student-hub-backend-/public/')); // save directly in public/
   },
   filename: (req, file, cb) => {
     const userId = req.userId || 'unknown';
@@ -14202,7 +14202,7 @@ app.post('/verify-payment/forma', async (req, res) => {
 });
 
 
-app.post("/api/verify-token", async (req, res) => {
+app.post("/api/verify-token/forma", async (req, res) => {
   const { token } = req.body;
 
   if (!token) return res.json({ valid: false });
