@@ -33,6 +33,8 @@ const Razorpay = require('razorpay');
 const { exec } = require("child_process");
 const puppeteer = require("puppeteer");
 const { YoutubeTranscript } = require("youtube-transcript");
+const fsForma = require('fs').promises; // use promises for async/await
+
 // Initialize Google Generative AI
 const genAI = new GoogleGenerativeAI('AIzaSyAhvINxPJMSHqKFA-oyBxEsuYxwBZtgPhA');
 
@@ -13955,7 +13957,7 @@ const uploadAIForma = multer({
 
 const processImageForma = async (file) => {
   try {
-    const fileBuffer = await fs.readFile(file.path);
+    const fileBuffer = await fsForma.readFile(file.path);
     return fileBuffer.toString('base64');
   } catch (err) {
     throw new Error('Failed to read uploaded file for base64 conversion');
