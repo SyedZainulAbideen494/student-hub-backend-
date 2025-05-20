@@ -151,21 +151,6 @@ connection.getConnection((err) => {
   }
 });
 
-const connection2 = mysql.createPool({
-  connectionLimit: 10, // Maximum number of connections in the pool
-  host: "localhost",
-  user: "root",
-  password: "Englishps#4",
-  database: "healthcare_ai",
-});
-
-connection2.getConnection((err) => {
-  if (err) {
-    console.error("Error connecting to MySQL database: ", err);
-  } else {
-    console.log("Connected to MySQL database doxsify");
-  }
-});
 
 const BASE_URL = 'https://srv594954.hstgr.cloud';
 const FRONTEND_BASE_URL = 'https://edusify.vercel.app'; // Update this if your frontend runs on a different URL
