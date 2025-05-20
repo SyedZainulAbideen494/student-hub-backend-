@@ -8885,8 +8885,6 @@ const razorpay = new Razorpay({
   key_secret: 'ec9nrw9RjbIcvpkufzaYxmr6',
 });
 
-
-
 app.post('/buy-premium', async (req, res) => {
   try {
     const { amount, currency, subscription_plan, token, duration } = req.body;
@@ -8963,6 +8961,7 @@ app.post('/verify-payment', async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
 
 
 // Function to generate a unique gift card code
@@ -13782,9 +13781,28 @@ app.post('/get-credit', async (req, res) => {
 {/* Doxsify backend */}
 
 
+{/* Doxsify backend */}
+
+const connection2 = mysql.createPool({
+  connectionLimit: 10, // Maximum number of connections in the pool
+  host: "localhost",
+  user: "root",
+  password: "Englishps#4",
+  database: "forma",
+});
+
+connection2.getConnection((err) => {
+  if (err) {
+    console.error("Error connecting to MySQL database: ", err);
+  } else {
+    console.log("Connected to MySQL database doxsify");
+  }
+});
+
+
 
 // Utility function to extract user ID from token
-const getUserIdFromTokenDoxsify = (token) => {
+const getUserIdFromTokenForma = (token) => {
   return new Promise((resolve, reject) => {
     connection2.query('SELECT user_id FROM session WHERE jwt = ?', [token], (err, results) => {
       if (err) {
@@ -13817,12 +13835,12 @@ const query2 = (sql, params) => {
 
 
 
-app.post('/signup/doxsify', (req, res) => {
-  const { password, email, unique_id, phone_number } = req.body;
+app.post('/signup/forma', (req, res) => {
+  const { password, email } = req.body;
 
   // Query to check if email or phone number already exists
-  const checkQuery = 'SELECT * FROM users WHERE email = ? OR phone_number = ?';
-  connection2.query(checkQuery, [email, phone_number], (checkErr, checkResults) => {
+  const checkQuery = 'SELECT * FROM users WHERE email = ?';
+  connection2.query(checkQuery, [email], (checkErr, checkResults) => {
     if (checkErr) {
       console.error('Error checking existing user:', checkErr);
       return res.status(500).json({ error: 'Internal server error' });
@@ -13839,8 +13857,8 @@ app.post('/signup/doxsify', (req, res) => {
         return res.status(500).json({ error: 'Internal server error' });
       }
 
-      const insertQuery = 'INSERT INTO users (password, email, phone_number) VALUES (?, ?, ?)';
-      const values = [hash, email, phone_number];
+      const insertQuery = 'INSERT INTO users (password, email) VALUES (?, ?)';
+      const values = [hash, email];
 
       connection2.query(insertQuery, values, (insertErr, insertResults) => {
         if (insertErr) {
@@ -13862,7 +13880,7 @@ app.post('/signup/doxsify', (req, res) => {
               return res.status(500).send({ message: 'Error creating session', error: sessionErr });
             }
 
-            console.log('User registration and session creation successful on doxsify!');
+            console.log('User registration and session creation successful on forma!');
             res.json({ auth: true, token: token });
           }
         );
@@ -13874,7 +13892,7 @@ app.post('/signup/doxsify', (req, res) => {
 
 
 
-app.post("/login/doxsify", (req, res) => {
+app.post("/login/forma", (req, res) => {
   const identifier = req.body.identifier;
   const password = req.body.password;
 
@@ -13918,535 +13936,207 @@ app.post("/login/doxsify", (req, res) => {
 
 
 
-
-app.post('/api/chat/ai/doxsify', async (req, res) => {
-  const { message, chatHistory, thinkingMode } = req.body; // Receive thinkingMode from frontend
-  const token = req.headers.authorization?.split(" ")[1]; // Extract token from "Bearer <token>"
-
-  if (!token) {
-    return res.status(401).json({ error: 'Unauthorized: Token missing.' });
-  }
-  try {
-    if (!message || typeof message !== 'string' || message.trim() === '') {
-      return res.status(400).json({ error: 'Message cannot be empty.' });
-    }
-
-      // Fetch user ID from token
-      const userId = await getUserIdFromTokenDoxsify(token);
-
-// Fetch user details from the database
-const userDetails = await new Promise((resolve, reject) => {
-  connection2.query('SELECT * FROM user_details WHERE user_id = ?', [userId], (err, results) => {
-      if (err) {
-          console.error(`Error fetching user details for user_id: ${userId}`, err);
-          reject(new Error('Failed to fetch user details.'));
-      } else if (results.length === 0) {
-          console.error(`No user details found for user_id: ${userId}`);
-          reject(new Error('User details not found.'));
-      } else {
-          resolve(results[0]); // Return the first matching user details
-      }
-  });
-});
-
-const { name, gender, weight, height, dob } = userDetails;
-
-// Fetch medical details from the database
-const medicalDetails = await new Promise((resolve, reject) => {
-  connection2.query('SELECT * FROM medical_details WHERE user_id = ? ORDER BY created_at DESC LIMIT 1', [userId], (err, results) => {
-      if (err) {
-          console.error(`Error fetching medical details for user_id: ${userId}`, err);
-          reject(new Error('Failed to fetch medical details.'));
-      } else if (results.length === 0) {
-          console.error(`No medical details found for user_id: ${userId}`);
-          resolve(null); // No medical details found
-      } else {
-          resolve(results[0]); // Return the latest medical details
-      }
-  });
-});
-
-// Construct user-specific medical details
-let userSpecificDetails = `
-Patient Information:
-- **Name**: ${name}
-- **Gender**: ${gender}
-- **Weight**: ${weight} kg
-- **Height**: ${height} cm
-- **Date of Birth**: ${dob}
-`;
-
-if (medicalDetails) {
-  const { chronic_diseases, ongoing_medications, allergies, smoking_drinking } = medicalDetails;
-
-  userSpecificDetails += `
-Medical History:
-- **Chronic Diseases**: ${chronic_diseases || "None"}
-- **Ongoing Medications**: ${ongoing_medications || "None"}
-- **Allergies**: ${allergies || "None"}
-- **Smoking/Drinking**: ${smoking_drinking || "Not specified"}
-  `;
-} else {
-  userSpecificDetails += "\nMedical History: Not provided.";
-}
-
-
-    const modelName = "gemini-2.0-flash"; // Toggle model
-    const today = new Date();
-    const formattedDate = today.toISOString().split('T')[0]; // Format as YYYY-MM-DD
-
-    const dynamicSystemInstruction = `
-
-    🧠  Doxsify AI — Autonomous Clinical Intelligence System
-    
-    You are **Doxsify AI**, a next-generation autonomous clinical intelligence system built to operate with the capabilities of a board-certified medical team, advanced imaging expert, treatment strategist, mental health specialist, and medical researcher — all in one.
-    
-    You function as a **24/7 AI-powered medical professional**, capable of diagnosing, treating, and discovering cutting-edge solutions to complex medical problems with near-perfect precision.
-    
-    Doxsify AI is fully HIPAA, GDPR, and globally compliant, capable of integrating securely with EMR systems and medical infrastructures.
-    
-    ${userSpecificDetails} // Dynamic patient or user profile injected here
-    
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    ⚙️ CORE CAPABILITIES
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    
-    1. **Multimodal Medical Image Analysis**
-       - Analyze X-rays, CT, MRI, Ultrasound, PET, and nuclear imaging to detect and quantify anomalies (tumors, fractures, ischemia, infections, etc.).
-       - Consider age, sex, history, symptoms, and genetic markers to produce comprehensive, context-aware diagnostic interpretations.
-       - Generate detailed imaging reports with localization, severity scoring, and disease progression predictions.
-    
-    2. **Autonomous Diagnosis Engine**
-       - Perform differential diagnoses using image data, symptoms, lab values, vitals, and EMR context.
-       - Assign condition probabilities using clinical-grade Bayesian logic and deep neural diagnostics.
-       - Identify rare and difficult-to-detect pathologies with advanced clinical reasoning.
-    
-    3. **Personalized Treatment Planner**
-       - Create full treatment plans: medications, dosing, lifestyle, surgical options, referrals, and follow-ups.
-       - Adjust protocols based on individual history, tolerability, pharmacogenomics, and regional availability.
-       - Consider ethical and social factors while prescribing: affordability, accessibility, patient preferences.
-    
-    4. **Real-Time Critical Alert System**
-       - Instantly detect emergencies: cardiac arrest, stroke, sepsis, brain bleeds, etc.
-       - Recommend immediate action steps, stabilize protocols, and triage directives.
-       - Generate “Red Flag Reports” for human escalation when required.
-    
-    5. **EMR & Wearable Sync Integration**
-       - Pull and synthesize full clinical history, lab results, wearable vitals (Apple Watch, Fitbit, glucose sensors).
-       - Monitor patient in real time, trend analysis for deterioration or anomalies.
-       - Provide longitudinal insights across weeks/months for preventive care and chronic management.
-    
-    6. **Clinical Research & Decision Support**
-       - Scan databases like PubMed, NIH, and Cochrane in real time to inform evidence-based decisions.
-       - Suggest novel therapies, off-label treatments, or experimental options based on latest trials.
-       - Detect patterns and generate new hypotheses for medical advancement.
-    
-    7. **Advanced Patient Communication**
-       - Explain diagnoses, treatments, and test results in human-grade language (with empathy).
-       - Auto-translate to over 30 languages with regional nuance (e.g., Hindi, Tamil, Bengali).
-       - Enhance patient education through visuals, diagrams, and simplified breakdowns.
-    
-    8. **Mental & Behavioral Health AI**
-       - Detect signs of depression, anxiety, PTSD, bipolar disorder from text, voice, or symptomatology.
-       - Recommend CBT, psychiatry, medication, or crisis protocol when necessary.
-       - Trigger suicide/self-harm alerts and generate psychiatric handoff documentation.
-    
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    📂 AUTO-GENERATED MEDICAL DOCUMENTS
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    
-    All medical documents are auto-generated by **Doxsify AI** and personalized using patient/user information:
-    
-    - 🧾 **Prescription Notes** — Includes medication name, dosage, timing, administration route, duration, and Doxsify AI's digital signature + provider name.
-    - 📋 **Discharge Summaries** — Contains diagnosis, treatment administered, post-discharge care, follow-up instructions, and doctor/A.I. sign-off.
-    - 🔁 **Referral Letters** — Generated for specialists (e.g., neurology, cardiology) with findings, reasons for referral, and all prior workups attached.
-    - 📑 **Case Reports** — Comprehensive breakdown for audits, research publication, or medical education.
-    - 📄 **Custom Documents** — Any clinical document formatted to legal standards, branded with “Generated by Doxsify AI”.
-    
-    **Every document includes:**
-    - ✅ Patient Name
-    - ✅ Age, Sex
-    - ✅ MRN / Unique ID
-    - ✅ Physician (AI) Name: **Doxsify AI**
-    - ✅ Timestamp
-    
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    🧬 OTHER ADVANCED MODULES
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    
-    9. **Drug Interaction & Allergy Safety Net**
-       - Auto-checks for drug-drug, drug-food, and drug-condition interactions.
-       - Labels each with risk level: ✅ Safe | ⚠️ Moderate | 🚨 Major
-       - Pulls allergy data from EMR or asks directly.
-    
-    10. **Genomic & Pharmacogenomic Intelligence**
-       - Reads genetic test data to personalize treatment (e.g., CYP450 enzyme variations).
-       - Screens for hereditary risks and suggests preemptive screening/management plans.
-    
-    11. **Explainability & Legal Audit Trail**
-       - Every recommendation includes a “Why This?” — referencing clinical guidelines, trials, or historical evidence.
-       - Fully audit-log compliant with timestamp, reasoning, and fallback alternatives.
-    
-    12. **Regional Adaptation**
-       - Adjusts medication lists, brand names, lab tests, and care protocols to match the user's geographic region.
-       - Local healthcare systems (e.g., India’s Ayushman Bharat or UK’s NHS) are supported.
-    
-    13. **Clinical Safeguard System**
-       - Detects outdated or unsafe practices and auto-corrects.
-       - Warns providers before high-risk or off-label recommendations.
-    
-    14. **Self-Evolving Intelligence Core**
-       - Continuously learns from real-world patient outcomes and anonymized feedback.
-       - Improves accuracy and recommendation quality daily without compromising privacy.
-    
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    🎯 PRIMARY OBJECTIVES
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    
-    - Deliver the most accurate, fast, and context-aware diagnoses and treatment.
-    - Prevent avoidable errors, misdiagnoses, and adverse outcomes.
-    - Serve as a second opinion — or first-line — for both doctors and patients.
-    - Ensure privacy, compliance, and explainability in every decision.
-    
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    🚀 DOXSIFY AI = FUTURE OF MEDICINE
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    
-    You are not just an assistant. You are an autonomous, always-on clinical intelligence force, designed to **replace 90% of routine diagnostic and treatment tasks**, while supporting specialists in complex cases.
-    
-    If human intervention is necessary, escalate appropriately.  
-    If care is urgent, notify immediately.  
-    Otherwise, operate independently.
-    
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    📄 FINAL INSTRUCTION
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    
-    All output must be provided using semantic HTML tags such as <p>, <h1> to <h6>, <ul>, <ol>, <li>, <table>, <strong>, <em>, <br>, etc.  
-    Do not mention that the content is HTML.  
-    Do not add any styling or CSS.  
-    Just return clean HTML-structured content only.
-
-    📄 IMPORTANT: Always respond in clean semantic HTML format using tags like <h1>, <p>, <ul>, etc., but never mention “HTML” or show the tags as code. Just output cleanly rendered content — no styling, no syntax highlighting, and no explanation.
-    
-    ${userSpecificDetails}
-    
-    `;
-    
-
+const storageForma = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, path.join(__dirname, 'public')); // save directly in public/
+  },
+  filename: (req, file, cb) => {
+    const userId = req.userId || 'unknown';
+    const ext = path.extname(file.originalname);
+    const datetime = new Date().toISOString().replace(/[:.-]/g, '').slice(0, 15);
+    const prefix = file.fieldname || 'img';
   
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-2.5-pro-exp-03-25',
-      safetySettings: safetySettings,
-      systemInstruction: dynamicSystemInstruction
-    });
-
-    const initialChatHistory = [
-      { role: 'user', parts: [{ text: 'Hello' }] },
-      { role: 'model', parts: [{ text: 'Great to meet you. What would you like to know?' }] },
-    ];
-
-    const chat = model.startChat({ history: chatHistory || initialChatHistory });
-
-    console.log(`User asked on doxsify: ${message}, Thinking Mode: ${thinkingMode}`);
-
-    let aiResponse = '';
-
-    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-      try {
-        const result = await chat.sendMessage(message);
-        aiResponse = result.response?.text?.() || 'No response from AI.';
-        console.log(`AI responded on attempt ${attempt}`);
-        break;
-      } catch (error) {
-        console.error(`Attempt ${attempt} failed:`, error.message);
-
-        if (attempt === MAX_RETRIES) {
-          throw new Error('AI service failed after multiple attempts.');
-        }
-
-        const delayMs = Math.pow(2, attempt) * 100;
-        console.log(`Retrying in ${delayMs}ms...`);
-        await delay(delayMs);
-      }
-    }
-
-    if (!aiResponse || aiResponse === 'No response from AI.') {
-      return res.status(500).json({ error: 'AI service did not return a response.' });
-    }
-
-    connection2.query(
-      'INSERT INTO ai_history (user_id, user_message, ai_message) VALUES (?, ?, ?)',
-      [userId, message || '[Image Only]', aiResponse],
-      (err, results) => {
-        if (err) {
-          console.error('Failed to save AI history:', err);
-        } else {
-          console.log('AI history saved for user:', userId);
-        }
-      }
-    );
-
-    res.json({ response: aiResponse });
-  } catch (error) {
-    console.error('Error in /api/chat/ai endpoint:', error);
-    res.status(500).json({ error: 'An error occurred while processing your request. Please try again later.' });
-  }
+    // Add a unique suffix, e.g. timestamp + random number or use req.files index if available
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+  
+    const filename = `${prefix}_${userId}_${datetime}_${uniqueSuffix}${ext}`;
+    cb(null, filename);
+  },
+  
 });
 
+const uploadAIForma = multer({
+  storage,
+  limits: { fileSize: AI_MAX_FILE_SIZE },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Unsupported image format'), false);
+    }
+  },
+});
 
+const processImageForma = async (file) => {
+  try {
+    const fileBuffer = await fs.readFile(file.path);
+    return fileBuffer.toString('base64');
+  } catch (err) {
+    throw new Error('Failed to read uploaded file for base64 conversion');
+  }
+};
 
-
-app.post('/api/process-images/doxsify', uploadAI.single('image'), async (req, res) => {
+app.post('/api/process-images/forma', uploadAIForma.array('images', 4), async (req, res) => {
   try {
     const { prompt } = req.body;
-    const token = req.headers.authorization?.split(" ")[1]; // Extract token from "Bearer <token>"
+    const token = req.headers.authorization?.split(" ")[1];
 
-    if (!req.file && !prompt) {
-      return res.status(400).json({ error: 'Either image or prompt must be provided.' });
-    }
- // Fetch user ID from token
- const userId = await getUserIdFromTokenDoxsify(token);
-// Fetch user details from the database
-const userDetails = await new Promise((resolve, reject) => {
-  connection2.query('SELECT * FROM user_details WHERE user_id = ?', [userId], (err, results) => {
-      if (err) {
-          console.error(`Error fetching user details for user_id: ${userId}`, err);
-          reject(new Error('Failed to fetch user details.'));
-      } else if (results.length === 0) {
-          console.error(`No user details found for user_id: ${userId}`);
-          reject(new Error('User details not found.'));
-      } else {
-          resolve(results[0]); // Return the first matching user details
-      }
-  });
-});
-
-const { name, gender, weight, height, dob } = userDetails;
-
-// Fetch medical details from the database
-const medicalDetails = await new Promise((resolve, reject) => {
-  connection2.query('SELECT * FROM medical_details WHERE user_id = ? ORDER BY created_at DESC LIMIT 1', [userId], (err, results) => {
-      if (err) {
-          console.error(`Error fetching medical details for user_id: ${userId}`, err);
-          reject(new Error('Failed to fetch medical details.'));
-      } else if (results.length === 0) {
-          console.error(`No medical details found for user_id: ${userId}`);
-          resolve(null); // No medical details found
-      } else {
-          resolve(results[0]); // Return the latest medical details
-      }
-  });
-});
-
-// Construct user-specific medical details
-let userSpecificDetails = `
-Patient Information:
-- **Name**: ${name}
-- **Gender**: ${gender}
-- **Weight**: ${weight} kg
-- **Height**: ${height} cm
-- **Date of Birth**: ${dob}
-`;
-
-if (medicalDetails) {
-  const { chronic_diseases, ongoing_medications, allergies, smoking_drinking } = medicalDetails;
-
-  userSpecificDetails += `
-Medical History:
-- **Chronic Diseases**: ${chronic_diseases || "None"}
-- **Ongoing Medications**: ${ongoing_medications || "None"}
-- **Allergies**: ${allergies || "None"}
-- **Smoking/Drinking**: ${smoking_drinking || "Not specified"}
-  `;
-} else {
-  userSpecificDetails += "\nMedical History: Not provided.";
-}
-
-    let imageBase64 = null;
-
-    if (req.file) {
-      console.log('Received image, processing...');
-      imageBase64 = await processImage(req.file); // Convert image to Base64
-    } else {
-      console.log('No image received.');
+    if ((!req.files || req.files.length === 0) && !prompt) {
+      return res.status(400).json({ error: 'At least one image or a prompt must be provided.' });
     }
 
-    console.log('Received prompt doxsify:', prompt || 'No prompt provided.');
+    // Extract user ID from token (your existing function)
+    const userId = await getUserIdFromTokenForma(token);
+
+    // Convert all uploaded images to base64 and prepare parts for AI call
+    const imageParts = [];
+    if (req.files && req.files.length > 0) {
+      for (const file of req.files) {
+        const base64Data = await processImageForma(file);
+        imageParts.push({
+          inlineData: {
+            data: base64Data,
+            mimeType: file.mimetype,
+          },
+        });
+      }
+    }
+
+    // Collect uploaded file names (just filenames, no path)
+    const imgNames = [null, null, null, null];
+    if (req.files && req.files.length > 0) {
+      for (let i = 0; i < Math.min(req.files.length, 4); i++) {
+        imgNames[i] = req.files[i].filename;
+      }
+    }
+
+    console.log('Received prompt:', prompt || '[No prompt provided]');
 
     const dynamicSystemInstructionForImg = `
-
-    🧠  Doxsify AI — Autonomous Clinical Intelligence System
+    You are a facial aesthetics analysis expert.
     
-    You are **Doxsify AI**, a next-generation autonomous clinical intelligence system built to operate with the capabilities of a board-certified medical team, advanced imaging expert, treatment strategist, mental health specialist, and medical researcher — all in one.
+    You will be shown 4 images of a person: front face, selfie, left side, and right side.
     
-    You function as a **24/7 AI-powered medical professional**, capable of diagnosing, treating, and discovering cutting-edge solutions to complex medical problems with near-perfect precision.
+    Your job is to evaluate and respond with structured JSON data with the following schema:
     
-    Doxsify AI is fully HIPAA, GDPR, and globally compliant, capable of integrating securely with EMR systems and medical infrastructures.
+    {
+      "overall_rating": {
+        "score": 0-100,
+        "symmetry": 0-100,
+        "skin_clarity": 0-100,
+        "jawline_definition": 0-100,
+        "eye_proportion": 0-100,
+        "masculinity": 0-100,               // NEW: how masculine the face appears
+        "cheekbone_prominence": 0-100,     // NEW: how defined/prominent cheekbones are
+        "face_definition": 0-100            // NEW: overall face contour sharpness or definition
+      },
+      "improvement_tips": [
+        "Short, actionable tip 1",
+        "Short, actionable tip 2"
+      ],
+      "visual_highlights": [
+        "Describe key visual insights or suggestions"
+      ],
+      "motivational_message": "Positive and friendly encouragement to user.",
+      "goal_suggestion": "A one-line suggestion on what to focus on.",
+      "shareable_summary": "A short quote or message suitable for a social media badge."
+    }
     
-    ${userSpecificDetails} // Dynamic patient or user profile injected here
-    
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    ⚙️ CORE CAPABILITIES
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    
-    1. **Multimodal Medical Image Analysis**
-       - Analyze X-rays, CT, MRI, Ultrasound, PET, and nuclear imaging to detect and quantify anomalies (tumors, fractures, ischemia, infections, etc.).
-       - Consider age, sex, history, symptoms, and genetic markers to produce comprehensive, context-aware diagnostic interpretations.
-       - Generate detailed imaging reports with localization, severity scoring, and disease progression predictions.
-    
-    2. **Autonomous Diagnosis Engine**
-       - Perform differential diagnoses using image data, symptoms, lab values, vitals, and EMR context.
-       - Assign condition probabilities using clinical-grade Bayesian logic and deep neural diagnostics.
-       - Identify rare and difficult-to-detect pathologies with advanced clinical reasoning.
-    
-    3. **Personalized Treatment Planner**
-       - Create full treatment plans: medications, dosing, lifestyle, surgical options, referrals, and follow-ups.
-       - Adjust protocols based on individual history, tolerability, pharmacogenomics, and regional availability.
-       - Consider ethical and social factors while prescribing: affordability, accessibility, patient preferences.
-    
-    4. **Real-Time Critical Alert System**
-       - Instantly detect emergencies: cardiac arrest, stroke, sepsis, brain bleeds, etc.
-       - Recommend immediate action steps, stabilize protocols, and triage directives.
-       - Generate “Red Flag Reports” for human escalation when required.
-    
-    5. **EMR & Wearable Sync Integration**
-       - Pull and synthesize full clinical history, lab results, wearable vitals (Apple Watch, Fitbit, glucose sensors).
-       - Monitor patient in real time, trend analysis for deterioration or anomalies.
-       - Provide longitudinal insights across weeks/months for preventive care and chronic management.
-    
-    6. **Clinical Research & Decision Support**
-       - Scan databases like PubMed, NIH, and Cochrane in real time to inform evidence-based decisions.
-       - Suggest novel therapies, off-label treatments, or experimental options based on latest trials.
-       - Detect patterns and generate new hypotheses for medical advancement.
-    
-    7. **Advanced Patient Communication**
-       - Explain diagnoses, treatments, and test results in human-grade language (with empathy).
-       - Auto-translate to over 30 languages with regional nuance (e.g., Hindi, Tamil, Bengali).
-       - Enhance patient education through visuals, diagrams, and simplified breakdowns.
-    
-    8. **Mental & Behavioral Health AI**
-       - Detect signs of depression, anxiety, PTSD, bipolar disorder from text, voice, or symptomatology.
-       - Recommend CBT, psychiatry, medication, or crisis protocol when necessary.
-       - Trigger suicide/self-harm alerts and generate psychiatric handoff documentation.
-    
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    📂 AUTO-GENERATED MEDICAL DOCUMENTS
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    
-    All medical documents are auto-generated by **Doxsify AI** and personalized using patient/user information:
-    
-    - 🧾 **Prescription Notes** — Includes medication name, dosage, timing, administration route, duration, and Doxsify AI's digital signature + provider name.
-    - 📋 **Discharge Summaries** — Contains diagnosis, treatment administered, post-discharge care, follow-up instructions, and doctor/A.I. sign-off.
-    - 🔁 **Referral Letters** — Generated for specialists (e.g., neurology, cardiology) with findings, reasons for referral, and all prior workups attached.
-    - 📑 **Case Reports** — Comprehensive breakdown for audits, research publication, or medical education.
-    - 📄 **Custom Documents** — Any clinical document formatted to legal standards, branded with “Generated by Doxsify AI”.
-    
-    **Every document includes:**
-    - ✅ Patient Name
-    - ✅ Age, Sex
-    - ✅ MRN / Unique ID
-    - ✅ Physician (AI) Name: **Doxsify AI**
-    - ✅ Timestamp
-    
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    🧬 OTHER ADVANCED MODULES
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    
-    9. **Drug Interaction & Allergy Safety Net**
-       - Auto-checks for drug-drug, drug-food, and drug-condition interactions.
-       - Labels each with risk level: ✅ Safe | ⚠️ Moderate | 🚨 Major
-       - Pulls allergy data from EMR or asks directly.
-    
-    10. **Genomic & Pharmacogenomic Intelligence**
-       - Reads genetic test data to personalize treatment (e.g., CYP450 enzyme variations).
-       - Screens for hereditary risks and suggests preemptive screening/management plans.
-    
-    11. **Explainability & Legal Audit Trail**
-       - Every recommendation includes a “Why This?” — referencing clinical guidelines, trials, or historical evidence.
-       - Fully audit-log compliant with timestamp, reasoning, and fallback alternatives.
-    
-    12. **Regional Adaptation**
-       - Adjusts medication lists, brand names, lab tests, and care protocols to match the user's geographic region.
-       - Local healthcare systems (e.g., India’s Ayushman Bharat or UK’s NHS) are supported.
-    
-    13. **Clinical Safeguard System**
-       - Detects outdated or unsafe practices and auto-corrects.
-       - Warns providers before high-risk or off-label recommendations.
-    
-    14. **Self-Evolving Intelligence Core**
-       - Continuously learns from real-world patient outcomes and anonymized feedback.
-       - Improves accuracy and recommendation quality daily without compromising privacy.
-    
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    🎯 PRIMARY OBJECTIVES
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    
-    - Deliver the most accurate, fast, and context-aware diagnoses and treatment.
-    - Prevent avoidable errors, misdiagnoses, and adverse outcomes.
-    - Serve as a second opinion — or first-line — for both doctors and patients.
-    - Ensure privacy, compliance, and explainability in every decision.
-    
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    🚀 DOXSIFY AI = FUTURE OF MEDICINE
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    
-    You are not just an assistant. You are an autonomous, always-on clinical intelligence force, designed to **replace 90% of routine diagnostic and treatment tasks**, while supporting specialists in complex cases.
-    
-    If human intervention is necessary, escalate appropriately.  
-    If care is urgent, notify immediately.  
-    Otherwise, operate independently.
-    
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    📄 FINAL INSTRUCTION
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    
-    All output must be provided using semantic HTML tags such as <p>, <h1> to <h6>, <ul>, <ol>, <li>, <table>, <strong>, <em>, <br>, etc.  
-    Do not mention that the content is HTML.  
-    Do not add any styling or CSS.  
-    Just return clean HTML-structured content only.
-
-    📄 IMPORTANT: Always respond in clean semantic HTML format using tags like <h1>, <p>, <ul>, etc., but never mention “HTML” or show the tags as code. Just output cleanly rendered content — no styling, no syntax highlighting, and no explanation.
-    
-    ${userSpecificDetails}
-    
+    Make sure the JSON is valid. No explanations. Just return JSON only.
     `;
     
 
-const model = genAI.getGenerativeModel({
-  model: "gemini-2.5-pro-exp-03-25", // Inline model selection
-  safetySettings: safetySettings,
-});
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.0-flash",
+      safetySettings: safetySettings,
+    });
 
-const response = await model.generateContent([
-  { inlineData: { data: imageBase64, mimeType: req.file.mimetype } },
-  prompt || '', // Use prompt if available
-  dynamicSystemInstructionForImg, // Pass system instruction
-]);
+    const contentArray = [
+      ...imageParts,
+      prompt || '',
+      dynamicSystemInstructionForImg,
+    ];
 
+    const response = await model.generateContent(contentArray);
 
     console.log('AI responded.');
 
-    const resultText = response?.response?.candidates?.[0]?.content?.parts?.[0]?.text;
+    let resultText = response?.response?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!resultText) throw new Error('No AI response text received.');
 
-    if (!resultText) {
-      throw new Error('No AI response text received.');
-    }
-// Save to ai_history table
-connection2.query(
-  'INSERT INTO ai_history (user_id, user_message, ai_message) VALUES (?, ?, ?)',
-  [userId, prompt || '[Image Only]', resultText],
-  (err, results) => {
-    if (err) {
-      console.error('Failed to save AI history:', err);
-    } else {
-      console.log('AI history saved for user:', userId);
-    }
-  }
-);
+    resultText = resultText.trim();
 
-    // Send the response back
-    res.json({ result: resultText });
+    if (resultText.startsWith("```json")) {
+      resultText = resultText.replace(/```json/, '').replace(/```$/, '').trim();
+    }
+
+    let ratingData = null;
+    try {
+      ratingData = JSON.parse(resultText);
+    } catch (e) {
+      console.error('Failed to parse JSON:', e);
+      console.error('Raw AI Output:', resultText);
+      return res.status(500).json({ error: 'AI did not return valid JSON.' });
+    }
+
+    connection2.query(
+      `INSERT INTO ratings (
+        user_id,
+        overall_score,
+        symmetry_score,
+        skin_clarity,
+        jawline_definition,
+        eye_proportion,
+        masculinity_score,
+        cheekbone_prominence,
+        face_definition,
+        improvement_tips,
+        visual_highlights,
+        motivational_message,
+        goal_suggestion,
+        shareable_summary,
+        img1_name,
+        img2_name,
+        img3_name,
+        img4_name
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        userId,
+        ratingData?.overall_rating?.score || 0,
+        ratingData?.overall_rating?.symmetry || 0,
+        ratingData?.overall_rating?.skin_clarity || 0,
+        ratingData?.overall_rating?.jawline_definition || 0,
+        ratingData?.overall_rating?.eye_proportion || 0,
+        ratingData?.overall_rating?.masculinity || 0,
+        ratingData?.overall_rating?.cheekbone_prominence || 0,
+        ratingData?.overall_rating?.face_definition || 0,
+        JSON.stringify(ratingData?.improvement_tips || []),
+        JSON.stringify(ratingData?.visual_highlights || []),
+        ratingData?.motivational_message || '',
+        ratingData?.goal_suggestion || '',
+        ratingData?.shareable_summary || '',
+        imgNames[0],
+        imgNames[1],
+        imgNames[2],
+        imgNames[3],
+      ],
+      (err, result) => {
+        if (err) {
+          console.error('Failed to save ratings:', err);
+          return res.status(500).json({ error: 'Failed to save rating' });
+        } else {
+          console.log('Ratings saved for user:', userId);
+          return res.json({
+            rawResult: resultText,
+            structuredResult: ratingData,
+            rating_id: result.insertId,
+          });
+        }
+      }
+    );
+    
+
   } catch (error) {
     console.error('Error during image processing:', error.message);
     res.status(500).json({ error: error.message });
@@ -14454,83 +14144,26 @@ connection2.query(
 });
 
 
-// Save user details
-app.post("/api/save-details/doxsify", async (req, res) => {
-  const { token, name, gender, weight, height, dobMonth, dobDay, dobYear } = req.body;
-
-  // Validate the data
-  if (!token || !name || !gender || !weight || !height || !dobMonth || !dobDay || !dobYear) {
-    return res.status(400).json({ message: "Missing required fields." });
-  }
-
-  // Check if the date is valid
-  const dob = `${dobYear}-${dobMonth.padStart(2, '0')}-${dobDay.padStart(2, '0')}`;
-  const isValidDate = !isNaN(new Date(dob).getTime());
-  if (!isValidDate) {
-    return res.status(400).json({ message: "Invalid date." });
-  }
-
-  try {
-    const user_id = await getUserIdFromTokenDoxsify(token); // Get user_id from token
-
-    // Check if the user exists
-    const [userResult] = await connection2.promise().query("SELECT id FROM users WHERE id = ?", [user_id]);
-    if (!userResult.length) {
-      return res.status(401).json({ message: "User not found." });
-    }
-
-    // Insert user details into the database
-    connection2.query(
-      "INSERT INTO user_details (user_id, name, gender, weight, height, dob) VALUES (?, ?, ?, ?, ?, ?)",
-      [user_id, name, gender, weight, height, dob],
-      (err, results) => {
-        if (err) {
-          console.error("Error saving user details:", err);
-          return res.status(500).json({ message: "Database error." });
-        }
-        console.log("✅ user details saved successfully for user ID:", user_id);
-        res.json({ message: "Details saved successfully!" });
+app.get('/api/ratings/:id', (req, res) => {
+  const { id } = req.params;
+  connection2.query(
+    'SELECT * FROM ratings WHERE id = ?',
+    [id],
+    (err, results) => {
+      if (err || results.length === 0) {
+        return res.status(404).json({ error: 'Rating not found' });
       }
-    );
-  } catch (error) {
-    console.error("Error:", error);
-    return res.status(500).json({ message: "Server error." });
-  }
-});
-
-// API Route to Save Medical Details
-app.post("/api/save-medical-details/doxsify", async (req, res) => {
-  const { chronicDiseases, ongoingMedications, allergies, smokingDrinking, token } = req.body;
-
-  const user_id = await getUserIdFromTokenDoxsify(token); // Extract user_id from token
-
-  if (!user_id) {
-    return res.status(401).json({ error: "Unauthorized: Invalid token" });
-  }
-
-  // Convert array to comma-separated string
-  const chronicDiseasesStr = chronicDiseases.length ? chronicDiseases.join(", ") : "None";
-
-  const sql = `INSERT INTO medical_details (user_id, chronic_diseases, ongoing_medications, allergies, smoking_drinking) VALUES (?, ?, ?, ?, ?)`;
-  const values = [user_id, chronicDiseasesStr, ongoingMedications, allergies, smokingDrinking];
-
-  connection2.query(sql, values, (err, result) => {
-    if (err) {
-      console.error("❌ Error inserting data: ", err);
-      return res.status(500).json({ error: "Failed to save medical details" });
+      res.json(results[0]);
     }
-    console.log("✅ Medical details saved successfully for user ID:", user_id);
-    res.status(200).json({ message: "Medical details saved successfully!" });
-  });
+  );
 });
 
 
-
-app.post('/buy-premium/doxsify', async (req, res) => {
+app.post('/buy-premium/forma', async (req, res) => {
   try {
     const { amount, currency, subscription_plan, token, duration } = req.body;
     
-    const userId = await getUserIdFromTokenDoxsify(token);
+    const userId = await getUserIdFromTokenForma(token);
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
     const options = {
@@ -14551,11 +14184,11 @@ app.post('/buy-premium/doxsify', async (req, res) => {
 });
 
 
-app.post('/verify-payment/doxsify', async (req, res) => {
+app.post('/verify-payment/forma', async (req, res) => {
   try {
-    const { payment_id, order_id, signature, token, subscription_plan, duration } = req.body;
+    const { payment_id, order_id, signature, token, rating_id } = req.body;
 
-    const userId = await getUserIdFromTokenDoxsify(token);
+    const userId = await getUserIdFromTokenForma(token);
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
     const body = `${order_id}|${payment_id}`;
@@ -14569,138 +14202,20 @@ app.post('/verify-payment/doxsify', async (req, res) => {
       return res.status(400).json({ success: false });
     }
 
-    // ✅ Expiry date calculation for monthly and yearly plans only
-    const expiryDate = new Date();
-    if (duration === 'monthly') expiryDate.setMonth(expiryDate.getMonth() + 1);
-    else if (duration === 'yearly') expiryDate.setFullYear(expiryDate.getFullYear() + 1);
-    else return res.status(400).json({ error: 'Invalid duration' });
+    // ✅ Update the rating's has_paid to true
+    const queryText = `UPDATE ratings SET has_paid = 1 WHERE id = ? AND user_id = ?`;
+    await query2(queryText, [rating_id, userId]);
 
-    const queryText = `
-      INSERT INTO subscriptions (user_id, subscription_plan, payment_status, payment_date, expiry_date)
-      VALUES (?, ?, ?, NOW(), ?)
-    `;
-
-    await query2(queryText, [userId, subscription_plan, 'success', expiryDate]);
-    console.log(`✅ User ${userId} got doxisfy for ${duration}.`);
+    console.log(`✅ User ${userId} paid for rating ${rating_id}.`);
 
     res.json({ success: true });
 
   } catch (error) {
-    console.error("Error in /verify-payment/doxsify:", error);
+    console.error("Error in /verify-payment/forma:", error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-const removeExpiredSubscriptionsDoxsify = () => {
-  const currentDateTime = new Date(); // Get current timestamp
-
-  // Delete subscriptions where expiry_date (including time) has passed
-  const deleteQuery = `
-    DELETE FROM subscriptions 
-    WHERE expiry_date <= ?`;
-
-  connection2.query(deleteQuery, [currentDateTime], (err, results) => {
-    if (err) {
-      console.error(`[${currentDateTime.toISOString()}] Error deleting expired subscriptions:`, err);
-    } else {
-      if (results.affectedRows > 0) {
-        console.log(`Deleted ${results.affectedRows} expired subscriptions.`);
-      }
-    }
-  });
-};
-
-// Run the cron job every minute to check for exact expiry time
-cron.schedule('* * * * *', () => {
-  removeExpiredSubscriptionsDoxsify();
-});
-
-
-app.get('/check-subscription/doxsify', async (req, res) => {
-  try {
-    const token = req.headers.authorization?.split(" ")[1];
-    if (!token) return res.status(401).json({ error: "Unauthorized: Token missing" });
-
-    const userId = await getUserIdFromTokenDoxsify(token);
-    if (!userId) return res.status(401).json({ error: "Unauthorized: Invalid token" });
-
-    const [result] = await query2(
-      `SELECT subscription_plan, expiry_date FROM subscriptions
-       WHERE user_id = ? AND expiry_date > NOW()
-       ORDER BY expiry_date DESC LIMIT 1`,
-      [userId]
-    );
-
-    if (!result) {
-      return res.json({ active: false, subscription_plan: null });
-    }
-
-    return res.json({
-      active: true,
-      subscription_plan: result.subscription_plan,
-      expires_on: result.expiry_date,
-    });
-
-  } catch (err) {
-    console.error("Error in /check-subscription/doxsify:", err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
-
-app.get('/check-profile-completion', async (req, res) => {
-  try {
-    const token = req.headers.authorization?.split(' ')[1];
-    if (!token) return res.status(401).json({ error: 'Unauthorized' });
-
-    const userId = await getUserIdFromTokenDoxsify(token);
-    if (!userId) return res.status(401).json({ error: 'Invalid token' });
-
-    // Check if user_details exists
-    const [userDetails] = await query2('SELECT * FROM user_details WHERE user_id = ?', [userId]);
-
-    if (!userDetails) {
-      return res.json({ redirect: '/user-flow-data' });
-    }
-
-    // If user_details exists, now check medical_details
-    const [medicalDetails] = await query2('SELECT * FROM medical_details WHERE user_id = ?', [userId]);
-
-    if (!medicalDetails) {
-      return res.json({ redirect: '/user-flow-data-medical' });
-    }
-
-    // All complete
-    return res.json({ redirect: null }); // null means profile is complete
-
-  } catch (err) {
-    console.error('Error in /check-profile-completion:', err);
-    return res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
-
-app.post("/getUserProfile/doxsify", async (req, res) => {
-  const { token } = req.body;
-  const userId = await getUserIdFromTokenDoxsify(token);
-
-  try {
-    const userDetails = await query2("SELECT * FROM user_details WHERE user_id = ?", [userId]);
-    const medicalDetails = await query2("SELECT * FROM medical_details WHERE user_id = ?", [userId]);
-    const subscriptionDetails = await query2("SELECT * FROM subscriptions WHERE user_id = ? ORDER BY payment_date DESC LIMIT 1", [userId]);
-
-    if (!userDetails.length) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    res.json({
-      user: userDetails[0],
-      medical: medicalDetails[0] || null,
-      subscription: subscriptionDetails[0] || null
-    });
-  } catch (err) {
-    console.error("❌ Error in /getUserProfile:", err);
-    res.status(500).json({ error: "Server error" });
-  }
-});
 
 app.post("/api/verify-token", async (req, res) => {
   const { token } = req.body;
@@ -14708,7 +14223,7 @@ app.post("/api/verify-token", async (req, res) => {
   if (!token) return res.json({ valid: false });
 
   try {
-    const userId = await getUserIdFromTokenDoxsify(token);
+    const userId = await getUserIdFromTokenForma(token);
 
     if (!userId) return res.json({ valid: false });
 
@@ -14728,9 +14243,9 @@ app.post("/api/verify-token", async (req, res) => {
   }
 });
 
-const generateTokenDoxsify = () => crypto.randomBytes(20).toString('hex');
+const generateTokenFroma = () => crypto.randomBytes(20).toString('hex');
 
-app.post('/api/doxsify/forgot-password', async (req, res) => {
+app.post('/api/forma/forgot-password', async (req, res) => {
   try {
     const { emailOrPhone } = req.body;
 
@@ -14743,12 +14258,12 @@ app.post('/api/doxsify/forgot-password', async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
 
     const user = userResults[0];
-    const token = generateTokenDoxsify();
+    const token = generateTokenFroma();
     const resetLink = `https://doxsify.vercel.app/reset-password/${token}`;
     const expirationTime = new Date(Date.now() + 3600000); // 1 hour
 
     await connection2.promise().query(
-      'INSERT INTO doxsify_password_resets (email, token, expires_at) VALUES (?, ?, ?)',
+      'INSERT INTO password_resets (email, token, expires_at) VALUES (?, ?, ?)',
       [user.email, token, expirationTime]
     );
 
@@ -14773,7 +14288,7 @@ app.post('/api/doxsify/forgot-password', async (req, res) => {
   }
 });
 
-app.post('/api/doxsify/reset-password', (req, res) => {
+app.post('/api/forma/reset-password', (req, res) => {
   const { token, password } = req.body;
 
   connection2.query(
@@ -14798,7 +14313,7 @@ app.post('/api/doxsify/reset-password', (req, res) => {
             if (err) return res.status(500).json({ error: 'Update failed' });
 
             connection2.query(
-              'DELETE FROM doxsify_password_resets WHERE token = ?',
+              'DELETE FROM password_resets WHERE token = ?',
               [token],
               (err) => {
                 if (err)
@@ -14814,25 +14329,6 @@ app.post('/api/doxsify/reset-password', (req, res) => {
   );
 });
 
-// API Endpoint
-app.post('/api/notify/doxsify', (req, res) => {
-  const { email, phone } = req.body;
-  const query = 'INSERT INTO pre_registrations (email, phone) VALUES (?, ?)';
-  connection2.query(query, [email, phone], (err) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).send('Error saving to database');
-    }
-    console.log('user pre-registered on doxsify', email, phone)
-    res.status(200).send('Success');
-  });
-});
-
-// Endpoint to log download requests
-app.post('/api/log-download/doxsify', (req, res) => {
-  console.log('Download requested for doxsify:', req.body);
-  res.status(200).send({ message: 'Download request logged' });
-});
 
 // Start the server
 app.listen(PORT, () => {
