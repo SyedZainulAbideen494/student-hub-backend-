@@ -14208,8 +14208,8 @@ app.post('/verify-payment/forma', async (req, res) => {
     }
 
     // ✅ Update the rating's has_paid to true
-    const queryText = `UPDATE ratings SET has_paid = 1 WHERE id = ? AND user_id = ?`;
-    await query2(queryText, [rating_id, userId]);
+    const queryText = `UPDATE ratings SET has_paid = 1 WHERE id = ?`;
+    await query2(queryText, [rating_id]);
 
     console.log(`✅ User ${userId} paid for rating ${rating_id}.`);
 
