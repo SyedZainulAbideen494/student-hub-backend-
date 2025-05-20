@@ -13963,6 +13963,22 @@ const processImageForma = async (file) => {
     throw new Error('Failed to read uploaded file for base64 conversion');
   }
 };
+// Retry helper function
+const retryOnError = async (fn, retries = 5, delay = 2000) => {
+  let lastError;
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err;
+      console.warn(`AI call attempt ${i + 1} failed: ${err.message}`);
+      if (i < retries - 1) {
+        await new Promise(res => setTimeout(res, delay));
+      }
+    }
+  }
+  throw lastError;
+};
 
 app.post('/api/process-images/forma', uploadAIForma.array('images', 4), async (req, res) => {
   try {
@@ -14047,7 +14063,7 @@ Only return valid JSON. No other text.
       dynamicSystemInstructionForImg,
     ];
 
-    const response = await model.generateContent(contentArray);
+    const response = await retryOnError(() => model.generateContent(contentArray), 5, 2000);
     console.log('AI responded.');
 
     let resultText = response?.response?.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -14067,7 +14083,6 @@ Only return valid JSON. No other text.
       return res.status(500).json({ error: 'AI did not return valid JSON.' });
     }
 
-    // INSERT into DB (make sure you ALTER the ratings table to add `style_advice` column)
     connection2.query(
       `INSERT INTO ratings (
         user_id,
