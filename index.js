@@ -36,7 +36,7 @@ const { YoutubeTranscript } = require("youtube-transcript");
 const fsForma = require('fs').promises; // use promises for async/await
 
 // Initialize Google Generative AI
-const genAI = new GoogleGenerativeAI('AIzaSyAhvINxPJMSHqKFA-oyBxEsuYxwBZtgPhA');
+const genAI = new GoogleGenerativeAI('AIzaSyAPA71SwVCz2M0HQjLy2h7uVH9rYdkWqSg');
 
 const safetySettings = [
   {
@@ -13973,10 +13973,8 @@ app.post('/api/process-images/forma', uploadAIForma.array('images', 4), async (r
       return res.status(400).json({ error: 'At least one image or a prompt must be provided.' });
     }
 
-    // Extract user ID from token (your existing function)
     const userId = await getUserIdFromTokenForma(token);
 
-    // Convert all uploaded images to base64 and prepare parts for AI call
     const imageParts = [];
     if (req.files && req.files.length > 0) {
       for (const file of req.files) {
@@ -13990,7 +13988,6 @@ app.post('/api/process-images/forma', uploadAIForma.array('images', 4), async (r
       }
     }
 
-    // Collect uploaded file names (just filenames, no path)
     const imgNames = [null, null, null, null];
     if (req.files && req.files.length > 0) {
       for (let i = 0; i < Math.min(req.files.length, 4); i++) {
@@ -14001,38 +13998,43 @@ app.post('/api/process-images/forma', uploadAIForma.array('images', 4), async (r
     console.log('Received prompt:', prompt || '[No prompt provided]');
 
     const dynamicSystemInstructionForImg = `
-    You are a facial aesthetics analysis expert.
-    
-    You will be shown 4 images of a person: front face, selfie, left side, and right side.
-    
-    Your job is to evaluate and respond with structured JSON data with the following schema:
-    
-    {
-      "overall_rating": {
-        "score": 0-100,
-        "symmetry": 0-100,
-        "skin_clarity": 0-100,
-        "jawline_definition": 0-100,
-        "eye_proportion": 0-100,
-        "masculinity": 0-100,               // NEW: how masculine the face appears
-        "cheekbone_prominence": 0-100,     // NEW: how defined/prominent cheekbones are
-        "face_definition": 0-100            // NEW: overall face contour sharpness or definition
-      },
-      "improvement_tips": [
-        "Short, actionable tip 1",
-        "Short, actionable tip 2"
-      ],
-      "visual_highlights": [
-        "Describe key visual insights or suggestions"
-      ],
-      "motivational_message": "Positive and friendly encouragement to user.",
-      "goal_suggestion": "A one-line suggestion on what to focus on.",
-      "shareable_summary": "A short quote or message suitable for a social media badge."
-    }
-    
-    Make sure the JSON is valid. No explanations. Just return JSON only.
+You are a facial aesthetics and fashion advisor AI.
+
+You will be shown 4 images of a person: front face, selfie, left side, and right side.
+
+Your job is to evaluate and respond with structured JSON data with the following schema:
+
+{
+  "overall_rating": {
+    "score": 0-100,
+    "symmetry": 0-100,
+    "skin_clarity": 0-100,
+    "jawline_definition": 0-100,
+    "eye_proportion": 0-100,
+    "masculinity": 0-100,
+    "cheekbone_prominence": 0-100,
+    "face_definition": 0-100
+  },
+  "improvement_tips": [
+    "Short, actionable tip 1",
+    "Short, actionable tip 2"
+  ],
+  "visual_highlights": [
+    "Describe key visual insights or suggestions"
+  ],
+  "motivational_message": "Positive and friendly encouragement to user.",
+  "goal_suggestion": "A one-line suggestion on what to focus on.",
+  "shareable_summary": "A short quote or message suitable for a social media badge.",
+  "style_advice": {
+    "best_clothing_colors": ["color1", "color2"],
+    "recommended_styles": ["minimalist", "streetwear", "classy", "etc"],
+    "best_photo_angle": "left-side / right-side / front",
+    "dp_pose_tip": "Best pose and lighting tip for DP photo"
+  }
+}
+
+Only return valid JSON. No other text.
     `;
-    
 
     const model = genAI.getGenerativeModel({
       model: "gemini-2.0-flash",
@@ -14046,14 +14048,12 @@ app.post('/api/process-images/forma', uploadAIForma.array('images', 4), async (r
     ];
 
     const response = await model.generateContent(contentArray);
-
     console.log('AI responded.');
 
     let resultText = response?.response?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!resultText) throw new Error('No AI response text received.');
 
     resultText = resultText.trim();
-
     if (resultText.startsWith("```json")) {
       resultText = resultText.replace(/```json/, '').replace(/```$/, '').trim();
     }
@@ -14067,6 +14067,7 @@ app.post('/api/process-images/forma', uploadAIForma.array('images', 4), async (r
       return res.status(500).json({ error: 'AI did not return valid JSON.' });
     }
 
+    // INSERT into DB (make sure you ALTER the ratings table to add `style_advice` column)
     connection2.query(
       `INSERT INTO ratings (
         user_id,
@@ -14083,11 +14084,12 @@ app.post('/api/process-images/forma', uploadAIForma.array('images', 4), async (r
         motivational_message,
         goal_suggestion,
         shareable_summary,
+        style_advice,
         img1_name,
         img2_name,
         img3_name,
         img4_name
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         userId,
         ratingData?.overall_rating?.score || 0,
@@ -14103,6 +14105,7 @@ app.post('/api/process-images/forma', uploadAIForma.array('images', 4), async (r
         ratingData?.motivational_message || '',
         ratingData?.goal_suggestion || '',
         ratingData?.shareable_summary || '',
+        JSON.stringify(ratingData?.style_advice || {}),
         imgNames[0],
         imgNames[1],
         imgNames[2],
@@ -14122,13 +14125,13 @@ app.post('/api/process-images/forma', uploadAIForma.array('images', 4), async (r
         }
       }
     );
-    
 
   } catch (error) {
     console.error('Error during image processing:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
+
 
 
 app.get('/api/ratings/:id', (req, res) => {
