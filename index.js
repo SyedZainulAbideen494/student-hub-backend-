@@ -14012,7 +14012,7 @@ app.post('/api/process-images/forma', uploadAIForma.array('images', 4), async (r
     }
 
     console.log('Received prompt:', prompt || '[No prompt provided]');
-    const umaxStyleInstruction = `
+    const dynamicSystemInstructionForImg  = `
 You are an elite AI trained to evaluate facial aesthetics with emotional intelligence, social intuition, and deep visual expertise — not just by standards of beauty, but by what truly makes someone *stand out* today.
 
 You will be shown 4 facial photos: front-facing, selfie, left profile, and right profile.
