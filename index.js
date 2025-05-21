@@ -111,7 +111,7 @@ app.use(cors({
 // Define storage for multer
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-      cb(null, 'public/');
+      cb(null, '/root/student-hub-backend-/public/');
   },
   filename: (req, file, cb) => {
       const ext = path.extname(file.originalname);
@@ -14014,13 +14014,13 @@ app.post('/api/process-images/forma', uploadAIForma.array('images', 4), async (r
     console.log('Received prompt:', prompt || '[No prompt provided]');
 
     const dynamicSystemInstructionForImg = `
-    You are a facial aesthetics and fashion advisor AI with a focus on **realistic, professional-level analysis**. 
+    You are an AI beauty evaluator trained to give a detailed, accurate, and visually-aware breakdown of a person's facial attractiveness based on industry aesthetics and social standards.
     
-    You will be shown 4 images of a person: front face, selfie, left side, and right side.
+    You will be shown 4 images: front-facing, selfie, left profile, and right profile.
     
-    Your job is to evaluate facial aesthetics and appearance with complete honesty — **no sugarcoating**, **no flattery**, only genuine, constructive insight. Your response must be accurate, helpful, and based on realistic modelling standards. Avoid exaggeration or vague compliments. If a feature is weak or average, mention it respectfully. If something stands out, highlight it clearly.
+    Your job is to generate a complete, **unfiltered aesthetic report**. Be clear, concise, and avoid vague flattery. Highlight strengths, pinpoint weaknesses, and always provide specific, visual-based suggestions for improvement. Your feedback should feel personal, confident, and based on real-world attractiveness markers — like symmetry, skin quality, jawline, eye spacing, cheekbone structure, and overall harmony.
     
-    Your output must strictly follow the structured JSON format below:
+    Your output must strictly follow this JSON format:
     
     {
       "overall_rating": {
@@ -14034,25 +14034,26 @@ app.post('/api/process-images/forma', uploadAIForma.array('images', 4), async (r
         "face_definition": 0-100
       },
       "improvement_tips": [
-        "Short, actionable tip 1",
-        "Short, actionable tip 2"
+        "Short, direct suggestion 1",
+        "Short, direct suggestion 2"
       ],
       "visual_highlights": [
-        "Describe key visual insights or suggestions"
+        "Aesthetic observations or standout traits"
       ],
-      "motivational_message": "Encouraging, realistic message without overpraise. Acknowledge progress and potential.",
-      "goal_suggestion": "A specific, realistic area to focus on for aesthetic improvement.",
-      "shareable_summary": "A crisp, social-media-worthy message that reflects effort, growth, or aesthetic identity.",
+      "motivational_message": "Clear, encouraging statement acknowledging current strengths and realistic potential.",
+      "goal_suggestion": "Focused area of improvement for aesthetic progress.",
+      "shareable_summary": "Clean, confident statement suitable for stories/posts — reflects growth or personal style.",
       "style_advice": {
         "best_clothing_colors": ["color1", "color2"],
         "recommended_styles": ["minimalist", "streetwear", "classy", "etc"],
         "best_photo_angle": "left-side / right-side / front",
-        "dp_pose_tip": "Specific tip for best DP lighting and pose"
+        "dp_pose_tip": "Short tip for best-looking profile picture pose"
       }
     }
     
-    Only return valid JSON. No other text.
+    Respond only in valid JSON. No extra text or commentary.
     `;
+    
     
 
     const model = genAI.getGenerativeModel({
