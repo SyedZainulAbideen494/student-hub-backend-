@@ -7844,6 +7844,8 @@ app.post(
   uploadAudio.single("audio"),
   async (req, res) => {
     try {
+      console.log("Generating AI Notes from lecture");  // <-- Start log
+
       if (!req.file) {
         return res.status(400).json({ error: "No audio file uploaded" });
       }
@@ -7941,6 +7943,7 @@ const insertAudioNoteQuery = `
   VALUES (?, ?, ?)
 `;
 await query(insertAudioNoteQuery, [user_id, insertResult.insertId, fileName]);
+console.log(`Successfully processed audio notes for user_id: ${user_id}, note_id: ${insertResult.insertId}`); // <-- Success log
 
 res.json({
   flashcardId: insertResult.insertId,
@@ -7955,8 +7958,26 @@ res.json({
   }
 );
 
+app.get('/api/audio-notes', async (req, res) => {
+  const token = req.headers.authorization;
 
+  try {
+    if (!token) return res.status(401).json({ error: 'No token provided' });
 
+    const userId = await getUserIdFromToken(token);
+    const results = await query(`
+      SELECT note_id, audio_file, created_at 
+      FROM user_audio_notes 
+      WHERE user_id = ? 
+      ORDER BY created_at DESC
+    `, [userId]);
+
+    res.json({ notes: results });
+  } catch (err) {
+    console.error('Error fetching audio notes:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 app.post("/ai-chatbox/pdf/ai", uploadPDF.single("file"), async (req, res) => {
   try {
