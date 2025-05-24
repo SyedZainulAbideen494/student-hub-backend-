@@ -8921,9 +8921,10 @@ app.post('/verify-payment', async (req, res) => {
       if (duration === 'daily') expiryDate.setDate(expiryDate.getDate() + 1);
       else if (duration === 'weekly') expiryDate.setDate(expiryDate.getDate() + 7);
       else if (duration === 'monthly') expiryDate.setDate(expiryDate.getDate() + 30);
+      else if (duration === '3months') expiryDate.setDate(expiryDate.getDate() + 90);
       else if (duration === '6months') expiryDate.setDate(expiryDate.getDate() + 180);
       else if (duration === 'yearly') expiryDate.setFullYear(expiryDate.getFullYear() + 1);
-        
+              
 
       const queryText = `
         INSERT INTO subscriptions (user_id, subscription_plan, payment_status, payment_date, expiry_date)
@@ -13765,7 +13766,6 @@ app.post('/get-credit', async (req, res) => {
 });
 
 
-{/* Doxsify backend */}
 
 
 {/* Doxsify backend */}
@@ -13782,7 +13782,7 @@ connection2.getConnection((err) => {
   if (err) {
     console.error("Error connecting to MySQL database: ", err);
   } else {
-    console.log("Connected to MySQL database doxsify");
+    console.log("Connected to MySQL database forma");
   }
 });
 
@@ -14371,6 +14371,7 @@ app.post('/api/forma/reset-password', (req, res) => {
   );
 });
 
+{/* Whatsapp analysier backend */}
 
 // Start the server
 app.listen(PORT, () => {
