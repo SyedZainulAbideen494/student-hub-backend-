@@ -8815,7 +8815,43 @@ app.post("/api/saveGoal", async (req, res) => {
   }
 });
 
+app.post("/api/save-study-plan/manual", async (req, res) => {
+  const token = req.headers.authorization?.split(" ")[1];
 
+  if (!token) {
+    return res.status(401).json({ error: "Token missing" });
+  }
+
+  let userId;
+  try {
+    userId = await getUserIdFromToken(token);
+  } catch (err) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const { studyPlan } = req.body;
+
+  if (!studyPlan) {
+    return res.status(400).json({ error: "Study plan data missing" });
+  }
+
+  const query = `
+    INSERT INTO study_plans (user_id, study_plan)
+    VALUES (?, ?)
+  `;
+
+  connection.query(query, [userId, JSON.stringify(studyPlan)], (err, results) => {
+    if (err) {
+      console.error("DB error:", err);
+      return res.status(500).json({ error: "Failed to save study plan" });
+    }
+
+    return res.status(200).json({
+      message: "Study plan saved successfully",
+      id: results.insertId,
+    });
+  });
+});
 app.post("/api/study-plan", async (req, res) => {
   try {
     const { token } = req.body; // Get token from the request body
