@@ -34,6 +34,17 @@ const { exec } = require("child_process");
 const puppeteer = require("puppeteer");
 const { YoutubeTranscript } = require("youtube-transcript");
 const fsForma = require('fs').promises; // use promises for async/await
+// Replace this line:
+// const { GoogleGenAI, createUserContent, createPartFromUri } = require("@google/genai");
+
+// With this:
+let GoogleGenAI, createUserContent, createPartFromUri;
+(async () => {
+  const genai = await import('@google/genai');
+  GoogleGenAI = genai.GoogleGenAI;
+  createUserContent = genai.createUserContent;
+  createPartFromUri = genai.createPartFromUri;
+})();
 
 // Initialize Google Generative AI
 const genAI = new GoogleGenerativeAI('AIzaSyAPA71SwVCz2M0HQjLy2h7uVH9rYdkWqSg');
@@ -7800,6 +7811,153 @@ app.post('/api/process-images', uploadAI.single('image'), async (req, res) => {
   }
 });
 
+const AI_MAX_AUDIO_SIZE = 100 * 1024 * 1024;
+const uploadAudio = multer({
+  limits: { fileSize: AI_MAX_AUDIO_SIZE },
+  storage: multer.memoryStorage(),
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = [
+      "audio/mpeg",
+      "audio/mp3",
+      "audio/wav",
+      "audio/x-wav",
+      "audio/mp4",
+      "audio/m4a",
+    ];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Unsupported audio format"), false);
+    }
+  },
+});
+
+const uploadDir = path.join(__dirname, "/root/student-hub-backend-/public");
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+
+
+app.post(
+  "/upload/audio/notes",
+  uploadAudio.single("audio"),
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No audio file uploaded" });
+      }
+
+      // Extract token from header or body, get userId
+      const token = req.headers.authorization?.split(" ")[1] || req.body.token;
+      const user_id = token ? await getUserIdFromToken(token) : null;
+
+      const genai = await import("@google/genai");
+      const { GoogleGenAI, createUserContent, createPartFromUri } = genai;
+
+      const ai = new GoogleGenAI({
+        apiKey: "AIzaSyAPA71SwVCz2M0HQjLy2h7uVH9rYdkWqSg",
+      });
+
+      // Save uploaded file permanently
+      const fileName = `${Date.now()}-${req.file.originalname}`;
+      const savePath = path.join(uploadDir, fileName);
+      fs.writeFileSync(savePath, req.file.buffer);
+
+      // Upload file to Gemini API
+      const myfile = await ai.files.upload({
+        file: savePath,
+        config: { mimeType: req.file.mimetype },
+      });
+
+      // Prompt for HTML formatted notes
+      const prompt =
+        req.body?.prompt ||
+        `
+You are an expert academic tutor and note-taking assistant.
+
+Your task:
+- Listen carefully to the lecture audio and create detailed, well-organized <b>HTML notes</b>.
+- Structure the notes with headings (<h1>, <h2>, <h3>) for main topics and subtopics.
+- Use bullet points (<ul>, <li>) for lists of key points, definitions, and formulas.
+- Highlight important concepts and exam tips using bold (<b>) or italics (<i>).
+- Include formulas in proper math notation or inline.
+- Avoid unnecessary filler text or irrelevant info.
+- Make notes concise but thorough enough for quick revision.
+- Format everything with clean, valid HTML markup.
+- No plain text or markdown; output only valid HTML content.
+
+Do not:
+- Add greetings, intros, or conclusions.
+- Include any code blocks or raw transcripts.
+- Use ambiguous language — be precise and clear.
+`;
+
+      const contents = createUserContent([
+        createPartFromUri(myfile.uri, req.file.mimetype),
+        prompt,
+      ]);
+
+      // Generate notes using Gemini
+      const response = await ai.models.generateContent({
+        model: "gemini-2.0-flash",
+        contents,
+      });
+
+      const resultText =
+        response?.candidates?.[0]?.content?.parts?.[0]?.text || null;
+
+      if (!resultText)
+        throw new Error("No response text from Gemini AI for notes.");
+
+      // Insert into DB using queryHelper
+      const insertQuery = `
+        INSERT INTO flashcards
+          (title, description, images, is_public, user_id, headings, subject_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `;
+
+      const title = req.body.title || "Lecture Notes";
+      const description = req.body.description || "Summary of lecture audio";
+      const images = "[]"; // Valid JSON string for empty images array
+      const is_public = req.body.is_public === undefined ? 1 : req.body.is_public;
+      const subject_id = req.body.subject_id || null;
+      const headings = resultText; // save AI-generated HTML notes here
+
+// After inserting flashcard
+const insertResult = await query(insertQuery, [
+  title,
+  description,
+  images,
+  is_public,
+  user_id,
+  headings,
+  subject_id,
+]);
+
+// Insert into user_audio_notes
+const insertAudioNoteQuery = `
+  INSERT INTO user_audio_notes (user_id, note_id, audio_file)
+  VALUES (?, ?, ?)
+`;
+await query(insertAudioNoteQuery, [user_id, insertResult.insertId, fileName]);
+
+res.json({
+  flashcardId: insertResult.insertId,
+  result: resultText,
+  savedFile: `/public/${fileName}`,
+});
+
+    } catch (error) {
+      console.error("Error processing audio notes:", error);
+      res.status(500).json({ error: error.message });
+    }
+  }
+);
+
+
+
+
 app.post("/ai-chatbox/pdf/ai", uploadPDF.single("file"), async (req, res) => {
   try {
     const { prompt, token } = req.body; // Extract user prompt and token
@@ -8924,7 +9082,8 @@ app.post('/verify-payment', async (req, res) => {
       else if (duration === '3months') expiryDate.setDate(expiryDate.getDate() + 90);
       else if (duration === '6months') expiryDate.setDate(expiryDate.getDate() + 180);
       else if (duration === 'yearly') expiryDate.setFullYear(expiryDate.getFullYear() + 1);
-              
+      
+        
 
       const queryText = `
         INSERT INTO subscriptions (user_id, subscription_plan, payment_status, payment_date, expiry_date)
