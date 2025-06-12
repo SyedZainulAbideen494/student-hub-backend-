@@ -481,19 +481,33 @@ app.post('/signup', (req, res) => {
         const token = jwt.sign({ id: userId }, 'jwtsecret', { expiresIn: 86400 }); // 24 hours
 
         // Create session
-        connection.query(
-          'INSERT INTO session (user_id, jwt) VALUES (?, ?)',
-          [userId, token],
-          (sessionErr) => {
-            if (sessionErr) {
-              console.error('Error creating session:', sessionErr);
-              return res.status(500).send({ message: 'Error creating session', error: sessionErr });
-            }
+connection.query(
+  'INSERT INTO session (user_id, jwt) VALUES (?, ?)',
+  [userId, token],
+  (sessionErr) => {
+    if (sessionErr) {
+      console.error('Error creating session:', sessionErr);
+      return res.status(500).send({ message: 'Error creating session', error: sessionErr });
+    }
 
-            console.log('User registration and session creation successful!');
-            res.json({ auth: true, token: token });
-          }
-        );
+    // Give 1-hour premium subscription
+    const subscriptionQuery = `
+      INSERT INTO subscriptions (user_id, subscription_plan, payment_status, payment_date, expiry_date)
+      VALUES (?, '1-Hour Trial', 'Paid', NOW(), DATE_ADD(NOW(), INTERVAL 1 HOUR))
+    `;
+
+    connection.query(subscriptionQuery, [userId], (subErr) => {
+      if (subErr) {
+        console.error('Error creating trial subscription:', subErr);
+        return res.status(500).json({ error: 'Error setting up trial subscription' });
+      }
+
+      console.log('User registration, session, and 1-hour premium setup successful!');
+      res.json({ auth: true, token: token });
+    });
+  }
+);
+
       });
     });
   });
