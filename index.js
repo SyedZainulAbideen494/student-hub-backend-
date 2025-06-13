@@ -449,11 +449,15 @@ app.post('/generate-alternatives', (req, res) => {
 app.post('/signup', (req, res) => {
   const { password, email, unique_id, phone_number } = req.body;
 
-  // Check if email or phone number already exists
+  // Basic validation
+  if (!email || !password || !unique_id || !phone_number) {
+    return res.status(400).json({ error: 'All fields are required' });
+  }
+
   const checkQuery = 'SELECT * FROM users WHERE email = ? OR phone_number = ?';
   connection.query(checkQuery, [email, phone_number], (checkErr, checkResults) => {
     if (checkErr) {
-      console.error('Error checking existing user:', checkErr);
+      console.error('🔴 Error checking existing user:', checkErr);
       return res.status(500).json({ error: 'Internal server error' });
     }
 
@@ -461,10 +465,10 @@ app.post('/signup', (req, res) => {
       return res.status(400).json({ error: 'Email or phone number already in use' });
     }
 
-    // Hash password and insert new user
+    // Hash password
     bcrypt.hash(password, saltRounds, (hashErr, hash) => {
       if (hashErr) {
-        console.error('Error hashing password:', hashErr);
+        console.error('🔴 Error hashing password:', hashErr);
         return res.status(500).json({ error: 'Internal server error' });
       }
 
@@ -473,47 +477,32 @@ app.post('/signup', (req, res) => {
 
       connection.query(insertQuery, values, (insertErr, insertResults) => {
         if (insertErr) {
-          console.error('Error inserting user:', insertErr);
+          console.error('🔴 Error inserting user:', insertErr);
           return res.status(500).json({ error: 'Internal server error' });
         }
 
         const userId = insertResults.insertId;
-        const token = jwt.sign({ id: userId }, 'jwtsecret', { expiresIn: 86400 }); // 24 hours
+        const token = jwt.sign({ id: userId }, 'jwtsecret', { expiresIn: '24h' });
 
-        // Create session
-connection.query(
-  'INSERT INTO session (user_id, jwt) VALUES (?, ?)',
-  [userId, token],
-  (sessionErr) => {
-    if (sessionErr) {
-      console.error('Error creating session:', sessionErr);
-      return res.status(500).send({ message: 'Error creating session', error: sessionErr });
-    }
+        // Insert session
+        const sessionQuery = 'INSERT INTO session (user_id, jwt) VALUES (?, ?)';
+        connection.query(sessionQuery, [userId, token], (sessionErr) => {
+          if (sessionErr) {
+            console.error('🔴 Error creating session:', sessionErr);
+            return res.status(500).json({ error: 'Error creating session' });
+          }
 
-    // Give 1-hour premium subscription
-    const subscriptionQuery = `
-      INSERT INTO subscriptions (user_id, subscription_plan, payment_status, payment_date, expiry_date)
-      VALUES (?, '1-Hour Trial', 'Paid', NOW(), DATE_ADD(NOW(), INTERVAL 1 HOUR))
-    `;
-
-    connection.query(subscriptionQuery, [userId], (subErr) => {
-      if (subErr) {
-        console.error('Error creating trial subscription:', subErr);
-        return res.status(500).json({ error: 'Error setting up trial subscription' });
-      }
-
-      console.log('User registration, session, and 1-hour premium setup successful!');
-      res.json({ auth: true, token: token });
-    });
-  }
-);
-
+          console.log('✅ User registered!');
+          return res.status(200).json({
+            auth: true,
+            token: token,
+            user: { id: userId, email }
+          });
+        });
       });
     });
   });
 });
-
-
 
 
 const verifyjwt = (req, res) => {
