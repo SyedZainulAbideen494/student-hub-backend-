@@ -454,7 +454,6 @@ app.post('/signup', (req, res) => {
     return res.status(400).json({ error: 'All fields are required' });
   }
 
-  // Check if user already exists
   const checkQuery = 'SELECT * FROM users WHERE email = ? OR phone_number = ?';
   connection.query(checkQuery, [email, phone_number], (checkErr, checkResults) => {
     if (checkErr) {
@@ -473,7 +472,6 @@ app.post('/signup', (req, res) => {
         return res.status(500).json({ error: 'Internal server error' });
       }
 
-      // Insert new user
       const insertQuery = 'INSERT INTO users (password, email, unique_id, phone_number) VALUES (?, ?, ?, ?)';
       const values = [hash, email, unique_id, phone_number];
 
@@ -494,31 +492,18 @@ app.post('/signup', (req, res) => {
             return res.status(500).json({ error: 'Error creating session' });
           }
 
-          // Insert free 1-day trial subscription
-          const freeTrialQuery = `
-            INSERT INTO subscriptions (
-              user_id, subscription_plan, payment_status, payment_date, expiry_date
-            ) VALUES (?, 'free_trial_1_day', 'free', NOW(), DATE_ADD(NOW(), INTERVAL 1 DAY))
-          `;
-
-          connection.query(freeTrialQuery, [userId], (trialErr) => {
-            if (trialErr) {
-              console.error('🔴 Error inserting free trial:', trialErr);
-              // Continue even if this fails
-            }
-
-            console.log('✅ User registered with 1-day trial!');
-            return res.status(200).json({
-              auth: true,
-              token: token,
-              user: { id: userId, email }
-            });
+          console.log('✅ User registered!');
+          return res.status(200).json({
+            auth: true,
+            token: token,
+            user: { id: userId, email }
           });
         });
       });
     });
   });
 });
+
 
 const verifyjwt = (req, res) => {
   const token = req.headers["x-access-token"];
