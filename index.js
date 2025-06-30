@@ -6391,7 +6391,7 @@ const pdfFileFilter = (req, file, cb) => {
 const uploadPDF = multer({
   storage: pdfStorage,
   fileFilter: pdfFileFilter,
-  limits: { fileSize: 50 * 1024 * 1024 }, // Limit file size to 10 MB
+  limits: { fileSize: 200 * 1024 * 1024 }, // Limit file size to 10 MB
 });
 
 // API endpoint to upload PDF and generate flashcards
