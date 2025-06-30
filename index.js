@@ -69,7 +69,7 @@ const safetySettings = [
 ];
 
 const model = genAI.getGenerativeModel({
-  model: "gemini-1.5-flash",
+  model: "gemini-2.0-flash",
   safetySettings: safetySettings,
   systemInstruction: "You are Edusify, an AI-powered productivity assistant designed to help students manage their academic tasks, study materials, and stay organized. Your mission is to provide tailored assistance and streamline the study experience with a wide range of features.\n\n" +
   
@@ -3588,7 +3588,7 @@ app.post('/api/chat/ai', async (req, res) => {
       return res.status(401).json({ error: 'Invalid token or user not authenticated.' });
     }
 
-    const modelName = thinkingMode ? "gemini-2.5-pro-exp-03-25" : "gemini-1.5-flash"; // Toggle model
+    const modelName = thinkingMode ? "gemini-2.5-pro-exp-03-25" : "gemini-2.0-flash"; // Toggle model
 
      // Fetch user data
      const userData = await Promise.all([
@@ -8007,7 +8007,7 @@ app.post("/ai-chatbox/pdf/ai", uploadPDF.single("file"), async (req, res) => {
      
 
       // Load the generative model
-      const model = genAI.getGenerativeModel({ model: "models/gemini-1.5-flash" });
+      const model = genAI.getGenerativeModel({ model: "models/gemini-2.0-flash" });
       const result = await model.generateContent([
         {
           inlineData: {
