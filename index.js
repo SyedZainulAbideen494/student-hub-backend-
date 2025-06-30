@@ -8198,44 +8198,116 @@ app.post('/api/notes/generate', async (req, res) => {
     const todayDate = new Date().toISOString().split('T')[0];
 
     let prompt = `
-You are an expert educational content creator for a smart student app.
 
-🎯 Your task:
-Generate *detailed, highly engaging, and structured notes* for the topic: "${topic}"
+You are an expert educational content designer.
 
-💡 Format:
-Output strictly in HTML. Do NOT explain anything outside HTML. Use:
+Task: 
+Generate a complete, extremely detailed, beautiful HTML document for the chapter "${topic}", aimed at students who want crystal-clear understanding, exam success, and memorable learning.
 
-- <section> for each major block
-- <h1> for the topic title (only once)
-- <h2> for section headings
-- <h3> for sub-sections if needed
-- <ul> & <li> for lists
-- <p> for explanations
-- <strong> or <mark> for important words
-- Emojis (where appropriate) for engagement
-- Example image/diagram suggestions as: <!-- Suggested image: "Labelled diagram of ..." -->
+Requirements:
 
-📚 Structure:
-1. <h1> Main Topic
-2. Introduction section
-3. Key Concepts or Definitions
-4. Important Formulas / Theories / Steps (if relevant)
-5. Use Cases or Examples
-6. Diagram/Image suggestion section
-7. Common Mistakes (if any)
-8. Real-Life Applications (if relevant)
-9. Key Takeaways
-10. Fun Fact
+1. **Proper Structure:**
+    - Use <h1> for the main topic title.
+    - Use <h2> for each major section.
+    - Use <h3> for important subtopics under each section.
+    - Under each heading/subheading, write deeply explained concepts inside <p> tags.
 
-🎯 Notes:
-- Automatically create section titles based on the topic (no generic headings)
-- Make the language simple but intelligent
-- Never skip HTML formatting
-- Never write outside HTML
-- Keep learners engaged and fascinated
+2. **Style and Aesthetic:**
+    - Apply inline styles:
+        - Heading (<h1>, <h2>, <h3>) color: #fff (pure white).
+        - Paragraph (<p>) color: #ddd (soft white).
+        - Font-family: 'Poppins', sans-serif for all text.
+        - Font-weight: 400 for normal text, 600+ for headings.
+        - Background-color: #121212 (dark gray) for the entire page.
+        - Text shadow for headings: 1px 1px 5px rgba(255, 255, 255, 0.1) for a soft glowing effect.
+        - For <p> tags, apply line-height: 1.6 for better readability.
+        - Use a smooth gradient for headings, e.g., linear-gradient(to right, #00c6ff, #0072ff), for a modern glow effect.
 
-👇 Output begins below (HTML only)
+    - Keep it easy to read on a dark background, Pinterest-style soft aesthetic.
+    - Space the sections properly: visually breathable, calm.
+    - Add subtle hover effects for interactive elements like links and buttons.
+
+3. **Special Formatting:**
+    - If there’s any important **formula, equation, or key definition**, put it inside a <pre><code>...</code></pre> block for better visual separation.
+    - Use <ul> and <li> for lists if needed.
+    - Bold important words using <b> inside paragraphs when necessary.
+    - Add soft glows around formulas or key definitions to make them stand out.
+
+4. **Study Tips, Examples & Fun:**
+    - **Funny and Memorable Examples**: Include relatable and funny examples that help students visualize and remember concepts. Use humor to keep the learning engaging.
+    - **Cool Analogies**: Create analogies that connect the subject matter to real-life scenarios or pop culture references to make complex ideas easier to grasp.
+    - **Study Tips**: Add actionable tips for studying the topic, like how to break down the material or create associations to remember difficult concepts.
+    - **Humorous Side Notes**: Where appropriate, throw in quirky notes to add some lightheartedness, making it feel like the content is talking directly to the student.
+
+5. **Final Sections:**
+    - After full content, include these sections clearly separated:
+        - <h2>Summary</h2> with bullet points inside <ul>.
+        - <h2>Key Terms</h2> with definitions.
+        - <h2>Fun Facts</h2> with short interesting points and real-life connections to the subject.
+
+6. **Tone and Language:**
+    - Keep the tone professional yet lightly motivating, with an approachable feel.
+    - Language should feel friendly, clean, and smart — neither childish nor overly formal.
+    - The notes should feel like a "cheat code" to help students easily excel in exams while feeling motivated and confident.
+
+7. **General Rules:**
+    - Output beautiful, clean, semantic HTML only (no unnecessary divs or spans).
+    - Every section should feel separate and easy to navigate visually.
+    - No long continuous walls of only <p> tags without headings.
+    - Formulas and key ideas must *pop out* visually through formatting.
+
+---
+**How Structure Should Look:**
+
+<h1 style="color: #fff; font-family: 'Poppins', sans-serif; font-weight: 700; text-shadow: 1px 1px 5px rgba(255, 255, 255, 0.1); background: linear-gradient(to right, #00c6ff, #0072ff); padding: 10px 20px; border-radius: 5px;">Kinematics: Motion in One Direction</h1>
+
+<p style="color: #ddd; font-family: 'Poppins', sans-serif; line-height: 1.6;">Welcome to the world of motion! In this chapter, we study how objects move without worrying about the forces behind the motion. Think of it as a dance party for objects. But instead of beats, they move based on equations!</p>
+
+<h2 style="color: #fff; font-family: 'Poppins', sans-serif; font-weight: 600; background: linear-gradient(to right, #00c6ff, #0072ff); padding: 10px; border-radius: 5px;">Understanding Displacement and Distance</h2>
+
+<h3 style="color: #fff; font-family: 'Poppins', sans-serif; font-weight: 600;">Displacement</h3>
+<p style="color: #ddd; font-family: 'Poppins', sans-serif; line-height: 1.6;">Displacement is a <b>vector quantity</b> that refers to the change in position of an object. It's not just how far an object has moved, but also the direction. If you walk to the store and then back, your displacement is zero. You're basically doing a loop-de-loop in the world of physics.</p>
+
+<h3 style="color: #fff; font-family: 'Poppins', sans-serif; font-weight: 600;">Distance</h3>
+<p style="color: #ddd; font-family: 'Poppins', sans-serif; line-height: 1.6;">Distance is a <b>scalar quantity</b>, meaning it only counts how far you've traveled, no matter the direction. So if you walked to the store and back, your distance would be double what your displacement is. Basically, distance loves to count everything; it's the overachiever of the two!</p>
+
+<h2 style="color: #fff; font-family: 'Poppins', sans-serif; font-weight: 600; background: linear-gradient(to right, #00c6ff, #0072ff); padding: 10px; border-radius: 5px;">Speed, Velocity, and Acceleration</h2>
+
+<h3 style="color: #fff; font-family: 'Poppins', sans-serif; font-weight: 600;">Speed</h3>
+<p style="color: #ddd; font-family: 'Poppins', sans-serif; line-height: 1.6;">Speed is how fast something is going without caring about direction. Think of it like a race car that speeds around the track but doesn't care which lane it’s in. Speed = Distance / Time.</p>
+
+<pre><code style="color: #ddd; font-family: 'Poppins', sans-serif; background: #2a2a2a; padding: 10px; border-radius: 5px; box-shadow: 0px 0px 5px rgba(255, 255, 255, 0.1);">
+Speed = Total Distance / Total Time
+</code></pre>
+
+<h3 style="color: #fff; font-family: 'Poppins', sans-serif; font-weight: 600;">Velocity</h3>
+<p style="color: #ddd; font-family: 'Poppins', sans-serif; line-height: 1.6;">Velocity is speed with direction. So, if you’re in a race and turn left, you've now got velocity! It's speed’s more sophisticated, GPS-savvy sibling. It's basically the same thing, but with a hint of direction.</p>
+
+<h2 style="color: #fff; font-family: 'Poppins', sans-serif; font-weight: 600; background: linear-gradient(to right, #00c6ff, #0072ff); padding: 10px; border-radius: 5px;">Summary</h2>
+<ul style="color: #ddd; font-family: 'Poppins', sans-serif; line-height: 1.6;">
+    <li>Displacement is directional; distance is not.</li>
+    <li>Speed is scalar; velocity is vectorial.</li>
+    <li>Acceleration measures changes in velocity, like when you're speeding up your favorite playlist.</li>
+</ul>
+
+<h2 style="color: #fff; font-family: 'Poppins', sans-serif; font-weight: 600; background: linear-gradient(to right, #00c6ff, #0072ff); padding: 10px; border-radius: 5px;">Key Terms</h2>
+<ul style="color: #ddd; font-family: 'Poppins', sans-serif; line-height: 1.6;">
+    <li><b>Displacement:</b> Change in position with direction.</li>
+    <li><b>Speed:</b> Rate of covering distance.</li>
+    <li><b>Velocity:</b> Speed with direction.</li>
+</ul>
+
+<h2 style="color: #fff; font-family: 'Poppins', sans-serif; font-weight: 600; background: linear-gradient(to right, #00c6ff, #0072ff); padding: 10px; border-radius: 5px;">Fun Facts</h2>
+<ul style="color: #ddd; font-family: 'Poppins', sans-serif; line-height: 1.6;">
+    <li>The fastest land animal, the cheetah, can accelerate faster than a sports car! Next time you’re late for class, just pretend you're a cheetah!</li>
+    <li>Ever wondered why you can’t run as fast as the speed of light? Well, let’s just say that’s because we’re not quite there yet. But hey, who knows?</li>
+</ul>
+
+---
+
+Final Reminder:
+- Follow the structure style above closely.
+- Maintain visual beauty, section separation, and readability.
 
     `;
     
