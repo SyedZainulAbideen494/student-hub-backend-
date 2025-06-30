@@ -8186,7 +8186,7 @@ app.get("/api/flashcards/count/pdf-premium", async (req, res) => {
 });
 
 app.post('/api/notes/generate', async (req, res) => {
-  const { topic, types, token } = req.body;
+  const { topic, types, token, class: classLevel, exam, extraDetails } = req.body;
 
   try {
     const userId = await getUserIdFromToken(token);
@@ -8203,6 +8203,11 @@ You are an expert educational content designer.
 
 Task: 
 Generate a complete, extremely detailed, beautiful HTML document for the chapter "${topic}", aimed at students who want crystal-clear understanding, exam success, and memorable learning.
+
+📘 CONTEXT:
+- Class/Grade: ${classLevel || 'Not specified'}
+- Exam: ${exam || 'General purpose'}
+- Notes Preference: ${extraDetails || 'None'}
 
 Requirements:
 
