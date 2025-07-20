@@ -445,11 +445,9 @@ app.post('/generate-alternatives', (req, res) => {
   res.status(200).json({ alternatives });
 });
 
-
 app.post('/signup', (req, res) => {
   const { password, email, unique_id, phone_number } = req.body;
 
-  // Basic validation
   if (!email || !password || !unique_id || !phone_number) {
     return res.status(400).json({ error: 'All fields are required' });
   }
@@ -465,7 +463,6 @@ app.post('/signup', (req, res) => {
       return res.status(400).json({ error: 'Email or phone number already in use' });
     }
 
-    // Hash password
     bcrypt.hash(password, saltRounds, (hashErr, hash) => {
       if (hashErr) {
         console.error('🔴 Error hashing password:', hashErr);
@@ -484,7 +481,6 @@ app.post('/signup', (req, res) => {
         const userId = insertResults.insertId;
         const token = jwt.sign({ id: userId }, 'jwtsecret', { expiresIn: '24h' });
 
-        // Insert session
         const sessionQuery = 'INSERT INTO session (user_id, jwt) VALUES (?, ?)';
         connection.query(sessionQuery, [userId, token], (sessionErr) => {
           if (sessionErr) {
@@ -492,11 +488,24 @@ app.post('/signup', (req, res) => {
             return res.status(500).json({ error: 'Error creating session' });
           }
 
-          console.log('✅ User registered!');
-          return res.status(200).json({
-            auth: true,
-            token: token,
-            user: { id: userId, email }
+          // ✅ Insert 1-day free premium
+          const subQuery = `
+            INSERT INTO subscriptions (user_id, subscription_plan, payment_status, payment_date, expiry_date)
+            VALUES (?, '1-Day Plan', 'Paid', NOW(), DATE_ADD(NOW(), INTERVAL 1 DAY))
+          `;
+          connection.query(subQuery, [userId], (subErr) => {
+            if (subErr) {
+              console.error('🔴 Error giving free premium:', subErr);
+              return res.status(500).json({ error: 'Error giving free premium' });
+            }
+
+            console.log('✅ User registered with 1-day premium!');
+            return res.status(200).json({
+              auth: true,
+              token: token,
+              user: { id: userId, email },
+              message: 'User registered and 1-day premium activated!'
+            });
           });
         });
       });
