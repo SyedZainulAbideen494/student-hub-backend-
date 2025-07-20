@@ -11070,139 +11070,63 @@ app.post("/api/mindmaps/generate", async (req, res) => {
           try {
             const chat = model.startChat({ history: [] });
             const result = await chat.sendMessage(`
-              Generate a highly detailed and structured JSON object for a **circular** mind map based on the following details:
-            
-              - Topics: ${headings}
-              - Subject: ${subject}
-              - Additional Instructions: ${instructions || "None provided"}
-            
-              The JSON structure should be:
-          {
+          You are a premium mind map generator for students. Based on the subject and topics provided below, generate a **comprehensive, detailed, multilayered JSON object** for a **circular mind map**.
+
+📚 **Your Goal**:
+- Create a **radial, layered, study-efficient** mind map with complete coverage of the topic.
+- Include **main topic**, **major sections**, **detailed subtopics**, and **examples or facts** if needed.
+- The mind map should be useful for **exam revision**, **understanding concepts deeply**, and **quick recall**.
+
+---
+
+🎯 **Input**:
+- Subject: ${subject}
+- Topics: ${headings}
+- Additional Instructions: ${instructions || "None"}
+
+---
+
+🧠 **Rules & Requirements**:
+
+1. **Main Topic** should be the central node (id: 1, x: 0, y: 0).
+2. Expand into at least **3-5 major topics** around it.
+3. Each major topic should have **2-4 subtopics**.
+4. Subtopics may have **examples or additional facts** (third level).
+5. Use a **circular radial layout**:
+   - Balanced spacing between all nodes
+   - Maintain **at least 300px** gap to avoid clutter
+6. Follow a **hierarchical and structured flow**:
+   - Main → Major → Sub → (Optional) Micro
+7. The output must be **valid, strict JSON** — no extra text.
+
+---
+
+📐 **JSON Format** (STRICTLY FOLLOW):
+
+{
   "nodes": [
-    {
-      "id": 1,
-      "label": "Main Topic",
-      "x": 0,
-      "y": 0
-    },
-    {
-      "id": 2,
-      "label": "Major Topic 1",
-      "x": 500,
-      "y": 0
-    },
-    {
-      "id": 3,
-      "label": "Major Topic 2",
-      "x": 250,
-      "y": 400
-    },
-    {
-      "id": 4,
-      "label": "Major Topic 3",
-      "x": -250,
-      "y": 400
-    },
-    {
-      "id": 5,
-      "label": "Subtopic 1.1",
-      "x": 650,
-      "y": -100
-    },
-    {
-      "id": 6,
-      "label": "Subtopic 1.2",
-      "x": 650,
-      "y": 100
-    },
-    {
-      "id": 7,
-      "label": "Subtopic 2.1",
-      "x": 350,
-      "y": 500
-    },
-    {
-      "id": 8,
-      "label": "Subtopic 2.2",
-      "x": 150,
-      "y": 500
-    },
-    {
-      "id": 9,
-      "label": "Subtopic 3.1",
-      "x": -150,
-      "y": 500
-    },
-    {
-      "id": 10,
-      "label": "Subtopic 3.2",
-      "x": -350,
-      "y": 500
-    }
+    { "id": 1, "label": "Main Topic", "x": 0, "y": 0 },
+    { "id": 2, "label": "Major Topic 1", "x": 500, "y": 0 },
+    { "id": 3, "label": "Subtopic 1.1", "x": 700, "y": -100 },
+    ...
   ],
   "edges": [
-    {
-      "from": 1,
-      "to": 2
-    },
-    {
-      "from": 1,
-      "to": 3
-    },
-    {
-      "from": 1,
-      "to": 4
-    },
-    {
-      "from": 2,
-      "to": 5
-    },
-    {
-      "from": 2,
-      "to": 6
-    },
-    {
-      "from": 3,
-      "to": 7
-    },
-    {
-      "from": 3,
-      "to": 8
-    },
-    {
-      "from": 4,
-      "to": 9
-    },
-    {
-      "from": 4,
-      "to": 10
-    }
+    { "from": 1, "to": 2 },
+    { "from": 2, "to": 3 },
+    ...
   ]
 }
 
-            
-              **Rules:**
-              1. The structure must be **circular**, ensuring balanced spacing between nodes.  
-              2. The **main topic** should be centrally placed with major topics surrounding it.  
-              3. Subtopics should be **distributed evenly** around their parent topics.  
-              4. Each node must be **logically connected**, avoiding random placements.  
-              5. Follow additional instructions, if provided.  
-              6. Ensure the JSON output is **formatted properly** with no extra text.  
-            
-              **Guidelines:**
-              - **Circular Layout** → The central topic should be the **core node**, with branches expanding outward.
-              - **Even Distribution** → Arrange all nodes to **prevent overlapping** and ensure **readability**.
-              - **Logical Connections** → Link nodes **hierarchically**, ensuring a **structured flow**.
-              - **Minimum 300px Spacing** → Ensure **at least 300px gap** between each node to avoid clutter.
-              - **Detailed Breakdown** → Expand major topics into **clear, well-organized** subtopics.
-              - **Strict JSON Format** → Output must be **clean, valid JSON** with no extra text.
-            
-              **✅ Optimized for Clarity** – Balanced structure with **proper spacing**.  
-              **✅ Hierarchical & Meaningful** – Each topic connects **logically**.  
-              **✅ Radial Expansion** – Topics expand in a **smooth circular pattern**.  
-              **✅ No Extra Clutter** – AI must **only return JSON**, with no explanations.  
-            
-              **Return ONLY the JSON object** with no additional text or explanation. 🚀
+---
+
+✅ **Guidelines**:
+- Include only the **JSON object**, no extra explanation.
+- Use **descriptive, complete labels** (e.g. “Causes of World War I” not just “Causes”).
+- Ensure **no node overlaps**, layout should be radial and symmetrical.
+- Structure logically so students can **grasp and retain** the flow easily.
+- Output must be **copy-paste ready JSON** (no markdown, no comments).
+
+Return only the JSON. No extra words or code blocks.
             `);
             
 
