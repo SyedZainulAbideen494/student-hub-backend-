@@ -13958,25 +13958,40 @@ app.post('/get-credit', async (req, res) => {
 
 
 
+
 {/* Doxsify backend */}
+app.use(express.static(path.join(__dirname, 'public')));
 
 const connection2 = mysql.createPool({
   connectionLimit: 10, // Maximum number of connections in the pool
   host: "localhost",
   user: "root",
   password: "Englishps#4",
-  database: "forma",
+  database: "fashionapp",
 });
 
 connection2.getConnection((err) => {
   if (err) {
     console.error("Error connecting to MySQL database: ", err);
   } else {
-    console.log("Connected to MySQL database forma");
+    console.log("Connected to MySQL database");
   }
 });
 
 
+
+// Promisify query function
+const query2 = (sql, params) => {
+  return new Promise((resolve, reject) => {
+    connection2.query(sql, params, (error, results) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve(results);
+      }
+    });
+  });
+};
 
 // Utility function to extract user ID from token
 const getUserIdFromTokenForma = (token) => {
@@ -13997,571 +14012,594 @@ const getUserIdFromTokenForma = (token) => {
   });
 };
 
-// Promisify query function
-const query2 = (sql, params) => {
-  return new Promise((resolve, reject) => {
-    connection2.query(sql, params, (error, results) => {
-      if (error) {
-        reject(error);
-      } else {
-        resolve(results);
-      }
-    });
-  });
-};
+app.post('/fashion/signup', (req, res) => {
+  const { email, password } = req.body;
 
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required' });
+  }
 
-
-app.post('/signup/forma', (req, res) => {
-  const { password, email } = req.body;
-
-  // Query to check if email or phone number already exists
   const checkQuery = 'SELECT * FROM users WHERE email = ?';
   connection2.query(checkQuery, [email], (checkErr, checkResults) => {
     if (checkErr) {
-      console.error('Error checking existing user:', checkErr);
+      console.error('🔴 Error checking existing user:', checkErr);
       return res.status(500).json({ error: 'Internal server error' });
     }
-    
+
     if (checkResults.length > 0) {
-      return res.status(400).json({ error: 'Email or phone number already in use' });
+      return res.status(400).json({ error: 'Email already in use' });
     }
 
-    // Proceed with hashing the password and inserting the new user
     bcrypt.hash(password, saltRounds, (hashErr, hash) => {
       if (hashErr) {
-        console.error('Error hashing password:', hashErr);
+        console.error('🔴 Error hashing password:', hashErr);
         return res.status(500).json({ error: 'Internal server error' });
       }
 
-      const insertQuery = 'INSERT INTO users (password, email) VALUES (?, ?)';
-      const values = [hash, email];
-
-      connection2.query(insertQuery, values, (insertErr, insertResults) => {
+      const insertQuery = 'INSERT INTO users (email, password) VALUES (?, ?)';
+      connection2.query(insertQuery, [email, hash], (insertErr, insertResults) => {
         if (insertErr) {
-          console.error('Error inserting user:', insertErr);
+          console.error('🔴 Error inserting user:', insertErr);
           return res.status(500).json({ error: 'Internal server error' });
         }
 
-        // User successfully registered, now generate JWT token
         const userId = insertResults.insertId;
-        const token = jwt.sign({ id: userId }, 'jwtsecret', { expiresIn: 86400 }); // 24 hours
+        const token = jwt.sign({ id: userId }, 'jwtsecret', { expiresIn: '24h' });
 
-        // Insert the token into the session table
-        connection2.query(
-          'INSERT INTO session (user_id, jwt) VALUES (?, ?)',
-          [userId, token],
-          (sessionErr) => {
-            if (sessionErr) {
-              console.error('Error creating session:', sessionErr);
-              return res.status(500).send({ message: 'Error creating session', error: sessionErr });
-            }
-
-            console.log('User registration and session creation successful on forma!');
-            res.json({ auth: true, token: token });
+        const sessionQuery = 'INSERT INTO session (user_id, jwt) VALUES (?, ?)';
+        connection2.query(sessionQuery, [userId, token], (sessionErr) => {
+          if (sessionErr) {
+            console.error('🔴 Error creating session:', sessionErr);
+            return res.status(500).json({ error: 'Error creating session' });
           }
-        );
-      });
-    });
-  });
-});
 
-
-
-
-app.post("/login/forma", (req, res) => {
-  const identifier = req.body.identifier;
-  const password = req.body.password;
-
-  let query;
-  if (identifier.includes('@')) {
-    query = "SELECT * FROM users WHERE email = ?";
-  } else if (!isNaN(identifier)) {
-    query = "SELECT * FROM users WHERE phone_number = ?";
-  } else {
-    query = "SELECT * FROM users WHERE unique_id = ?";
-  }
-
-  connection2.query(query, [identifier], (err, result) => {
-    if (err) return res.status(500).send({ message: "Database error", error: err });
-
-    if (result.length > 0) {
-      bcrypt.compare(password, result[0].password, (error, response) => {
-        if (error) return res.status(500).send({ message: "Password comparison error", error });
-
-        if (response) {
-          // Generate JWT token and return it
-          const token = jwt.sign({ id: result[0].id }, "jwtsecret", { expiresIn: 86400 });
-
-          connection2.query(
-            "INSERT INTO session (user_id, jwt) VALUES (?, ?)",
-            [result[0].id, token],
-            (sessionErr) => {
-              if (sessionErr) return res.status(500).send({ message: "Error creating session", error: sessionErr });
-              res.json({ auth: true, token: token, user: result[0] });
-            }
-          );
-        } else {
-          res.json({ auth: false, message: "Incorrect password" });
-        }
-      });
-    } else {
-      res.json({ auth: false, message: "User not found" });
-    }
-  });
-});
-
-
-
-const storageForma = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, path.join(__dirname, '/root/student-hub-backend-/public/')); // save directly in public/
-  },
-  filename: (req, file, cb) => {
-    const userId = req.userId || 'unknown';
-    const ext = path.extname(file.originalname);
-    const datetime = new Date().toISOString().replace(/[:.-]/g, '').slice(0, 15);
-    const prefix = file.fieldname || 'img';
-  
-    // Add a unique suffix, e.g. timestamp + random number or use req.files index if available
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-  
-    const filename = `${prefix}_${userId}_${datetime}_${uniqueSuffix}${ext}`;
-    cb(null, filename);
-  },
-  
-});
-
-const uploadAIForma = multer({
-  storage,
-  limits: { fileSize: AI_MAX_FILE_SIZE },
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
-    if (allowedTypes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Unsupported image format'), false);
-    }
-  },
-});
-
-const processImageForma = async (file) => {
-  try {
-    const fileBuffer = await fsForma.readFile(file.path);
-    return fileBuffer.toString('base64');
-  } catch (err) {
-    throw new Error('Failed to read uploaded file for base64 conversion');
-  }
-};
-// Retry helper function
-const retryOnError = async (fn, retries = 5, delay = 2000) => {
-  let lastError;
-  for (let i = 0; i < retries; i++) {
-    try {
-      return await fn();
-    } catch (err) {
-      lastError = err;
-      console.warn(`AI call attempt ${i + 1} failed: ${err.message}`);
-      if (i < retries - 1) {
-        await new Promise(res => setTimeout(res, delay));
-      }
-    }
-  }
-  throw lastError;
-};
-
-app.post('/api/process-images/forma', uploadAIForma.array('images', 4), async (req, res) => {
-  try {
-    const { prompt } = req.body;
-    const token = req.headers.authorization?.split(" ")[1];
-
-    if ((!req.files || req.files.length === 0) && !prompt) {
-      return res.status(400).json({ error: 'At least one image or a prompt must be provided.' });
-    }
-
-    const userId = await getUserIdFromTokenForma(token);
-
-    const imageParts = [];
-    if (req.files && req.files.length > 0) {
-      for (const file of req.files) {
-        const base64Data = await processImageForma(file);
-        imageParts.push({
-          inlineData: {
-            data: base64Data,
-            mimeType: file.mimetype,
-          },
-        });
-      }
-    }
-
-    const imgNames = [null, null, null, null];
-    if (req.files && req.files.length > 0) {
-      for (let i = 0; i < Math.min(req.files.length, 4); i++) {
-        imgNames[i] = req.files[i].filename;
-      }
-    }
-
-    console.log('Received prompt:', prompt || '[No prompt provided]');
-
-    const dynamicSystemInstructionForImg = `
-    You are LooksMaxGPT — a highly intelligent and realistic AI trained in facial aesthetics, symmetry analysis, and modern fashion styling.
-    
-    You will be shown 4 facial images of a person: front face, selfie, left profile, and right profile.
-    
-    Your purpose is to evaluate the user’s appearance through a highly accurate lens based on established standards of attractiveness — not sugarcoated opinions. Your role is to give direct, respectful, and highly actionable feedback to help users improve their looks over time.
-    
-    You must respond in the following **strict JSON format**:
-    
-    {
-      "overall_rating": {
-        "score": 0-100,
-        "symmetry": 0-100,
-        "skin_clarity": 0-100,
-        "jawline_definition": 0-100,
-        "eye_proportion": 0-100,
-        "masculinity": 0-100,
-        "cheekbone_prominence": 0-100,
-        "face_definition": 0-100
-      },
-      "improvement_tips": [
-        "Short, actionable tip 1",
-        "Short, actionable tip 2"
-      ],
-      "visual_highlights": [
-        "Describe key visual insights or suggestions"
-      ],
-      "motivational_message": "Positive and friendly encouragement to user.",
-      "goal_suggestion": "A one-line suggestion on what to focus on.",
-      "shareable_summary": "A short quote or message suitable for a social media badge.",
-      "style_advice": {
-        "best_clothing_colors": ["color1", "color2"],
-        "recommended_styles": ["minimalist", "streetwear", "classy", "etc"],
-        "best_photo_angle": "left-side / right-side / front",
-        "dp_pose_tip": "Best pose and lighting tip for DP photo"
-      }
-    }
-    
-    Your goals:
-    - Give **honest ratings** based on facial harmony, symmetry, and proportion.
-    - Offer **real, practical advice** for grooming, styling, and looksmaxing.
-    - Help users build a strong appearance and online image with **confidence**.
-    - Be encouraging but not fake. Always stick to **truth over flattery**.
-    
-    Only return valid JSON. No explanations. No additional text.
-    `;
-    
-    
-
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
-      safetySettings: safetySettings,
-    });
-
-    const contentArray = [
-      ...imageParts,
-      prompt || '',
-      dynamicSystemInstructionForImg,
-    ];
-
-    const response = await retryOnError(() => model.generateContent(contentArray), 5, 2000);
-    console.log('AI responded.');
-
-    let resultText = response?.response?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!resultText) throw new Error('No AI response text received.');
-
-    resultText = resultText.trim();
-    if (resultText.startsWith("```json")) {
-      resultText = resultText.replace(/```json/, '').replace(/```$/, '').trim();
-    }
-
-    let ratingData = null;
-    try {
-      ratingData = JSON.parse(resultText);
-    } catch (e) {
-      console.error('Failed to parse JSON:', e);
-      console.error('Raw AI Output:', resultText);
-      return res.status(500).json({ error: 'AI did not return valid JSON.' });
-    }
-
-    connection2.query(
-      `INSERT INTO ratings (
-        user_id,
-        overall_score,
-        symmetry_score,
-        skin_clarity,
-        jawline_definition,
-        eye_proportion,
-        masculinity_score,
-        cheekbone_prominence,
-        face_definition,
-        improvement_tips,
-        visual_highlights,
-        motivational_message,
-        goal_suggestion,
-        shareable_summary,
-        style_advice,
-        img1_name,
-        img2_name,
-        img3_name,
-        img4_name
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        userId,
-        ratingData?.overall_rating?.score || 0,
-        ratingData?.overall_rating?.symmetry || 0,
-        ratingData?.overall_rating?.skin_clarity || 0,
-        ratingData?.overall_rating?.jawline_definition || 0,
-        ratingData?.overall_rating?.eye_proportion || 0,
-        ratingData?.overall_rating?.masculinity || 0,
-        ratingData?.overall_rating?.cheekbone_prominence || 0,
-        ratingData?.overall_rating?.face_definition || 0,
-        JSON.stringify(ratingData?.improvement_tips || []),
-        JSON.stringify(ratingData?.visual_highlights || []),
-        ratingData?.motivational_message || '',
-        ratingData?.goal_suggestion || '',
-        ratingData?.shareable_summary || '',
-        JSON.stringify(ratingData?.style_advice || {}),
-        imgNames[0],
-        imgNames[1],
-        imgNames[2],
-        imgNames[3],
-      ],
-      (err, result) => {
-        if (err) {
-          console.error('Failed to save ratings:', err);
-          return res.status(500).json({ error: 'Failed to save rating' });
-        } else {
-          console.log('Ratings saved for user:', userId);
-          return res.json({
-            rawResult: resultText,
-            structuredResult: ratingData,
-            rating_id: result.insertId,
+          console.log('✅ User registered successfully!');
+          return res.status(200).json({
+            auth: true,
+            token: token,
+            user: { id: userId, email },
+            message: 'User registered successfully!'
           });
-        }
-      }
-    );
-
-  } catch (error) {
-    console.error('Error during image processing:', error.message);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-
-
-app.get('/api/ratings/:id', (req, res) => {
-  const { id } = req.params;
-  connection2.query(
-    'SELECT * FROM ratings WHERE id = ?',
-    [id],
-    (err, results) => {
-      if (err || results.length === 0) {
-        return res.status(404).json({ error: 'Rating not found' });
-      }
-      res.json(results[0]);
-    }
-  );
-});
-
-
-app.post('/buy-premium/forma', async (req, res) => {
-  try {
-    const { amount, currency, subscription_plan, token, duration } = req.body;
-    
-    const userId = await getUserIdFromTokenForma(token);
-    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-
-    const options = {
-      amount: amount * 100, 
-      currency,
-      receipt: `order_rcptid_${Math.floor(Math.random() * 100000)}`,
-      notes: { subscription_plan, userId, duration },
-    };
-
-    razorpay.orders.create(options, (err, order) => {
-      if (err) return res.status(500).json({ error: err });
-      res.json({ order });
+        });
+      });
     });
-
-  } catch (error) {
-    res.status(500).json({ error: 'Internal server error' });
-  }
+  });
 });
 
 
-app.post('/verify-payment/forma', async (req, res) => {
-  try {
-    const { payment_id, order_id, signature, token, rating_id } = req.body;
+2
 
-    const userId = await getUserIdFromTokenForma(token);
-    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+app.get("/fashion/userAuth", verifyjwt, (req, res) => {});
+// backend/routes/auth.js
 
-    const body = `${order_id}|${payment_id}`;
-    const expected_signature = crypto
-      .createHmac('sha256', 'ec9nrw9RjbIcvpkufzaYxmr6') // Replace with your Razorpay secret
-      .update(body)
-      .digest('hex');
+app.post("/fashion/login", (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) return res.status(400).json({ message: "Email and password required" });
 
-    if (expected_signature !== signature) {
-      console.error('Signature mismatch');
-      return res.status(400).json({ success: false });
-    }
+  const query = "SELECT * FROM users WHERE email = ?";
+  connection2.query(query, [email], (err, results) => {
+    if (err) return res.status(500).json({ message: "Database error", error: err });
+    if (!results.length) return res.status(404).json({ auth: false, message: "User not found" });
 
-    // ✅ Update the rating's has_paid to true
-    const queryText = `UPDATE ratings SET has_paid = 1 WHERE id = ?`;
-    await query2(queryText, [rating_id]);
+    const user = results[0];
+    bcrypt.compare(password, user.password, (err, matched) => {
+      if (err) return res.status(500).json({ message: "Error checking password", error: err });
+      if (!matched) return res.status(401).json({ auth: false, message: "Incorrect password" });
 
-    console.log(`✅ User ${userId} paid for rating ${rating_id}.`);
-
-    res.json({ success: true });
-
-  } catch (error) {
-    console.error("Error in /verify-payment/forma:", error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
+      const token = jwt.sign({ id: user.id }, "jwtsecret", { expiresIn: "24h" });
+      connection2.query("INSERT INTO session (user_id, jwt) VALUES (?, ?)", [user.id, token], (err) => {
+        if (err) return res.status(500).json({ message: "Session error", error: err });
+        res.status(200).json({ auth: true, token, user: { id: user.id, email: user.email } });
+      });
+    });
+  });
 });
 
-
-app.post("/api/verify-token/forma", async (req, res) => {
+app.post('/fashion/verifyToken', (req, res) => {
   const { token } = req.body;
-
   if (!token) return res.json({ valid: false });
 
+
+    const query = "SELECT * FROM session WHERE jwt = ?";
+    connection2.query(query, [token], (err, result) => {
+      if (err || result.length === 0) return res.json({ valid: false });
+      res.json({ valid: true });
+    });
+
+});
+
+app.post("/fashion/save-details", async (req, res) => {
+  const token = req.headers.authorization?.split(" ")[1];
+
+  if (!token) return res.status(401).json({ message: "Unauthorized" });
+
   try {
     const userId = await getUserIdFromTokenForma(token);
+    const { name, dob, gender, bodyType, stylePref, zodiac } = req.body;
 
-    if (!userId) return res.json({ valid: false });
+    const sql = `INSERT INTO user_details (user_id, name, dob, gender, body_type, style_preference, zodiac) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?)`;
 
-    const rows = await query2(
-      "SELECT * FROM session WHERE jwt = ? AND user_id = ?",
-      [token, userId]
-    );
-
-    if (rows.length > 0) {
-      return res.json({ valid: true });
-    } else {
-      return res.json({ valid: false });
-    }
+    connection2.query(sql, [userId, name, dob, gender, bodyType, stylePref, zodiac], (err, result) => {
+      if (err) return res.status(500).json({ message: "Error saving details", error: err });
+      res.status(200).json({ message: "Details saved successfully" });
+    });
   } catch (err) {
-    console.error("Token verification error:", err);
-    return res.status(500).json({ valid: false });
+    res.status(403).json({ message: err.message });
   }
 });
 
-app.post("/api/user-ratings/forma", async (req, res) => {
-  const { token } = req.body;
-
-  if (!token) {
-    return res.status(400).json({ error: "Token is required" });
-  }
-
+app.post('/fashion/upload/cloths', upload.single('image'), async (req, res) => {
   try {
-    const userId = await getUserIdFromTokenForma(token);
+    const { hashtag, token } = req.body;
 
-    if (!userId) {
-      return res.status(401).json({ error: "Invalid or expired token" });
+    if (!req.file) {
+      console.log("❌ No image file received");
+      return res.status(400).json({ error: 'Image file not received.' });
     }
 
-    const ratings = await query2(
-      "SELECT * FROM ratings WHERE user_id = ? ORDER BY created_at DESC",
+    if (!token) {
+      console.log("❌ Token not received");
+      return res.status(401).json({ error: 'Token required.' });
+    }
+
+    const user_id = await getUserIdFromTokenForma(token);
+    const fileName = req.file.filename;
+
+    console.log("✅ Received image:", fileName);
+    console.log("📦 Hashtag:", hashtag);
+    console.log("👤 User ID:", user_id);
+
+    // Check if hashtag exists
+    connection2.query(
+      'SELECT id FROM hashtags WHERE name = ? AND user_id = ?',
+      [hashtag, user_id],
+      (err, results) => {
+        if (err) {
+          console.log("❌ Error selecting hashtag:", err);
+          return res.status(500).json({ error: 'Database error during hashtag check.' });
+        }
+
+        const hashtagId = results.length > 0 ? results[0].id : null;
+
+        const insertHashtagAndClothing = (hashtagIdToUse) => {
+          connection2.query(
+            'INSERT INTO clothes (user_id, image_name, hashtag_id) VALUES (?, ?, ?)',
+            [user_id, fileName, hashtagIdToUse],
+            (err) => {
+              if (err) {
+                console.log("❌ Error inserting clothes:", err);
+                return res.status(500).json({ error: 'Database error during clothes insert.' });
+              }
+              console.log("✅ Upload successful!");
+              res.json({ message: 'Uploaded!' });
+            }
+          );
+        };
+
+        if (hashtagId) {
+          insertHashtagAndClothing(hashtagId);
+        } else {
+          connection2.query(
+            'INSERT INTO hashtags (name, user_id) VALUES (?, ?)',
+            [hashtag, user_id],
+            (err, result) => {
+              if (err) {
+                console.log("❌ Error inserting hashtag:", err);
+                return res.status(500).json({ error: 'Database error during hashtag insert.' });
+              }
+              insertHashtagAndClothing(result.insertId);
+            }
+          );
+        }
+      }
+    );
+  } catch (error) {
+    console.error("🔥 Unexpected server error:", error);
+    return res.status(500).json({ error: 'Unexpected error occurred.' });
+  }
+});
+
+app.post('/fashion/hashtags/previous', async (req, res) => {
+  try {
+    const { token } = req.body;
+
+    if (!token) return res.status(401).json({ error: 'Token required' });
+
+    const user_id = await getUserIdFromTokenForma(token);
+
+    connection2.query(
+      'SELECT name FROM hashtags WHERE user_id = ?',
+      [user_id],
+      (err, results) => {
+        if (err) return res.status(500).json({ error: err });
+        res.json(results.map(r => r.name));
+      }
+    );
+  } catch (err) {
+    console.error('Error fetching hashtags:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/fashion/dashboard-data', async (req, res) => {
+  try {
+    const { token } = req.body;
+    const user_id = await getUserIdFromTokenForma(token);
+
+    // Fetch user full name
+    const userRows = await query2('SELECT name FROM user_details WHERE id = ?', [user_id]);
+    const full_name = userRows[0]?.name || '';
+
+    // Fetch hashtags
+    const hashtags = await query2('SELECT id, name FROM hashtags WHERE user_id = ?', [user_id]);
+
+    // Fetch images for each hashtag
+    const hashtagMap = {};
+    for (const tag of hashtags) {
+      const clothes = await query2('SELECT image_name FROM clothes WHERE hashtag_id = ?', [tag.id]);
+hashtagMap[tag.id] = { 
+  name: tag.name,
+  imgs: clothes.map(c => `/${c.image_name}`)
+};
+    }
+
+    // Return response
+    res.json({
+      full_name,
+      hashtags: hashtagMap,
+      savedOutfits: [
+        { id: 1, img: '/uploads/outfit1.jpg' },
+        { id: 2, img: '/uploads/outfit2.jpg' },
+        { id: 3, img: '/uploads/outfit3.jpg' }
+      ]
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+app.post('/fashion/user-clothes', async (req, res) => {
+  try {
+    const { token } = req.body;
+    const user_id = await getUserIdFromTokenForma(token);
+
+    const hashtags = await query2('SELECT id, name FROM hashtags WHERE user_id = ?', [user_id]);
+    const clothesByHashtag = {};
+
+    for (const tag of hashtags) {
+      const clothes = await query2('SELECT id, image_name FROM clothes WHERE hashtag_id = ?', [tag.id]);
+      clothesByHashtag[tag.name] = clothes.map(c => ({
+        cloth_id: c.id,
+        image: `${c.image_name}`,
+        hashtag: tag.name,
+      }));
+    }
+
+    res.json(clothesByHashtag);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+const uploadAIFashion = multer({
+  limits: { fileSize: 100 * 1024 * 1024 },
+  storage: multer.memoryStorage(),
+});
+
+
+app.post('/fashion/generate-outfit', uploadAIFashion.array('images'), async (req, res) => {
+  try {
+    const { token, clothes, goal, styleAim, weather } = req.body;
+    if (!token) return res.status(401).json({ error: 'Token required' });
+
+    const userId = await getUserIdFromTokenForma(token);
+    if (!userId) return res.status(403).json({ error: 'Invalid token' });
+
+    if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'No images uploaded' });
+
+    const images = req.files;
+    const parsedClothes = JSON.parse(clothes); // [{ cloth_id, hashtag }]
+
+    const imageParts = await Promise.all(
+      images.map((img) => ({
+        inlineData: {
+          data: img.buffer.toString('base64'),
+          mimeType: img.mimetype,
+        },
+      }))
+    );
+
+    const clothPromptData = parsedClothes
+      .map((c, i) =>
+        `Cloth ID: ${c.cloth_id}, Hashtag: ${c.hashtag}, Image Name: "${images[i].originalname}" → Image (${i + 1})`
+      )
+      .join('\n');
+
+  const finalPrompt = `
+You are a professional luxury fashion stylist AI for an app called Forma.
+
+Your job is to create **exactly 2 outfits** from the user's uploaded clothing items, based on their preferences.
+
+---
+🧥 CATEGORIES (Classify user clothes into these types):
+- Tops: shirt, t-shirt, hoodie, sweatshirt, kurta, etc.
+- Bottoms: pants, jeans, shorts, joggers, trousers, skirts, etc.
+- Layers (optional): jackets, overcoats, sweaters, cardigans, blazers.
+- Accessories (optional): watches, caps, sunglasses, belts, bags, etc.
+---
+
+🧍User's Style Preferences:
+- Occasion: ${goal}
+- Style Aim: ${styleAim}
+- Weather: ${weather}
+
+👕 Uploaded Clothes:
+${clothPromptData}
+
+---
+🛑 HARD RULES (STRICTLY ENFORCED):
+1. Each outfit **must** include:
+   - **One and only one top**
+   - **One and only one bottom**
+   - Optional: One layer (e.g., jacket), One or two accessories
+2. Do **NOT** include multiple tops or multiple bottoms.
+3. Do **NOT** include more than one layer per outfit.
+4. Use only the provided cloth_ids — no new or imagined items.
+5. Match outfits aesthetically to the user's goal, aim, and weather.
+6. Do **NOT** explain anything. Output only the clean JSON format below.
+
+🎯 JSON Format (Output Only This — No Text Outside JSON):
+
+{
+  "outfits": [
+    {
+      "title": "College Day Flex",
+      "cloth_ids": [1, 4, 6] // top, bottom, optional jacket or watch
+    },
+    {
+      "title": "Smart Minimal Evening",
+      "cloth_ids": [2, 5]
+    }
+  ]
+}
+`;
+
+    const result = await model.generateContent([...imageParts, finalPrompt]);
+    const aiReply = result?.response?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!aiReply) throw new Error('No response from Gemini');
+
+    let outfitsJSON;
+    try {
+      const jsonMatch = aiReply.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error('No valid JSON found in Gemini response');
+      outfitsJSON = JSON.parse(jsonMatch[0]);
+    } catch (e) {
+      console.error('Gemini raw:', aiReply);
+      throw new Error('Failed to parse Gemini response');
+    }
+console.log(JSON.stringify(outfitsJSON, null, 2));
+// INSERT GENERATED OUTFITS INTO DB
+for (const outfit of outfitsJSON.outfits) {
+  const clothIdsJson = JSON.stringify(outfit.cloth_ids);
+  await query2(
+    'INSERT INTO generated_outfits (user_id, title, cloth_ids) VALUES (?, ?, ?)',
+    [userId, outfit.title, clothIdsJson]
+  );
+}
+    res.json({ success: true, outfits: outfitsJSON });
+  } catch (err) {
+    console.error('AI outfit error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/fashion/get-history', async (req, res) => {
+  try {
+    const { token } = req.body;
+    if (!token) return res.status(401).json({ error: 'Token required' });
+
+    const userId = await getUserIdFromTokenForma(token);
+    if (!userId) return res.status(403).json({ error: 'Invalid token' });
+
+    const outfitRows = await query2(
+      'SELECT id, title, cloth_ids, created_at FROM generated_outfits WHERE user_id = ? ORDER BY id DESC',
       [userId]
     );
 
-    return res.json({ ratings });
+    const outfitResults = [];
+
+    for (const outfit of outfitRows) {
+      const clothIds = JSON.parse(outfit.cloth_ids); // e.g., [25,22,23]
+
+      if (!Array.isArray(clothIds) || clothIds.length === 0) continue;
+
+      const placeholders = clothIds.map(() => '?').join(',');
+      const clothRows = await query2(
+        `SELECT image_name FROM clothes WHERE id IN (${placeholders}) AND user_id = ?`,
+        [...clothIds, userId]
+      );
+
+      const imageNames = clothRows.map(c => c.image_name);
+
+      outfitResults.push({
+        title: outfit.title,
+        created_at: outfit.created_at,
+        images: imageNames // just image_name
+      });
+    }
+
+    res.json({ success: true, outfits: outfitResults });
   } catch (err) {
-    console.error("Error fetching user ratings:", err);
-    return res.status(500).json({ error: "Internal server error" });
+    console.error('Fetch history error:', err);
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
-
-const generateTokenFroma = () => crypto.randomBytes(20).toString('hex');
-
-app.post('/api/forma/forgot-password', async (req, res) => {
+app.get('/fashion/hashtag/:id', async (req, res) => {
   try {
-    const { emailOrPhone } = req.body;
-
-    const [userResults] = await connection.promise().query(
-      'SELECT * FROM users WHERE email = ? OR phone_number = ?',
-      [emailOrPhone, emailOrPhone]
+    const hashtagId = req.params.id;
+    const clothes = await query2(
+      'SELECT image_name FROM clothes WHERE hashtag_id = ?', 
+      [hashtagId]
     );
 
-    if (userResults.length === 0)
-      return res.status(404).json({ error: 'User not found' });
+    res.json({
+      hashtagId,
+      clothes: clothes.map(c => `/${c.image_name}`)
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch clothes for hashtag' });
+  }
+});
+
+app.post('/fashion/dashboard-stats', async (req, res) => {
+  try {
+    const { token } = req.body;
+    if (!token) return res.status(400).json({ error: "No token provided" });
+
+    const userId = await getUserIdFromTokenForma(token);
+    if (!userId) return res.status(401).json({ error: "Invalid token" });
+
+    // Count clothes
+    const [clothes] = await connection2.promise().query(
+      "SELECT COUNT(*) as totalClothes FROM clothes WHERE user_id = ?",
+      [userId]
+    );
+
+    // Count categories
+    const [categories] = await connection2.promise().query(
+      "SELECT COUNT(*) as totalCategories FROM hashtags WHERE user_id = ?",
+      [userId]
+    );
+
+    // Count generated outfits
+    const [generated] = await connection2.promise().query(
+      "SELECT COUNT(*) as totalGenerated FROM generated_outfits WHERE user_id = ?",
+      [userId]
+    );
+
+    // Calculate streak (days with at least 1 generated outfit)
+    const [streakData] = await connection2.promise().query(
+      `SELECT DATE(created_at) as day
+       FROM generated_outfits
+       WHERE user_id = ?
+       GROUP BY DATE(created_at)
+       ORDER BY day DESC`,
+      [userId]
+    );
+
+    let streak = 0;
+    if (streakData.length > 0) {
+      let prevDate = new Date(streakData[0].day);
+      streak = 1;
+
+      for (let i = 1; i < streakData.length; i++) {
+        let currentDate = new Date(streakData[i].day);
+        let diffDays = (prevDate - currentDate) / (1000 * 60 * 60 * 24);
+
+        if (diffDays === 1) {
+          streak++;
+          prevDate = currentDate;
+        } else {
+          break; // streak ended
+        }
+      }
+    }
+
+    res.json({
+      totalClothes: clothes[0].totalClothes,
+      totalCategories: categories[0].totalCategories,
+      totalGenerated: generated[0].totalGenerated,
+      streak
+    });
+
+  } catch (error) {
+    console.error("Error fetching dashboard stats:", error);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+const generateTokenForma = () => crypto.randomBytes(20).toString('hex');
+
+// Forgot Password Route
+app.post('/fashion/api/auth/forgot-password', async (req, res) => {
+  try {
+    const { emailOrPhone } = req.body;
+    const [userResults] = await connection2.promise().query(
+      'SELECT * FROM users WHERE email  = ?',
+      [emailOrPhone]
+    );
+
+    if (userResults.length === 0) return res.status(404).json({ error: 'User not found' });
 
     const user = userResults[0];
-    const token = generateTokenFroma();
-    const resetLink = `https://doxsify.vercel.app/reset-password/${token}`;
-    const expirationTime = new Date(Date.now() + 3600000); // 1 hour
+    const token = generateTokenForma();
+    const resetLink = `https://60vhsl5m-3000.inc1.devtunnels.ms/reset-password/${token}`;
+    const expirationTime = new Date(Date.now() + 3600000);
 
     await connection2.promise().query(
       'INSERT INTO password_resets (email, token, expires_at) VALUES (?, ?, ?)',
       [user.email, token, expirationTime]
     );
 
+    // Send the email in a non-blocking way
     const mailOptions = {
       to: user.email,
-      from: 'edusyfy@gmail.com',
-      subject: 'Reset Your Doxsify Password',
-      text: `Hi there,\n\nYou requested a password reset for your Doxsify account. Click below to reset it:\n\n${resetLink}\n\nIf this wasn't you, ignore this email.\n\n– Doxsify AI Team`
+      from: 'edusiyfy@gmail.com',
+      subject: 'Password Reset Request',
+      text: `Hi ${user.name || 'there'},\n\nWe received a request to reset your password. You can reset it by clicking on the link below:\n\n${resetLink}\n\nIf you did not request this, please ignore this email.\n\nBest regards,\nYour Edusify Team`
     };
 
-    transporter.sendMail(mailOptions, (err, info) => {
+    transporterSec.sendMail(mailOptions, (err, info) => {
       if (err) {
-        console.log('Email error:', err);
-        return res.status(500).json({ error: 'Failed to send email' });
+        console.log('Error sending email:', err);
+        return res.status(500).json({ error: 'Error sending email' });
       }
-      console.log('Doxsify reset email sent:', info.response);
-      res.status(200).json({ message: 'Reset link sent to your email' });
+      console.log('Email sent:', info.response);
+      res.status(200).json({ message: 'Reset link sent' });
     });
   } catch (err) {
-    console.error('Forgot password error:', err);
+    console.error('Error in forgot password route:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-app.post('/api/forma/reset-password', (req, res) => {
+
+// Reset Password Route
+app.post('/fashion/api/auth/reset-password', (req, res) => {
   const { token, password } = req.body;
 
-  connection2.query(
-    'SELECT * FROM doxsify_password_resets WHERE token = ? AND expires_at > NOW()',
-    [token],
-    (err, results) => {
-      if (err) return res.status(500).json({ error: 'Database error' });
-      if (results.length === 0)
-        return res.status(400).json({ error: 'Invalid or expired token' });
+  // Validate token
+  connection2.query('SELECT * FROM password_resets WHERE token = ? AND expires_at > NOW()', [token], (err, results) => {
+    if (err) return res.status(500).json({ error: 'Database error' });
+    if (results.length === 0) return res.status(400).json({ error: 'Invalid or expired token' });
 
-      const email = results[0].email;
-      const saltRounds = 10;
+    const email = results[0].email;
+    const saltRounds = 10;
 
-      bcrypt.hash(password, saltRounds, (hashErr, hash) => {
-        if (hashErr)
-          return res.status(500).json({ error: 'Hashing failed' });
+    // Hash the new password
+    bcrypt.hash(password, saltRounds, (hashErr, hash) => {
+      if (hashErr) return res.status(500).json({ error: 'Internal server error' });
 
-        connection2.query(
-          'UPDATE users SET password = ? WHERE email = ?',
-          [hash, email],
-          (err) => {
-            if (err) return res.status(500).json({ error: 'Update failed' });
+      // Update the password in the database
+      connection2.query('UPDATE users SET password = ? WHERE email = ?', [hash, email], (err) => {
+        if (err) return res.status(500).json({ error: 'Database error' });
 
-            connection2.query(
-              'DELETE FROM password_resets WHERE token = ?',
-              [token],
-              (err) => {
-                if (err)
-                  return res.status(500).json({ error: 'Cleanup failed' });
+        // Deactivate the token
+        connection2.query('DELETE FROM password_resets WHERE token = ?', [token], (err) => {
+          if (err) return res.status(500).json({ error: 'Database error' });
 
-                res.status(200).json({ message: 'Password updated' });
-              }
-            );
-          }
-        );
+          res.status(200).json({ message: 'Password successfully updated' });
+        });
       });
-    }
-  );
+    });
+  });
 });
 
-{/* Whatsapp analysier backend */}
 
 // Start the server
 app.listen(PORT, () => {
