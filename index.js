@@ -14108,26 +14108,138 @@ app.post('/fashion/verifyToken', (req, res) => {
 
 });
 
-app.post("/fashion/save-details", async (req, res) => {
-  const token = req.headers.authorization?.split(" ")[1];
 
-  if (!token) return res.status(401).json({ message: "Unauthorized" });
+// Utility: Calculate Zodiac sign from date of birth (YYYY-MM-DD string)
+function zodiacFromDate(dob) {
+  if (!dob) return null;
+  const date = new Date(dob);
+  const day = date.getUTCDate();
+  const month = date.getUTCMonth() + 1;
 
+  if ((month === 3 && day >= 21) || (month === 4 && day <= 19)) return "Aries";
+  if ((month === 4 && day >= 20) || (month === 5 && day <= 20)) return "Taurus";
+  if ((month === 5 && day >= 21) || (month === 6 && day <= 20)) return "Gemini";
+  if ((month === 6 && day >= 21) || (month === 7 && day <= 22)) return "Cancer";
+  if ((month === 7 && day >= 23) || (month === 8 && day <= 22)) return "Leo";
+  if ((month === 8 && day >= 23) || (month === 9 && day <= 22)) return "Virgo";
+  if ((month === 9 && day >= 23) || (month === 10 && day <= 22)) return "Libra";
+  if ((month === 10 && day >= 23) || (month === 11 && day <= 21)) return "Scorpio";
+  if ((month === 11 && day >= 22) || (month === 12 && day <= 21)) return "Sagittarius";
+  if ((month === 12 && day >= 22) || (month === 1 && day <= 19)) return "Capricorn";
+  if ((month === 1 && day >= 20) || (month === 2 && day <= 18)) return "Aquarius";
+  if ((month === 2 && day >= 19) || (month === 3 && day <= 20)) return "Pisces";
+  return null;
+}
+
+app.post('/fashion/save-details', async (req, res) => {
   try {
-    const userId = await getUserIdFromTokenForma(token);
-    const { name, dob, gender, bodyType, stylePref, zodiac } = req.body;
+    const {
+      token,
+      name,
+      dob,
+      gender,
+      bodyType,
+      stylePref,
+      zodiac,
+      colorPreferences,
+      eyeColor,
+      hairColor,
+      faceType,
+      enhanceHide,
+      newStyle,
+      fitIn,
+    } = req.body;
 
-    const sql = `INSERT INTO user_details (user_id, name, dob, gender, body_type, style_preference, zodiac) 
-                 VALUES (?, ?, ?, ?, ?, ?, ?)`;
+    if (!token) {
+      return res.status(401).json({ error: 'Token is required.' });
+    }
 
-    connection2.query(sql, [userId, name, dob, gender, bodyType, stylePref, zodiac], (err, result) => {
-      if (err) return res.status(500).json({ message: "Error saving details", error: err });
-      res.status(200).json({ message: "Details saved successfully" });
-    });
+    const user_id = await getUserIdFromTokenForma(token);
+    if (!user_id) {
+      return res.status(401).json({ error: 'Invalid token.' });
+    }
+
+    if (!name || !dob) {
+      return res.status(400).json({ error: 'Name and Date of Birth are required.' });
+    }
+
+    const colorPrefStr = JSON.stringify(colorPreferences || []);
+    const enhanceHideStr = JSON.stringify(enhanceHide || []);
+    const calculatedZodiac = zodiac || zodiacFromDate(dob);
+
+    // Check if user details already exist
+    const checkSql = 'SELECT COUNT(*) as count FROM user_details WHERE user_id = ?';
+    const checkResult = await query2(checkSql, [user_id]);
+
+    if (checkResult[0].count > 0) {
+      // Update existing record
+      const updateSql = `
+        UPDATE user_details SET
+          name = ?,
+          dob = ?,
+          gender = ?,
+          body_type = ?,
+          style = ?,
+          zodiac = ?,
+          color_preferences = ?,
+          eye_color = ?,
+          hair_color = ?,
+          face_type = ?,
+          enhance_hide = ?,
+          new_style = ?,
+          fit_in = ?
+        WHERE user_id = ?
+      `;
+      const updateValues = [
+        name,
+        dob,
+        gender,
+        bodyType,
+        stylePref,
+        calculatedZodiac,
+        colorPrefStr,
+        eyeColor,
+        hairColor,
+        faceType,
+        enhanceHideStr,
+        newStyle,
+        fitIn,
+        user_id,
+      ];
+      await query2(updateSql, updateValues);
+      return res.json({ success: true, message: 'User details updated.' });
+    } else {
+      // Insert new record
+      const insertSql = `
+        INSERT INTO user_details
+        (user_id, name, dob, gender, body_type, style, zodiac, color_preferences, eye_color, hair_color, face_type, enhance_hide, new_style, fit_in)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `;
+      const insertValues = [
+        user_id,
+        name,
+        dob,
+        gender,
+        bodyType,
+        stylePref,
+        calculatedZodiac,
+        colorPrefStr,
+        eyeColor,
+        hairColor,
+        faceType,
+        enhanceHideStr,
+        newStyle,
+        fitIn,
+      ];
+      const result = await query2(insertSql, insertValues);
+      return res.json({ success: true, insertedId: result.insertId });
+    }
   } catch (err) {
-    res.status(403).json({ message: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
+
 
 app.post('/fashion/upload/cloths', upload.single('image'), async (req, res) => {
   try {
