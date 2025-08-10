@@ -14712,6 +14712,27 @@ app.post('/fashion/api/auth/reset-password', (req, res) => {
   });
 });
 
+app.post("/fashion/api/check-user-details", async (req, res) => {
+  try {
+    const { token } = req.body;
+    if (!token) return res.status(401).json({ error: "Token required." });
+
+    const user_id = await getUserIdFromTokenForma(token);
+    if (!user_id) return res.status(401).json({ error: "Invalid token." });
+
+    const sql = "SELECT COUNT(*) AS count FROM user_details WHERE user_id = ?";
+    const result = await query2(sql, [user_id]);
+
+    if (result[0].count > 0) {
+      res.json({ exists: true });
+    } else {
+      res.json({ exists: false });
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 // Start the server
 app.listen(PORT, () => {
