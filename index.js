@@ -14404,7 +14404,7 @@ const uploadAIFashion = multer({
 
 app.post('/fashion/generate-outfit', uploadAIFashion.array('images'), async (req, res) => {
   try {
-    const { token, clothes, goal, styleAim, weather } = req.body;
+const { token, clothes, activity, comfort, preferences, psychology } = req.body;
     if (!token) return res.status(401).json({ error: 'Token required' });
 
     const userId = await getUserIdFromTokenForma(token);
@@ -14430,54 +14430,42 @@ app.post('/fashion/generate-outfit', uploadAIFashion.array('images'), async (req
       )
       .join('\n');
 
-  const finalPrompt = `
+const finalPrompt = `
 You are a professional luxury fashion stylist AI for an app called Forma.
 
-Your job is to create **exactly 2 outfits** from the user's uploaded clothing items, based on their preferences.
+Create exactly 3 outfits from the user's uploaded clothing items.
 
 ---
-🧥 CATEGORIES (Classify user clothes into these types):
-- Tops: shirt, t-shirt, hoodie, sweatshirt, kurta, etc.
-- Bottoms: pants, jeans, shorts, joggers, trousers, skirts, etc.
-- Layers (optional): jackets, overcoats, sweaters, cardigans, blazers.
-- Accessories (optional): watches, caps, sunglasses, belts, bags, etc.
----
-
-🧍User's Style Preferences:
-- Occasion: ${goal}
-- Style Aim: ${styleAim}
-- Weather: ${weather}
+🧍 User's Style Profile:
+- Activity / Occasion: ${activity}
+- Comfort:
+   - Fit Level (1–10): ${comfort.fit}
+   - Ease of Movement (1–10): ${comfort.movement}
+- Psychological Drivers:
+   - Mood & Emotions (1–10): ${psychology.mood}
+   - Self-Expression (1–10): ${psychology.selfExpression}
+   - Nostalgia (1–10): ${psychology.nostalgia}
 
 👕 Uploaded Clothes:
 ${clothPromptData}
 
 ---
-🛑 HARD RULES (STRICTLY ENFORCED):
-1. Each outfit **must** include:
-   - **One and only one top**
-   - **One and only one bottom**
-   - Optional: One layer (e.g., jacket), One or two accessories
-2. Do **NOT** include multiple tops or multiple bottoms.
-3. Do **NOT** include more than one layer per outfit.
-4. Use only the provided cloth_ids — no new or imagined items.
-5. Match outfits aesthetically to the user's goal, aim, and weather.
-6. Do **NOT** explain anything. Output only the clean JSON format below.
+🛑 RULES:
+1. Each outfit must include 1 top + 1 bottom.
+2. Optional: 1 layer + 1–2 accessories.
+3. Use only provided cloth_ids.
+4. Return JSON only.
 
-🎯 JSON Format (Output Only This — No Text Outside JSON):
-
+🎯 JSON Format:
 {
   "outfits": [
-    {
-      "title": "College Day Flex",
-      "cloth_ids": [1, 4, 6] // top, bottom, optional jacket or watch
-    },
-    {
-      "title": "Smart Minimal Evening",
-      "cloth_ids": [2, 5]
-    }
+    { "title": "Look 1", "cloth_ids": [1, 3, 5] },
+    { "title": "Look 2", "cloth_ids": [2, 4] },
+    { "title": "Look 3", "cloth_ids": [6, 7] }
   ]
 }
 `;
+
 
     const result = await model.generateContent([...imageParts, finalPrompt]);
     const aiReply = result?.response?.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -14507,6 +14495,8 @@ for (const outfit of outfitsJSON.outfits) {
     res.status(500).json({ error: err.message });
   }
 });
+
+
 
 app.post('/fashion/get-history', async (req, res) => {
   try {
