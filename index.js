@@ -47,7 +47,7 @@ let GoogleGenAI, createUserContent, createPartFromUri;
 })();
 
 // Initialize Google Generative AI
-const genAI = new GoogleGenerativeAI('AIzaSyAIVIy-wBA1YIWDcUiJGqyTxwfN4tmxlJw');
+const genAI = new GoogleGenerativeAI('AIzaSyAhvINxPJMSHqKFA-oyBxEsuYxwBZtgPhA');
 
 const safetySettings = [
   {
@@ -122,7 +122,7 @@ app.use(cors({
 // Define storage for multer
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-      cb(null, '/root/student-hub-backend-/public/');
+      cb(null, 'public/');
   },
   filename: (req, file, cb) => {
       const ext = path.extname(file.originalname);
@@ -14067,7 +14067,6 @@ app.post('/fashion/signup', (req, res) => {
 });
 
 
-2
 
 app.get("/fashion/userAuth", verifyjwt, (req, res) => {});
 // backend/routes/auth.js
