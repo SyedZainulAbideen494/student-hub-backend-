@@ -174,11 +174,28 @@ const CANCEL_URL = `${BASE_URL}/cancel`;
 const baseURL = 'https://dropment.online';
 
 
+
+const VERIFY_TOKEN = "EAAFsUoRPg1QBPhbJUdJfHq8BPiLdsv8m3kEZAH0ZAfFWbfBnvwDH07zGviQphQaubXao2n0op8TW0lZBWC1BQbNLzpSCFWhoh8BSP6XQ6YUTZAGsIlcljDfx7sl6VaZC3bwuRJ3dZBDXVAmWLREfNzsv5IRYEHbX3uGVWFkTs2U1NZC66Y3FqhFPejzbF3Vetdhv2FWuuVJs0KYW2UZCZAatuv1jDy1hnpq65E7j1cnPax09756DBE0kDSZB4z0ZCZCZCCAZDZD";
+
+
+app.post("/webhook", (req, res) => {
+    console.log("Ehllo")
+  const mode = req.query["hub.mode"];
+  const token = req.query["hub.verify_token"];
+  const challenge = req.query["hub.challenge"];
+  if (mode === "subscribe" && token === VERIFY_TOKEN) {
+    console.log("Webhook verified!");
+    res.status(200).send(challenge);
+  } else {
+    res.sendStatus(403);
+  }
+});
+
 // Function to send WhatsApp message
 function sendWhatsAppMessage(data) {
   const config = {
     headers: {
-      'Authorization': 'Bearer EAAFsUoRPg1QBO6ZCbIX3mh0YL4VvkMJhzPovnNITFIDLsZCM6Y1fidZA8mfMm7ac5jXUugjZCsq10DB1YGTP62waRfLZBn7SYcgQVMD2SmH7H7wxfgd6hZBSjALEZC5rxCbyhPuertNehx0KIOqMVZBw5CGLOkQqd8IZA01tNTTtp45sNpDBMcSC7jtZBwzIEkxKdBYoZCTLm7OLZBEcXSm3',
+      'Authorization': `Bearer ${VERIFY_TOKEN}`,
       'Content-Type': 'application/json'
     }
   };
@@ -191,6 +208,7 @@ function sendWhatsAppMessage(data) {
       console.error('Error sending message:', error.response.data);
     });
 }
+
 
 app.get('/', (req, res) => {
   // Send a JSON response indicating the server is working
