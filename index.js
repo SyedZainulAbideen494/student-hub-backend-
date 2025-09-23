@@ -410,22 +410,7 @@ const query = (sql, params) => {
 };
 
 
-// Webhook verification endpoint (GET request)
-app.get('/webhook', (req, res) => {
-  console.log('Query parameters:', req.query);
-  const VERIFY_TOKEN = "EAAFsUoRPg1QBOzpnPGEpxBDKEw93j35D2V0Qg5C8O58FNQZAxWXWMo0XJZB6ezMoUWY6xNC6AhPGUZCjt0w8AJwuyAfkhjnZAn73tOU88pXhTxAJevtKm1GSGkDFwh5y79N1eX9LWhD3ceZAZBr36MDd1fgAy0m9UfVDIugUDGxcl64vAhpNuj7FkbG36HGJn3RQus1iw92DiNn4w"; // Replace with your verification token
-  const mode = req.query['hub.mode'];
-  const token = req.query['hub.verify_token'];
-  const challenge = req.query['hub.challenge'];
 
-  if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-    console.log('Webhook verified!');
-    res.status(200).send(challenge);
-  } else {
-    console.error('Failed verification. Make sure the verification tokens match.');
-    res.sendStatus(403);
-  }
-});
 
 app.post('/check-unique-id', (req, res) => {
   const { unique_id } = req.body;
