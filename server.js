@@ -142,7 +142,7 @@ const connection = mysql.createPool({
   host: "localhost",
   user: "root",
   password: "Englishps#4",
-  database: "caltrack",
+  database: "studenthub",
 });
 
 connection.getConnection((err) => {
