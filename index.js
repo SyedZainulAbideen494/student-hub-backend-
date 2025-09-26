@@ -14097,7 +14097,7 @@ app.post("/fashion/signup", async (req, res) => {
 app.get("/fashion/userAuth", verifyjwt, (req, res) => {});
 
 
-app.post("/fashion/login", (req, res) => {
+app.post("/fashion/login/resgister", (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
