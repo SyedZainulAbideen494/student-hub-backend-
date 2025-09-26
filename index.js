@@ -14095,65 +14095,70 @@ app.post("/fashion/signup", async (req, res) => {
 });
 
 app.get("/fashion/userAuth", verifyjwt, (req, res) => {});
-
-
+// --- LOGIN ---
 app.post("/fashion/login", (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
-    return res.status(400).json({ auth: false, message: "Email and password required" });
+    return res
+      .status(400)
+      .json({ auth: false, message: "Email and password required" });
   }
 
-  const query = "SELECT * FROM users WHERE LOWER(email) = LOWER(?)";
-  connection2.query(query, [email], (err, results) => {
+  const normalizedEmail = email.trim().toLowerCase();
+
+  const query = "SELECT * FROM users WHERE email = ?";
+  connection.query(query, [normalizedEmail], (err, results) => {
     if (err) {
       console.error("DB error:", err);
-      return res.status(500).json({ message: "Database error", error: err });
+      return res.status(500).json({ message: "Database error" });
     }
 
     if (results.length === 0) {
-      console.log("❌ No user found for email:", email);
+      console.log("❌ No user found for email:", normalizedEmail);
       return res.status(400).json({ auth: false, message: "User not found" });
     }
 
     const user = results[0];
 
-    bcrypt.compare(password, user.password, (err, matched) => {
-      if (err) {
-        console.error("Password compare error:", err);
-        return res.status(500).json({ message: "Password comparison error", error: err });
+    bcrypt.compare(password, user.password, (err2, matched) => {
+      if (err2) {
+        console.error("Password compare error:", err2);
+        return res
+          .status(500)
+          .json({ message: "Password comparison error", error: err2 });
       }
 
       if (!matched) {
-        console.log("❌ Wrong password for email:", email);
-        return res.status(401).json({ auth: false, message: "Incorrect password" });
+        console.log("❌ Wrong password for email:", normalizedEmail);
+        return res
+          .status(401)
+          .json({ auth: false, message: "Incorrect password" });
       }
 
       // ✅ Generate JWT token
       const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: "24h" });
 
       // ✅ Save session
-      connection2.query(
+      connection.query(
         "INSERT INTO session (user_id, jwt) VALUES (?, ?)",
         [user.id, token],
-        (err2) => {
-          if (err2) {
-            console.error("Session insert error:", err2);
-            return res.status(500).json({ message: "Session error", error: err2 });
+        (err3) => {
+          if (err3) {
+            console.error("Session insert error:", err3);
+            return res.status(500).json({ message: "Session error" });
           }
-          console.log("✅ Login successful:", email);
+          console.log("✅ Login successful:", normalizedEmail);
           res.status(200).json({
             auth: true,
             token,
-            user: { id: user.id, email: user.email }
+            user: { id: user.id, email: user.email },
           });
         }
       );
     });
   });
 });
-
-
 
 app.post('/fashion/verifyToken', (req, res) => {
   const { token } = req.body;
