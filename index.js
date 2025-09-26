@@ -14095,71 +14095,64 @@ app.post("/fashion/signup", async (req, res) => {
 });
 
 app.get("/fashion/userAuth", verifyjwt, (req, res) => {});
-// --- LOGIN ---
-app.post("/fashion/login", (req, res) => {
-  const { email, password } = req.body;
 
-  if (!email || !password) {
-    return res
-      .status(400)
-      .json({ auth: false, message: "Email and password required" });
-  }
 
-  const normalizedEmail = email.trim().toLowerCase();
+app.post("/fashion/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
 
-  const query = "SELECT * FROM users WHERE email = ?";
-  connection.query(query, [normalizedEmail], (err, results) => {
-    if (err) {
-      console.error("DB error:", err);
-      return res.status(500).json({ message: "Database error" });
+    if (!email || !password) {
+      return res.status(400).json({ message: "Missing required fields" });
     }
 
-    if (results.length === 0) {
-      console.log("❌ No user found for email:", normalizedEmail);
-      return res.status(400).json({ auth: false, message: "User not found" });
-    }
-
-    const user = results[0];
-
-    bcrypt.compare(password, user.password, (err2, matched) => {
-      if (err2) {
-        console.error("Password compare error:", err2);
-        return res
-          .status(500)
-          .json({ message: "Password comparison error", error: err2 });
-      }
-
-      if (!matched) {
-        console.log("❌ Wrong password for email:", normalizedEmail);
-        return res
-          .status(401)
-          .json({ auth: false, message: "Incorrect password" });
-      }
-
-      // ✅ Generate JWT token
-      const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: "24h" });
-
-      // ✅ Save session
-      connection.query(
-        "INSERT INTO session (user_id, jwt) VALUES (?, ?)",
-        [user.id, token],
-        (err3) => {
-          if (err3) {
-            console.error("Session insert error:", err3);
-            return res.status(500).json({ message: "Session error" });
-          }
-          console.log("✅ Login successful:", normalizedEmail);
-          res.status(200).json({
-            auth: true,
-            token,
-            user: { id: user.id, email: user.email },
-          });
+    // 1️⃣ Find user by email
+    connection2.query(
+      "SELECT * FROM users WHERE email = ?",
+      [email],
+      async (err, results) => {
+        if (err) {
+          return res.status(500).json({ message: "DB error", error: err });
         }
-      );
-    });
-  });
-});
 
+        if (results.length === 0) {
+          return res.status(401).json({ auth: false, message: "Invalid email or password" });
+        }
+
+        const user = results[0];
+
+        // 2️⃣ Compare password
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
+          return res.status(401).json({ auth: false, message: "Invalid email or password" });
+        }
+
+        // 3️⃣ Generate JWT token
+        const token = jwt.sign({ id: user.id }, "jwtsecret", { expiresIn: "24h" });
+
+        // 4️⃣ Insert into session table
+        connection2.query(
+          "INSERT INTO session (user_id, jwt) VALUES (?, ?)",
+          [user.id, token],
+          (err2) => {
+            if (err2) {
+              return res.status(500).json({ message: "Session error", error: err2 });
+            }
+
+            console.log("User Logged In Successfully!");
+            res.status(200).json({
+              auth: true,
+              token,
+              user: { id: user.id, email: user.email },
+            });
+          }
+        );
+      }
+    );
+ } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error", error: err });
+  }
+});
 app.post('/fashion/verifyToken', (req, res) => {
   const { token } = req.body;
   if (!token) return res.json({ valid: false });
