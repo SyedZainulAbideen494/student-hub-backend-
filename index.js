@@ -14015,87 +14015,131 @@ const getUserIdFromTokenForma = (token) => {
   });
 };
 
-app.post('/fashion/signup', (req, res) => {
+
+const JWT_SECRET = "jwtsecret"; // 🔑 replace with process.env.JWT_SECRET in prod
+
+app.post("/fashion/signup", async (req, res) => {
+  try {
+    const {
+      email,
+      password,
+      gender,
+      skinTone,
+      eyeColor,
+      hairColor,
+      height,
+      weight,
+      bodyType,
+    } = req.body;
+
+    if (!email || !password || !gender) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(password, 10); // saltRounds = 10
+
+    // 1️⃣ Insert into users table
+    connection2.query(
+      "INSERT INTO users (email, password) VALUES (?, ?)",
+      [email, hashedPassword],
+      (err, result) => {
+        if (err) {
+          if (err.code === "ER_DUP_ENTRY") {
+            return res.status(400).json({ message: "Email already exists" });
+          }
+          return res.status(500).json({ message: "DB error", error: err });
+        }
+
+        const userId = result.insertId;
+
+        // 2️⃣ Insert into user_details table
+        connection2.query(
+          `INSERT INTO user_details 
+           (user_id, gender, skin_tone, eye_color, hair_color, height, weight, body_type)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [userId, gender, skinTone, eyeColor, hairColor, height, weight, bodyType],
+          (err2) => {
+            if (err2) {
+              return res.status(500).json({ message: "DB error", error: err2 });
+            }
+
+            // 3️⃣ Generate JWT token
+            const token = jwt.sign({ id: userId }, "jwtsecret", { expiresIn: "24h" });
+
+            // 4️⃣ Insert into session table
+            connection2.query(
+              "INSERT INTO session (user_id, jwt) VALUES (?, ?)",
+              [userId, token],
+              (err3) => {
+                if (err3) {
+                  return res.status(500).json({ message: "Session error", error: err3 });
+                }
+                console.log("User Registered Successfully!")
+                // 5️⃣ Send response
+                res.status(200).json({
+                  auth: true,
+                  token,
+                  user: { id: userId, email },
+                });
+              }
+            );
+          }
+        );
+      }
+    );
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error", error: err });
+  }
+});
+
+app.get("/fashion/userAuth", verifyjwt, (req, res) => {});
+// backend/routes/auth.js
+// POST /fashion/login
+app.post("/fashion/login", (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required' });
+    return res.status(400).json({ auth: false, message: "Email and password required" });
   }
 
-  const checkQuery = 'SELECT * FROM users WHERE email = ?';
-  connection2.query(checkQuery, [email], (checkErr, checkResults) => {
-    if (checkErr) {
-      console.error('🔴 Error checking existing user:', checkErr);
-      return res.status(500).json({ error: 'Internal server error' });
+  const query = "SELECT * FROM users WHERE email = ?";
+  connection2.query(query, [email], (err, results) => {
+    if (err) return res.status(500).json({ message: "Database error", error: err });
+
+    if (results.length === 0) {
+      return res.status(404).json({ auth: false, message: "User not found" });
     }
 
-    if (checkResults.length > 0) {
-      return res.status(400).json({ error: 'Email already in use' });
-    }
+    const user = results[0];
 
-    bcrypt.hash(password, saltRounds, (hashErr, hash) => {
-      if (hashErr) {
-        console.error('🔴 Error hashing password:', hashErr);
-        return res.status(500).json({ error: 'Internal server error' });
+    // Compare hashed password
+    bcrypt.compare(password, user.password, (err, matched) => {
+      if (err) return res.status(500).json({ message: "Password comparison error", error: err });
+
+      if (!matched) {
+        return res.status(401).json({ auth: false, message: "Incorrect password" });
       }
 
-      const insertQuery = 'INSERT INTO users (email, password) VALUES (?, ?)';
-      connection2.query(insertQuery, [email, hash], (insertErr, insertResults) => {
-        if (insertErr) {
-          console.error('🔴 Error inserting user:', insertErr);
-          return res.status(500).json({ error: 'Internal server error' });
-        }
+      // Generate JWT token
+      const token = jwt.sign({ id: user.id }, "jwtsecret", { expiresIn: "24h" });
 
-        const userId = insertResults.insertId;
-        const token = jwt.sign({ id: userId }, 'jwtsecret', { expiresIn: '24h' });
-
-        const sessionQuery = 'INSERT INTO session (user_id, jwt) VALUES (?, ?)';
-        connection2.query(sessionQuery, [userId, token], (sessionErr) => {
-          if (sessionErr) {
-            console.error('🔴 Error creating session:', sessionErr);
-            return res.status(500).json({ error: 'Error creating session' });
-          }
-
-          console.log('✅ User registered successfully!');
-          return res.status(200).json({
-            auth: true,
-            token: token,
-            user: { id: userId, email },
-            message: 'User registered successfully!'
-          });
+      // Insert into session table
+      connection2.query("INSERT INTO session (user_id, jwt) VALUES (?, ?)", [user.id, token], (err2) => {
+        if (err2) return res.status(500).json({ message: "Session error", error: err2 });
+        console.log("Login Successfully")
+        // Send response
+        res.status(200).json({
+          auth: true,
+          token,
+          user: { id: user.id, email: user.email }
         });
       });
     });
   });
 });
 
-
-
-app.get("/fashion/userAuth", verifyjwt, (req, res) => {});
-// backend/routes/auth.js
-
-app.post("/fashion/login", (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) return res.status(400).json({ message: "Email and password required" });
-
-  const query = "SELECT * FROM users WHERE email = ?";
-  connection2.query(query, [email], (err, results) => {
-    if (err) return res.status(500).json({ message: "Database error", error: err });
-    if (!results.length) return res.status(404).json({ auth: false, message: "User not found" });
-
-    const user = results[0];
-    bcrypt.compare(password, user.password, (err, matched) => {
-      if (err) return res.status(500).json({ message: "Error checking password", error: err });
-      if (!matched) return res.status(401).json({ auth: false, message: "Incorrect password" });
-
-      const token = jwt.sign({ id: user.id }, "jwtsecret", { expiresIn: "24h" });
-      connection2.query("INSERT INTO session (user_id, jwt) VALUES (?, ?)", [user.id, token], (err) => {
-        if (err) return res.status(500).json({ message: "Session error", error: err });
-        res.status(200).json({ auth: true, token, user: { id: user.id, email: user.email } });
-      });
-    });
-  });
-});
 
 app.post('/fashion/verifyToken', (req, res) => {
   const { token } = req.body;
