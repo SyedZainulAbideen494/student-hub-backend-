@@ -14113,7 +14113,7 @@ app.post("/fashion/login", (req, res) => {
 
     if (results.length === 0) {
       console.log("❌ No user found for email:", email);
-      return res.status(404).json({ auth: false, message: "User not found" });
+      return res.status(400).json({ auth: false, message: "User not found" });
     }
 
     const user = results[0];
