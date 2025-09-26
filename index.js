@@ -14095,7 +14095,8 @@ app.post("/fashion/signup", async (req, res) => {
 });
 
 app.get("/fashion/userAuth", verifyjwt, (req, res) => {});
-// backend/routes/auth.js
+
+
 // POST /fashion/login
 app.post("/fashion/login", (req, res) => {
   const { email, password } = req.body;
