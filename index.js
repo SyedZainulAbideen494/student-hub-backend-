@@ -14167,138 +14167,6 @@ app.post('/fashion/verifyToken', (req, res) => {
 });
 
 
-// Utility: Calculate Zodiac sign from date of birth (YYYY-MM-DD string)
-function zodiacFromDate(dob) {
-  if (!dob) return null;
-  const date = new Date(dob);
-  const day = date.getUTCDate();
-  const month = date.getUTCMonth() + 1;
-
-  if ((month === 3 && day >= 21) || (month === 4 && day <= 19)) return "Aries";
-  if ((month === 4 && day >= 20) || (month === 5 && day <= 20)) return "Taurus";
-  if ((month === 5 && day >= 21) || (month === 6 && day <= 20)) return "Gemini";
-  if ((month === 6 && day >= 21) || (month === 7 && day <= 22)) return "Cancer";
-  if ((month === 7 && day >= 23) || (month === 8 && day <= 22)) return "Leo";
-  if ((month === 8 && day >= 23) || (month === 9 && day <= 22)) return "Virgo";
-  if ((month === 9 && day >= 23) || (month === 10 && day <= 22)) return "Libra";
-  if ((month === 10 && day >= 23) || (month === 11 && day <= 21)) return "Scorpio";
-  if ((month === 11 && day >= 22) || (month === 12 && day <= 21)) return "Sagittarius";
-  if ((month === 12 && day >= 22) || (month === 1 && day <= 19)) return "Capricorn";
-  if ((month === 1 && day >= 20) || (month === 2 && day <= 18)) return "Aquarius";
-  if ((month === 2 && day >= 19) || (month === 3 && day <= 20)) return "Pisces";
-  return null;
-}
-
-app.post('/fashion/save-details', async (req, res) => {
-  try {
-    const {
-      token,
-      name,
-      dob,
-      gender,
-      bodyType,
-      stylePref,
-      zodiac,
-      colorPreferences,
-      eyeColor,
-      hairColor,
-      faceType,
-      enhanceHide,
-      newStyle,
-      fitIn,
-    } = req.body;
-
-    if (!token) {
-      return res.status(401).json({ error: 'Token is required.' });
-    }
-
-    const user_id = await getUserIdFromTokenForma(token);
-    if (!user_id) {
-      return res.status(401).json({ error: 'Invalid token.' });
-    }
-
-    if (!name || !dob) {
-      return res.status(400).json({ error: 'Name and Date of Birth are required.' });
-    }
-
-    const colorPrefStr = JSON.stringify(colorPreferences || []);
-    const enhanceHideStr = JSON.stringify(enhanceHide || []);
-    const calculatedZodiac = zodiac || zodiacFromDate(dob);
-
-    // Check if user details already exist
-    const checkSql = 'SELECT COUNT(*) as count FROM user_details WHERE user_id = ?';
-    const checkResult = await query2(checkSql, [user_id]);
-
-    if (checkResult[0].count > 0) {
-      // Update existing record
-      const updateSql = `
-        UPDATE user_details SET
-          name = ?,
-          dob = ?,
-          gender = ?,
-          body_type = ?,
-          style = ?,
-          zodiac = ?,
-          color_preferences = ?,
-          eye_color = ?,
-          hair_color = ?,
-          face_type = ?,
-          enhance_hide = ?,
-          new_style = ?,
-          fit_in = ?
-        WHERE user_id = ?
-      `;
-      const updateValues = [
-        name,
-        dob,
-        gender,
-        bodyType,
-        stylePref,
-        calculatedZodiac,
-        colorPrefStr,
-        eyeColor,
-        hairColor,
-        faceType,
-        enhanceHideStr,
-        newStyle,
-        fitIn,
-        user_id,
-      ];
-      await query2(updateSql, updateValues);
-      return res.json({ success: true, message: 'User details updated.' });
-    } else {
-      // Insert new record
-      const insertSql = `
-        INSERT INTO user_details
-        (user_id, name, dob, gender, body_type, style, zodiac, color_preferences, eye_color, hair_color, face_type, enhance_hide, new_style, fit_in)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `;
-      const insertValues = [
-        user_id,
-        name,
-        dob,
-        gender,
-        bodyType,
-        stylePref,
-        calculatedZodiac,
-        colorPrefStr,
-        eyeColor,
-        hairColor,
-        faceType,
-        enhanceHideStr,
-        newStyle,
-        fitIn,
-      ];
-      const result = await query2(insertSql, insertValues);
-      return res.json({ success: true, insertedId: result.insertId });
-    }
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-
 app.post('/fashion/upload/cloths', upload.single('image'), async (req, res) => {
   try {
     const { hashtag, token } = req.body;
@@ -14320,7 +14188,7 @@ app.post('/fashion/upload/cloths', upload.single('image'), async (req, res) => {
     console.log("📦 Hashtag:", hashtag);
     console.log("👤 User ID:", user_id);
 
-    // Check if hashtag exists
+    // Step 1: Check if hashtag exists for this user
     connection2.query(
       'SELECT id FROM hashtags WHERE name = ? AND user_id = ?',
       [hashtag, user_id],
@@ -14332,43 +14200,59 @@ app.post('/fashion/upload/cloths', upload.single('image'), async (req, res) => {
 
         const hashtagId = results.length > 0 ? results[0].id : null;
 
-        const insertHashtagAndClothing = (hashtagIdToUse) => {
+        const insertClothes = (hashtagIdToUse) => {
+          // Step 3: Remove any previous clothes with same hashtag for the user (auto replace)
           connection2.query(
-            'INSERT INTO clothes (user_id, image_name, hashtag_id) VALUES (?, ?, ?)',
-            [user_id, fileName, hashtagIdToUse],
-            (err) => {
-              if (err) {
-                console.log("❌ Error inserting clothes:", err);
-                return res.status(500).json({ error: 'Database error during clothes insert.' });
+            'DELETE FROM clothes WHERE user_id = ? AND hashtag_id = ?',
+            [user_id, hashtagIdToUse],
+            (delErr) => {
+              if (delErr) {
+                console.log("❌ Error deleting previous clothes:", delErr);
+                return res.status(500).json({ error: 'Database error during previous clothes delete.' });
               }
-              console.log("✅ Upload successful!");
-              res.json({ message: 'Uploaded!' });
+
+              // Step 4: Insert new clothes record
+              connection2.query(
+                'INSERT INTO clothes (user_id, image_name, hashtag_id) VALUES (?, ?, ?)',
+                [user_id, fileName, hashtagIdToUse],
+                (insErr) => {
+                  if (insErr) {
+                    console.log("❌ Error inserting clothes:", insErr);
+                    return res.status(500).json({ error: 'Database error during clothes insert.' });
+                  }
+                  console.log("✅ Upload successful!");
+                  res.json({ message: 'Uploaded!' });
+                }
+              );
             }
           );
         };
 
         if (hashtagId) {
-          insertHashtagAndClothing(hashtagId);
+          insertClothes(hashtagId);
         } else {
+          // Step 2: Create new hashtag if not exists
           connection2.query(
             'INSERT INTO hashtags (name, user_id) VALUES (?, ?)',
             [hashtag, user_id],
-            (err, result) => {
-              if (err) {
-                console.log("❌ Error inserting hashtag:", err);
+            (insertErr, result) => {
+              if (insertErr) {
+                console.log("❌ Error inserting hashtag:", insertErr);
                 return res.status(500).json({ error: 'Database error during hashtag insert.' });
               }
-              insertHashtagAndClothing(result.insertId);
+              insertClothes(result.insertId);
             }
           );
         }
       }
     );
+
   } catch (error) {
     console.error("🔥 Unexpected server error:", error);
     return res.status(500).json({ error: 'Unexpected error occurred.' });
   }
 });
+
 
 app.post('/fashion/hashtags/previous', async (req, res) => {
   try {
