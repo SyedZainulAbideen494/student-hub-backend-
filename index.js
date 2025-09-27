@@ -47,7 +47,7 @@ let GoogleGenAI, createUserContent, createPartFromUri;
 })();
 
 // Initialize Google Generative AI
-const genAI = new GoogleGenerativeAI('AIzaSyAhvINxPJMSHqKFA-oyBxEsuYxwBZtgPhA');
+const genAI = new GoogleGenerativeAI('AIzaSyBSkZ9CndMAe5Dla911tpRNTRFdHNBa5ts');
 
 const safetySettings = [
   {
@@ -69,7 +69,7 @@ const safetySettings = [
 ];
 
 const model = genAI.getGenerativeModel({
-  model: "gemini-2.0-flash",
+  model: "gemini-2.5-flash-lite",
   safetySettings: safetySettings,
   systemInstruction: "You are Edusify, an AI-powered productivity assistant designed to help students manage their academic tasks, study materials, and stay organized. Your mission is to provide tailored assistance and streamline the study experience with a wide range of features.\n\n" +
   
@@ -14343,13 +14343,60 @@ const uploadAIFashion = multer({
   storage: multer.memoryStorage(),
 });
 
+app.post('/fashion/clothes', async (req, res) => {
+  try {
+    const { token } = req.body;
+
+    if (!token) {
+      return res.status(401).json({ error: 'Token required' });
+    }
+
+    const user_id = await getUserIdFromTokenForma(token);
+    if (!user_id) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+
+    // Join clothes and hashtags to get hashtag name
+    const query = `
+      SELECT c.id AS cloth_id, c.image_name AS image, h.name AS hashtag
+      FROM clothes c
+      JOIN hashtags h ON c.hashtag_id = h.id
+      WHERE c.user_id = ?
+      ORDER BY h.name ASC, c.id DESC
+    `;
+
+    connection2.query(query, [user_id], (err, results) => {
+      if (err) {
+        console.error('❌ Error fetching clothes:', err);
+        return res.status(500).json({ error: 'Database error fetching clothes.' });
+      }
+
+      // Group by hashtag
+      const grouped = {};
+      results.forEach(row => {
+        if (!grouped[row.hashtag]) grouped[row.hashtag] = [];
+        grouped[row.hashtag].push({
+          cloth_id: row.cloth_id,
+          image: `${row.image}`  // Adjust if your folder structure differs
+        });
+      });
+
+      res.json(grouped);
+    });
+
+  } catch (error) {
+    console.error('🔥 Unexpected error:', error);
+    res.status(500).json({ error: 'Unexpected server error.' });
+  }
+});
+
 
 app.post('/fashion/generate-outfit', uploadAIFashion.array('images'), async (req, res) => {
   try {
 const { token, clothes, activity, comfort, preferences, psychology } = req.body;
     if (!token) return res.status(401).json({ error: 'Token required' });
 
-    const userId = await getUserIdFromTokenForma(token);
+    const userId = 1
     if (!userId) return res.status(403).json({ error: 'Invalid token' });
 
     if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'No images uploaded' });
