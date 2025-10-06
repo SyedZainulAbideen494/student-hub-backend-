@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pricing Plans</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Poppins:wght@300;400;500&display=swap');
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #0B0F17;
+        }
+        .premium-title {
+            font-family: 'Cormorant Garamond', serif;
+        }
+        .premium-gradient {
+            background-image: linear-gradient(45deg, #e5e7eb, #9ca3af);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            filter: drop-shadow(0 0 10px rgba(229, 231, 235, 0.1));
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen">
+
+    <div class="container mx-auto p-4 md:p-8">
+        <h1 class="text-4xl md:text-6xl text-center mb-4 premium-title premium-gradient">PREMIUM</h1>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8 max-w-6xl mx-auto items-center">
+
+            <!-- Chic Plan -->
+            <div class="card bg-slate-800/50 rounded-3xl p-6 md:p-8 text-center text-slate-300 h-full flex flex-col border border-slate-700">
+                <h2 class="text-2xl font-semibold tracking-widest text-slate-200">CHIC</h2>
+                <p class="text-lg mt-2">BASIC PLAN</p>
+                <p class="text-5xl md:text-6xl font-bold my-6 text-slate-200">₹0</p>
+                <div class="space-y-6 flex-grow">
+                    <div class="flex flex-col items-center">
+                        <i class="fas fa-tshirt text-3xl mb-2 text-cyan-500"></i>
+                        <span class="font-semibold text-slate-200">20 OUTFIT</span>
+                        <span>GENERATION/MONTH</span>
+                    </div>
+                    <div class="flex flex-col items-center">
+                        <i class="fas fa-comments text-3xl mb-2 text-cyan-500"></i>
+                        <span class="font-semibold text-slate-200">20 CHATS/MONTH</span>
+                    </div>
+                </div>
+                <button class="mt-8 bg-cyan-500 text-white w-full py-3 rounded-xl font-semibold hover:bg-cyan-600 transition-colors">Buy Now</button>
+            </div>
+
+            <!-- Bespoke Plan (Most Selling) -->
+            <div class="card bg-slate-900 rounded-3xl p-6 md:p-8 text-center relative shadow-2xl h-full flex flex-col md:scale-105 border-2 border-pink-500">
+                 <div class="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-pink-500 text-white px-4 py-1 rounded-full text-sm font-semibold">
+                    MOST SELLING
+                </div>
+                <h2 class="text-2xl font-semibold tracking-widest text-slate-200">BESPOKE</h2>
+                <p class="text-5xl md:text-6xl font-bold my-6 md:my-8 text-slate-200">₹29</p>
+                <div class="space-y-6 flex-grow text-slate-300">
+                    <div class="flex flex-col items-center">
+                        <i class="fas fa-robot text-3xl mb-2 text-pink-500"></i>
+                        <span class="font-semibold text-slate-200">200 OUTFIT</span>
+                        <span>GENERATION/MONTH</span>
+                    </div>
+                    <div class="flex flex-col items-center">
+                        <i class="fas fa-ad text-3xl mb-2 text-pink-500"></i>
+                        <span>ADS FREE EXPERIENCE</span>
+                    </div>
+                    <div class="flex flex-col items-center">
+                        <i class="fas fa-bullhorn text-3xl mb-2 text-pink-500"></i>
+                        <span class="font-semibold text-slate-200">300 CHATS/MONTH</span>
+                    </div>
+                     <div class="flex flex-col items-center">
+                        <i class="fas fa-crown text-3xl mb-2 text-pink-500"></i>
+                        <span>PREMIUM FEATURES</span>
+                    </div>
+                </div>
+                <button class="mt-8 bg-pink-500 text-white w-full py-3 rounded-xl font-semibold hover:bg-pink-600 transition-colors">Buy Now</button>
+            </div>
+
+            <!-- Couture Plan -->
+            <div class="card bg-slate-800/50 rounded-3xl p-6 md:p-8 text-center text-slate-300 h-full flex flex-col border border-slate-700">
+                <h2 class="text-2xl font-semibold tracking-widest text-slate-200">COUTURE</h2>
+                <p class="text-lg mt-2">MOST PREMIUM EXPERIENCE</p>
+                <p class="text-5xl md:text-6xl font-bold my-6 text-slate-200">₹79</p>
+                <div class="space-y-6 flex-grow">
+                    <div class="flex flex-col items-center">
+                        <i class="fas fa-infinity text-3xl mb-2 text-cyan-500"></i>
+                        <span class="font-semibold text-slate-200">UNLIMITED OUTFIT</span>
+                        <span>GENERATION</span>
+                    </div>
+                    <div class="flex flex-col items-center">
+                       <i class="fas fa-award text-3xl mb-2 text-cyan-500"></i>
+                        <span>ADS FREE EXPERIENCE AND PREMIUN FEATURES</span>
+                    </div>
+                    <div class="flex flex-col items-center">
+                        <i class="fas fa-comments text-3xl mb-2 text-cyan-500"></i>
+                        <span class="font-semibold text-slate-200">UNLIMITED CHATS</span>
+                    </div>
+                </div>
+                <button class="mt-8 bg-cyan-500 text-white w-full py-3 rounded-xl font-semibold hover:bg-cyan-600 transition-colors">Buy Now</button>
+            </div>
+
+        </div>
+    </div>
+
+</body>
+</html>

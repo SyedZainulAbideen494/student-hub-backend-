@@ -69,7 +69,7 @@ const safetySettings = [
 ];
 
 const model = genAI.getGenerativeModel({
-  model: "gemini-2.5-flash-lite",
+  model: "gemini-2.0-flash",
   safetySettings: safetySettings,
   systemInstruction: "You are Edusify, an AI-powered productivity assistant designed to help students manage their academic tasks, study materials, and stay organized. Your mission is to provide tailored assistance and streamline the study experience with a wide range of features.\n\n" +
   
@@ -14171,15 +14171,8 @@ app.post('/fashion/upload/cloths', upload.single('image'), async (req, res) => {
   try {
     const { hashtag, token } = req.body;
 
-    if (!req.file) {
-      console.log("❌ No image file received");
-      return res.status(400).json({ error: 'Image file not received.' });
-    }
-
-    if (!token) {
-      console.log("❌ Token not received");
-      return res.status(401).json({ error: 'Token required.' });
-    }
+    if (!req.file) return res.status(400).json({ error: 'Image file not received.' });
+    if (!token) return res.status(401).json({ error: 'Token required.' });
 
     const user_id = await getUserIdFromTokenForma(token);
     const fileName = req.file.filename;
@@ -14188,59 +14181,38 @@ app.post('/fashion/upload/cloths', upload.single('image'), async (req, res) => {
     console.log("📦 Hashtag:", hashtag);
     console.log("👤 User ID:", user_id);
 
-    // Step 1: Check if hashtag exists for this user
+    // Check if hashtag exists
     connection2.query(
       'SELECT id FROM hashtags WHERE name = ? AND user_id = ?',
       [hashtag, user_id],
       (err, results) => {
-        if (err) {
-          console.log("❌ Error selecting hashtag:", err);
-          return res.status(500).json({ error: 'Database error during hashtag check.' });
-        }
+        if (err) return res.status(500).json({ error: 'Database error during hashtag check.' });
 
         const hashtagId = results.length > 0 ? results[0].id : null;
 
-        const insertClothes = (hashtagIdToUse) => {
-          // Step 3: Remove any previous clothes with same hashtag for the user (auto replace)
+        const insertCloth = (hashtagIdToUse) => {
           connection2.query(
-            'DELETE FROM clothes WHERE user_id = ? AND hashtag_id = ?',
-            [user_id, hashtagIdToUse],
-            (delErr) => {
-              if (delErr) {
-                console.log("❌ Error deleting previous clothes:", delErr);
-                return res.status(500).json({ error: 'Database error during previous clothes delete.' });
-              }
-
-              // Step 4: Insert new clothes record
-              connection2.query(
-                'INSERT INTO clothes (user_id, image_name, hashtag_id) VALUES (?, ?, ?)',
-                [user_id, fileName, hashtagIdToUse],
-                (insErr) => {
-                  if (insErr) {
-                    console.log("❌ Error inserting clothes:", insErr);
-                    return res.status(500).json({ error: 'Database error during clothes insert.' });
-                  }
-                  console.log("✅ Upload successful!");
-                  res.json({ message: 'Uploaded!' });
-                }
-              );
+            'INSERT INTO clothes (user_id, image_name, hashtag_id) VALUES (?, ?, ?)',
+            [user_id, fileName, hashtagIdToUse],
+            (insErr) => {
+              if (insErr) return res.status(500).json({ error: 'Database error during clothes insert.' });
+              console.log("✅ Upload successful!");
+              res.json({ message: 'Uploaded!' });
             }
           );
         };
 
         if (hashtagId) {
-          insertClothes(hashtagId);
+          // Hashtag exists → just insert cloth
+          insertCloth(hashtagId);
         } else {
-          // Step 2: Create new hashtag if not exists
+          // Hashtag doesn't exist → create hashtag first
           connection2.query(
             'INSERT INTO hashtags (name, user_id) VALUES (?, ?)',
             [hashtag, user_id],
             (insertErr, result) => {
-              if (insertErr) {
-                console.log("❌ Error inserting hashtag:", insertErr);
-                return res.status(500).json({ error: 'Database error during hashtag insert.' });
-              }
-              insertClothes(result.insertId);
+              if (insertErr) return res.status(500).json({ error: 'Database error during hashtag insert.' });
+              insertCloth(result.insertId);
             }
           );
         }
@@ -14252,6 +14224,7 @@ app.post('/fashion/upload/cloths', upload.single('image'), async (req, res) => {
     return res.status(500).json({ error: 'Unexpected error occurred.' });
   }
 });
+
 
 
 app.post('/fashion/hashtags/previous', async (req, res) => {
@@ -14338,25 +14311,17 @@ app.post('/fashion/user-clothes', async (req, res) => {
   }
 });
 
-const uploadAIFashion = multer({
-  limits: { fileSize: 100 * 1024 * 1024 },
-  storage: multer.memoryStorage(),
-});
+
 
 app.post('/fashion/clothes', async (req, res) => {
   try {
     const { token } = req.body;
 
-    if (!token) {
-      return res.status(401).json({ error: 'Token required' });
-    }
+    if (!token) return res.status(401).json({ error: 'Token required.' });
 
     const user_id = await getUserIdFromTokenForma(token);
-    if (!user_id) {
-      return res.status(401).json({ error: 'Invalid token' });
-    }
+    if (!user_id) return res.status(401).json({ error: 'Invalid token.' });
 
-    // Join clothes and hashtags to get hashtag name
     const query = `
       SELECT c.id AS cloth_id, c.image_name AS image, h.name AS hashtag
       FROM clothes c
@@ -14371,13 +14336,13 @@ app.post('/fashion/clothes', async (req, res) => {
         return res.status(500).json({ error: 'Database error fetching clothes.' });
       }
 
-      // Group by hashtag
+      // Group clothes by hashtag
       const grouped = {};
       results.forEach(row => {
         if (!grouped[row.hashtag]) grouped[row.hashtag] = [];
         grouped[row.hashtag].push({
           cloth_id: row.cloth_id,
-          image: `${row.image}`  // Adjust if your folder structure differs
+          image: `${row.image}` // full path for frontend
         });
       });
 
@@ -14389,42 +14354,74 @@ app.post('/fashion/clothes', async (req, res) => {
     res.status(500).json({ error: 'Unexpected server error.' });
   }
 });
+const uploadAIFashion = multer({
+  limits: { fileSize: 100 * 1024 * 1024 },
+  storage: multer.memoryStorage(),
+});
 
-
-app.post('/fashion/generate-outfit', uploadAIFashion.array('images'), async (req, res) => {
+app.post('/fashion/generate-outfit', uploadAIFashion.any(), async (req, res) => {
   try {
-const { token, clothes, activity, comfort, preferences, psychology } = req.body;
+    const { token, clothes, activity, comfort, psychology } = req.body;
     if (!token) return res.status(401).json({ error: 'Token required' });
 
-    const userId = 1
+    const userId = await getUserIdFromTokenForma(token);
     if (!userId) return res.status(403).json({ error: 'Invalid token' });
 
-    if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'No images uploaded' });
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'No images uploaded' });
+    }
 
-    const images = req.files;
-    const parsedClothes = JSON.parse(clothes); // [{ cloth_id, hashtag }]
+    const parsedClothes = JSON.parse(clothes); // [{ cloth_id, hashtag, type, image_name }]
+    if (!parsedClothes.length) throw new Error('No clothes provided');
+// 📌 Fetch user style attributes
+const [userDetails] = await query2(
+  `SELECT gender, skin_tone, eye_color, hair_color, height, weight, body_type 
+   FROM user_details WHERE user_id = ?`,
+  [userId]
+);
 
-    const imageParts = await Promise.all(
-      images.map((img) => ({
+const styleProfile = userDetails?.[0] || {};
+
+    // Map cloth_id -> uploaded file
+    const clothImageMap = {};
+    parsedClothes.forEach(c => {
+      const file = req.files.find(f => f.originalname === c.image_name);
+      if (!file) throw new Error(`Uploaded image for cloth_id ${c.cloth_id} not found`);
+      clothImageMap[c.cloth_id] = file;
+    });
+
+    // 🧠 Build parts array with cloth ID text BEFORE each image
+    const parts = [];
+    parsedClothes.forEach(c => {
+      parts.push({
+        text: `Cloth ID: ${c.cloth_id} → ${c.type || 'unknown'} (${c.hashtag})`
+      });
+      parts.push({
         inlineData: {
-          data: img.buffer.toString('base64'),
-          mimeType: img.mimetype,
-        },
-      }))
-    );
+          data: clothImageMap[c.cloth_id].buffer.toString('base64'),
+          mimeType: clothImageMap[c.cloth_id].mimetype,
+        }
+      });
+    });
 
-    const clothPromptData = parsedClothes
-      .map((c, i) =>
-        `Cloth ID: ${c.cloth_id}, Hashtag: ${c.hashtag}, Image Name: "${images[i].originalname}" → Image (${i + 1})`
-      )
-      .join('\n');
-
-const finalPrompt = `
-You are a professional luxury fashion stylist AI for an app called Forma.
-
-Create exactly 3 outfits from the user's uploaded clothing items.
+    // 📌 Main instruction comes LAST
+parts.push({
+  text: `
+You are a professional luxury fashion stylist AI for an app called Forma. 
+The user has uploaded several clothing images. Each image is preceded by a text line indicating its "Cloth ID". 
+Use these cloth IDs internally to assemble the outfits, but **do not mention the cloth IDs in the descriptions**. 
+Instead, describe the outfits naturally and stylishly as a fashion stylist would.
 
 ---
+👤 User Personal Attributes:
+- Gender: ${styleProfile.gender || 'unspecified'}
+- Skin Tone: ${styleProfile.skin_tone || 'unspecified'}
+- Eye Color: ${styleProfile.eye_color || 'unspecified'}
+- Hair Color: ${styleProfile.hair_color || 'unspecified'}
+- Height: ${styleProfile.height || 'unspecified'}
+- Weight: ${styleProfile.weight || 'unspecified'}
+- Body Type: ${styleProfile.body_type || 'unspecified'}
+
 🧍 User's Style Profile:
 - Activity / Occasion: ${activity}
 - Comfort:
@@ -14436,48 +14433,92 @@ Create exactly 3 outfits from the user's uploaded clothing items.
    - Nostalgia (1–10): ${psychology.nostalgia}
 
 👕 Uploaded Clothes:
-${clothPromptData}
+${parsedClothes
+  .map(
+    c =>
+      `Cloth ID: ${c.cloth_id}, Type: ${c.type || 'unknown'}, Hashtag: ${c.hashtag}, Image Name: "${c.image_name}"`
+  )
+  .join('\n')}
 
 ---
-🛑 RULES:
-1. Each outfit must include 1 top + 1 bottom.
-2. Optional: 1 layer + 1–2 accessories.
-3. Use only provided cloth_ids.
-4. Return JSON only.
+🛑 RULES FOR OUTFITS:
+1. Each outfit MUST include:
+   - 1 top (shirt, t-shirt, blouse, etc.)
+   - 1 bottom (pants, skirt, shorts)
+2. Optional:
+   - 1 outer layer (jacket, sweater, blazer)
+   - 1–2 accessories (hat, scarf, bag, jewelry)
+3. Never repeat the exact same combination of items.
+4. Use ONLY the provided cloth_ids.
+5. Ensure each outfit is stylish, coherent, and realistic.
+6. Adapt outfits to the user's **gender, skin tone, hair color, eye color, body type, and proportions**. 
+   For example, consider color harmony with skin tone, flattering silhouettes for body type, and style that matches gender expression.
+7. For each outfit, give a **short, premium stylist explanation** of why this combination works for this user. 
+   ✨ Use language you'd hear from a top fashion stylist — focus on texture, layering, tone, silhouette, and vibe.
+8. Do **not mention cloth IDs** in the descriptions. Describe pieces naturally (e.g., "a cropped cream blouse paired with tailored black trousers") without inventing wrong details.
+9. Return exactly 3 outfits.
+10. Return JSON ONLY.
 
-🎯 JSON Format:
+🎯 JSON FORMAT:
 {
   "outfits": [
-    { "title": "Look 1", "cloth_ids": [1, 3, 5] },
-    { "title": "Look 2", "cloth_ids": [2, 4] },
-    { "title": "Look 3", "cloth_ids": [6, 7] }
+    { 
+      "title": "Look 1", 
+      "cloth_ids": [1, 3, 5], 
+      "description": "Why this outfit fits the user in a premium stylist tone..." 
+    },
+    { 
+      "title": "Look 2", 
+      "cloth_ids": [2, 4], 
+      "description": "..." 
+    },
+    { 
+      "title": "Look 3", 
+      "cloth_ids": [1, 4], 
+      "description": "..." 
+    }
   ]
 }
-`;
+`
+});
 
+    const contents = [{ role: 'user', parts }];
 
-    const result = await model.generateContent([...imageParts, finalPrompt]);
-    const aiReply = result?.response?.candidates?.[0]?.content?.parts?.[0]?.text;
+    // ✅ Proper Gemini API call
+    const result = await model.generateContent({ contents });
+    const aiReply =
+      result?.response?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+
     if (!aiReply) throw new Error('No response from Gemini');
 
+    // 🧠 Parse JSON safely
     let outfitsJSON;
     try {
       const jsonMatch = aiReply.match(/\{[\s\S]*\}/);
       if (!jsonMatch) throw new Error('No valid JSON found in Gemini response');
       outfitsJSON = JSON.parse(jsonMatch[0]);
     } catch (e) {
-      console.error('Gemini raw:', aiReply);
+      console.error('Gemini raw response:', aiReply);
       throw new Error('Failed to parse Gemini response');
     }
-console.log(JSON.stringify(outfitsJSON, null, 2));
-// INSERT GENERATED OUTFITS INTO DB
-for (const outfit of outfitsJSON.outfits) {
-  const clothIdsJson = JSON.stringify(outfit.cloth_ids);
-  await query2(
-    'INSERT INTO generated_outfits (user_id, title, cloth_ids) VALUES (?, ?, ?)',
-    [userId, outfit.title, clothIdsJson]
-  );
-}
+
+    // ✅ Validate cloth_ids
+    for (const outfit of outfitsJSON.outfits) {
+      for (const id of outfit.cloth_ids) {
+        if (!parsedClothes.some(c => c.cloth_id === id)) {
+          throw new Error(`AI returned cloth_id ${id} which does not exist`);
+        }
+      }
+    }
+
+    // 💾 Store outfits
+    for (const outfit of outfitsJSON.outfits) {
+      await query2(
+        'INSERT INTO generated_outfits (user_id, title, cloth_ids) VALUES (?, ?, ?)',
+        [userId, outfit.title, JSON.stringify(outfit.cloth_ids)]
+      );
+    }
+
     res.json({ success: true, outfits: outfitsJSON });
   } catch (err) {
     console.error('AI outfit error:', err);
@@ -14485,134 +14526,6 @@ for (const outfit of outfitsJSON.outfits) {
   }
 });
 
-
-
-app.post('/fashion/get-history', async (req, res) => {
-  try {
-    const { token } = req.body;
-    if (!token) return res.status(401).json({ error: 'Token required' });
-
-    const userId = await getUserIdFromTokenForma(token);
-    if (!userId) return res.status(403).json({ error: 'Invalid token' });
-
-    const outfitRows = await query2(
-      'SELECT id, title, cloth_ids, created_at FROM generated_outfits WHERE user_id = ? ORDER BY id DESC',
-      [userId]
-    );
-
-    const outfitResults = [];
-
-    for (const outfit of outfitRows) {
-      const clothIds = JSON.parse(outfit.cloth_ids); // e.g., [25,22,23]
-
-      if (!Array.isArray(clothIds) || clothIds.length === 0) continue;
-
-      const placeholders = clothIds.map(() => '?').join(',');
-      const clothRows = await query2(
-        `SELECT image_name FROM clothes WHERE id IN (${placeholders}) AND user_id = ?`,
-        [...clothIds, userId]
-      );
-
-      const imageNames = clothRows.map(c => c.image_name);
-
-      outfitResults.push({
-        title: outfit.title,
-        created_at: outfit.created_at,
-        images: imageNames // just image_name
-      });
-    }
-
-    res.json({ success: true, outfits: outfitResults });
-  } catch (err) {
-    console.error('Fetch history error:', err);
-    res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
-
-app.get('/fashion/hashtag/:id', async (req, res) => {
-  try {
-    const hashtagId = req.params.id;
-    const clothes = await query2(
-      'SELECT image_name FROM clothes WHERE hashtag_id = ?', 
-      [hashtagId]
-    );
-
-    res.json({
-      hashtagId,
-      clothes: clothes.map(c => `/${c.image_name}`)
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to fetch clothes for hashtag' });
-  }
-});
-
-app.post('/fashion/dashboard-stats', async (req, res) => {
-  try {
-    const { token } = req.body;
-    if (!token) return res.status(400).json({ error: "No token provided" });
-
-    const userId = await getUserIdFromTokenForma(token);
-    if (!userId) return res.status(401).json({ error: "Invalid token" });
-
-    // Count clothes
-    const [clothes] = await connection2.promise().query(
-      "SELECT COUNT(*) as totalClothes FROM clothes WHERE user_id = ?",
-      [userId]
-    );
-
-    // Count categories
-    const [categories] = await connection2.promise().query(
-      "SELECT COUNT(*) as totalCategories FROM hashtags WHERE user_id = ?",
-      [userId]
-    );
-
-    // Count generated outfits
-    const [generated] = await connection2.promise().query(
-      "SELECT COUNT(*) as totalGenerated FROM generated_outfits WHERE user_id = ?",
-      [userId]
-    );
-
-    // Calculate streak (days with at least 1 generated outfit)
-    const [streakData] = await connection2.promise().query(
-      `SELECT DATE(created_at) as day
-       FROM generated_outfits
-       WHERE user_id = ?
-       GROUP BY DATE(created_at)
-       ORDER BY day DESC`,
-      [userId]
-    );
-
-    let streak = 0;
-    if (streakData.length > 0) {
-      let prevDate = new Date(streakData[0].day);
-      streak = 1;
-
-      for (let i = 1; i < streakData.length; i++) {
-        let currentDate = new Date(streakData[i].day);
-        let diffDays = (prevDate - currentDate) / (1000 * 60 * 60 * 24);
-
-        if (diffDays === 1) {
-          streak++;
-          prevDate = currentDate;
-        } else {
-          break; // streak ended
-        }
-      }
-    }
-
-    res.json({
-      totalClothes: clothes[0].totalClothes,
-      totalCategories: categories[0].totalCategories,
-      totalGenerated: generated[0].totalGenerated,
-      streak
-    });
-
-  } catch (error) {
-    console.error("Error fetching dashboard stats:", error);
-    res.status(500).json({ error: "Server error" });
-  }
-});
 
 const generateTokenForma = () => crypto.randomBytes(20).toString('hex');
 
@@ -14710,6 +14623,224 @@ app.post("/fashion/api/check-user-details", async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+app.get('/fashion/streak', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(401).json({ error: 'Token required' });
+
+    const user_id = await getUserIdFromTokenForma(token);
+    if (!user_id) return res.status(403).json({ error: 'Invalid token' });
+
+    // Fetch streak
+    const [streak] = await query2('SELECT * FROM user_streaks WHERE user_id = ?', [user_id]);
+
+    // Fetch credits
+    const [credit] = await query2('SELECT credits FROM user_credits WHERE user_id = ?', [user_id]);
+
+    res.json({
+      currentStreak: streak ? streak.current_streak : 0,
+      lastCheckinDate: streak ? streak.last_checkin_date : null,
+      loyalUserSince: streak ? streak.loyal_user_since : null,
+      credits: credit ? credit.credits : 0
+    });
+
+  } catch (err) {
+    console.error('❌ Error fetching streak:', err);
+    res.status(500).json({ error: 'Failed to fetch streak data' });
+  }
+});
+
+app.post('/fashion/checkin', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(401).json({ error: 'Token required' });
+
+    const user_id = await getUserIdFromTokenForma(token);
+    if (!user_id) return res.status(403).json({ error: 'Invalid token' });
+
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0]; // YYYY-MM-DD
+
+    // Fetch user's streak row
+    const [streakRow] = await query2('SELECT * FROM user_streaks WHERE user_id = ?', [user_id]);
+
+    let newStreak = 1;
+    let loyalUserSince = todayStr;
+
+    if (!streakRow) {
+      // First check-in ever
+      await query2(
+        'INSERT INTO user_streaks (user_id, current_streak, last_checkin_date, loyal_user_since, updated_at) VALUES (?, ?, ?, ?, NOW())',
+        [user_id, newStreak, todayStr, todayStr]
+      );
+    } else {
+      const lastCheckinStr = streakRow.last_checkin_date.toISOString().split('T')[0];
+      const yesterday = new Date(today);
+      yesterday.setDate(today.getDate() - 1);
+      const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+      // Already checked in today
+      if (lastCheckinStr === todayStr) {
+        return res.status(400).json({ error: 'Already checked in today' });
+      }
+
+      // Increment streak if last check-in was yesterday
+      if (lastCheckinStr === yesterdayStr) {
+        newStreak = streakRow.current_streak + 1;
+      } else {
+        newStreak = 1; // streak broken
+      }
+
+      loyalUserSince = streakRow.loyal_user_since;
+
+      // Update streak row
+      await query2(
+        'UPDATE user_streaks SET current_streak = ?, last_checkin_date = ?, updated_at = NOW() WHERE user_id = ?',
+        [newStreak, todayStr, user_id]
+      );
+    }
+
+    // 🎁 Check reward for this streak day
+    const [reward] = await query2('SELECT * FROM streak_rewards WHERE streak_day = ?', [newStreak]);
+    let rewardGiven = null;
+
+    if (reward) {
+      const [alreadyGiven] = await query2(
+        'SELECT * FROM user_streak_rewards WHERE user_id = ? AND streak_day = ?',
+        [user_id, newStreak]
+      );
+
+      if (!alreadyGiven) {
+        // Update user_credits table
+        const [existingCredit] = await query2('SELECT * FROM user_credits WHERE user_id = ?', [user_id]);
+        if (!existingCredit) {
+          await query2('INSERT INTO user_credits (user_id, credits, updated_at) VALUES (?, ?, NOW())', [user_id, reward.credits]);
+        } else {
+          await query2('UPDATE user_credits SET credits = credits + ?, updated_at = NOW() WHERE user_id = ?', [reward.credits, user_id]);
+        }
+
+        rewardGiven = {
+          streak_day: newStreak,
+          credits_awarded: reward.credits
+        };
+      }
+    }
+
+    res.json({
+      success: true,
+      currentStreak: newStreak,
+      lastCheckinDate: todayStr,
+      loyalUserSince,
+      reward: rewardGiven,
+      checkedInToday: true
+    });
+
+  } catch (err) {
+    console.error('❌ Error in check-in:', err);
+    res.status(500).json({ error: 'Failed to check in' });
+  }
+});
+
+
+
+app.post('/fashion/wardrobe', async (req, res) => {
+  try {
+
+    const { token } = req.body;
+    if (!token) return res.status(401).json({ error: 'Token missing' });
+
+    const user_id = await getUserIdFromTokenForma(token);
+
+    const clothes = await query2(
+      'SELECT image_name FROM clothes WHERE user_id = ?',
+      [user_id]
+    );
+
+    res.json({ success: true, clothes });
+  } catch (err) {
+    console.error('Error fetching wardrobe:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Bot system prompts
+const BOT_SYSTEM_PROMPTS = {
+  Elara: `You are Elara... Your tone is poetic and elevated. Since you cannot see images, ...`,
+  Loom: `You are Loom... Your tone is energetic and collaborative. ...`,
+  Jax: `You are Jax... Your tone is confident and uses current, relevant slang. ...`,
+  Sage: `You are Sage... Your personality is calm and intentional. ...`,
+  Flare: `You are Flare... Your personality is exuberant and theatrical. ...`,
+  Coda: `You are Coda... Your personality is precise and logical. ...`
+};
+
+app.post('/fashion/chat/stylist', async (req, res) => {
+  const { message, chatHistory, token, botName } = req.body;
+
+  try {
+    if (!message || !message.trim()) return res.status(400).json({ error: 'Message cannot be empty.' });
+    if (!token) return res.status(401).json({ error: 'Token is required.' });
+
+    const userId = await getUserIdFromTokenForma(token);
+    if (!userId) return res.status(401).json({ error: 'Invalid token or user not authenticated.' });
+
+    if (!botName || !BOT_SYSTEM_PROMPTS[botName]) {
+      return res.status(400).json({ error: 'Invalid bot name.' });
+    }
+
+    // Automatically get system prompt for the bot
+    const systemPrompt = BOT_SYSTEM_PROMPTS[botName];
+
+    // Initialize AI model
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-2.0-flash',
+      safetySettings: safetySettings,
+      systemInstruction: systemPrompt
+    });
+
+// Convert chatHistory to model format
+let initialChatHistory = chatHistory?.map(msg => ({
+  role: msg.sender === 'user' ? 'user' : 'model',
+  parts: [{ text: msg.text }]
+})) || [];
+
+// Ensure first message is from user
+if (initialChatHistory.length === 0 || initialChatHistory[0].role !== 'user') {
+  initialChatHistory.unshift({ role: 'user', parts: [{ text: '' }] });
+}
+
+const chat = model.startChat({ history: initialChatHistory });
+
+    let aiResponse = '';
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const result = await chat.sendMessage(message);
+        aiResponse = result.response?.text?.() || 'No response from AI.';
+        break;
+      } catch (error) {
+        if (attempt === MAX_RETRIES) throw new Error('AI service failed after multiple attempts.');
+        await delay(Math.pow(2, attempt) * 100);
+      }
+    }
+
+    if (!aiResponse || aiResponse === 'No response from AI.') {
+      return res.status(500).json({ error: 'AI service did not return a response.' });
+    }
+
+    // Save chat in DB
+    await query2('INSERT INTO stylist_chat_history (user_id, bot_name, user_message, bot_response) VALUES (?, ?, ?, ?)', [
+      userId,
+      botName,
+      message,
+      aiResponse
+    ]);
+
+    res.json({ success: true, reply: aiResponse });
+  } catch (error) {
+    console.error('Error in /fashion/chat/stylist:', error);
+    res.status(500).json({ error: 'An error occurred while processing your request.' });
   }
 });
 
