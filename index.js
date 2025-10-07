@@ -14031,6 +14031,7 @@ app.post("/fashion/signup", async (req, res) => {
       weight,
       bodyType,
     } = req.body;
+  console.log("Received body:", req.body); // <-- add this
 
     if (!email || !password || !gender) {
       return res.status(400).json({ message: "Missing required fields" });
@@ -14843,6 +14844,185 @@ const chat = model.startChat({ history: initialChatHistory });
     res.status(500).json({ error: 'An error occurred while processing your request.' });
   }
 });
+
+
+app.post("/fashion/create-order", async (req, res) => {
+  try {
+    const { amount, plan, token } = req.body;
+
+    const userId = await getUserIdFromTokenForma(token);
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const options = {
+      amount,
+      currency: "INR",
+      receipt: `order_rcptid_${Date.now()}`,
+      notes: { plan, userId },
+    };
+
+    const order = await razorpay.orders.create(options);
+
+    // Save pending subscription record in DB
+    await query2(
+      `INSERT INTO subscriptions (user_id, plan_name, amount, razorpay_order_id, payment_status)
+       VALUES (?, ?, ?, ?, 'pending')`,
+      [userId, plan, amount, order.id]
+    );
+
+    res.json(order);
+  } catch (error) {
+    console.error("Create order error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+
+
+app.post('/fashion/verify-payment', async (req, res) => {
+  try {
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+      token,
+      plan,
+    } = req.body;
+
+    const userId = await getUserIdFromTokenForma(token);
+    if (!userId) {
+      console.error("Invalid or expired token");
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const body = `${razorpay_order_id}|${razorpay_payment_id}`;
+    const expectedSignature = crypto
+      .createHmac("sha256", "ec9nrw9RjbIcvpkufzaYxmr6")
+      .update(body)
+      .digest("hex");
+
+    if (expectedSignature !== razorpay_signature) {
+      console.error("❌ Signature mismatch");
+      return res.status(400).json({ success: false, error: "Invalid signature" });
+    }
+
+    // Calculate expiry: For now let's set 30 days default
+    const expiryDate = new Date();
+    expiryDate.setDate(expiryDate.getDate() + 30);
+
+    // Update DB record
+    await query2(
+      `UPDATE subscriptions
+       SET razorpay_payment_id = ?, razorpay_signature = ?, payment_status = 'success',
+           payment_date = NOW(), expiry_date = ?
+       WHERE razorpay_order_id = ? AND user_id = ?`,
+      [razorpay_payment_id, razorpay_signature, expiryDate, razorpay_order_id, userId]
+    );
+
+    console.log(`✅ User ${userId} subscribed to ${plan}`);
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error in verify-payment:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// GET current subscription for logged-in user
+app.get("/fashion/current-plan", async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1]; // Bearer token
+    if (!token) return res.status(401).json({ error: "Unauthorized" });
+
+    const userId = await getUserIdFromTokenForma(token);
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    // Get the latest active subscription
+    const queryText = `
+      SELECT plan_name, amount, payment_status, expiry_date
+      FROM subscriptions
+      WHERE user_id = ? AND payment_status = 'success'
+      ORDER BY expiry_date DESC
+      LIMIT 1
+    `;
+    const results = await query2(queryText, [userId]);
+
+    if (!results.length) {
+      // No active subscription → free plan
+      return res.json({
+        plan: "Chic",
+        price: 0,
+        features: [
+          "20 outfit generations / month",
+          "20 chats / month",
+        ],
+        isFree: true,
+      });
+    }
+
+    // Check if subscription has expired
+    const sub = results[0];
+    const now = new Date();
+    if (new Date(sub.expiry_date) < now) {
+      return res.json({
+        plan: "Chic",
+        price: 0,
+        features: [
+          "20 outfit generations / month",
+          "20 chats / month",
+        ],
+        isFree: true,
+      });
+    }
+
+    // Active paid plan
+    res.json({
+      plan: sub.plan_name,
+      price: sub.amount / 100, // assuming amount stored in paise
+      expiry: sub.expiry_date,
+      isFree: false,
+    });
+  } catch (err) {
+    console.error("Error fetching current plan:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+app.post("/fashion/pro-rate", async (req, res) => {
+  try {
+    const { token, newPlanPrice } = req.body;
+    const userId = await getUserIdFromTokenForma(token);
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const currentSub = await query2(
+      `SELECT plan_name, amount, expiry_date, payment_date
+       FROM subscriptions
+       WHERE user_id = ? AND payment_status = 'success'
+       ORDER BY expiry_date DESC LIMIT 1`,
+      [userId]
+    );
+
+    if (!currentSub.length) return res.json({ amountToPay: newPlanPrice * 100 }); // in paise
+
+    const sub = currentSub[0];
+    const now = new Date();
+    const expiry = new Date(sub.expiry_date);
+    const daysLeft = Math.ceil((expiry - now) / (1000 * 60 * 60 * 24));
+
+    const totalDays = Math.ceil((expiry - new Date(sub.payment_date)) / (1000 * 60 * 60 * 24));
+    const currentAmount = sub.amount;
+
+    // Pro-rate calculation: pay difference for remaining days
+    const dailyCurrent = currentAmount / totalDays;
+    const dailyNew = newPlanPrice * 100 / totalDays; // newPlanPrice in ₹ → paise
+
+    const amountToPay = Math.max(0, (dailyNew - dailyCurrent) * daysLeft);
+
+    res.json({ amountToPay, daysLeft });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 
 // Start the server
 app.listen(PORT, () => {
