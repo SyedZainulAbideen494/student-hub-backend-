@@ -14527,6 +14527,38 @@ ${parsedClothes
   }
 });
 
+app.post('/fashion/get-history', async (req, res) => {
+  try {
+    const { token } = req.body;
+    if (!token) return res.status(401).json({ error: 'Token required' });
+
+    const userId = await getUserIdFromTokenForma(token);
+    if (!userId) return res.status(403).json({ error: 'Invalid token' });
+
+    // Fetch outfits for this user
+    const outfits = await query2(
+      `SELECT id, title, cloth_ids, created_at 
+       FROM generated_outfits 
+       WHERE user_id = ? 
+       ORDER BY created_at DESC`,
+      [userId]
+    );
+
+    // Convert cloth_ids JSON string to array
+    const formatted = outfits.map(o => ({
+      id: o.id,
+      title: o.title,
+      images: JSON.parse(o.cloth_ids), // assuming cloth_ids is array of uploaded cloth IDs / image names
+      created_at: o.created_at
+    }));
+
+    res.json({ success: true, outfits: formatted });
+  } catch (err) {
+    console.error('Fetch outfit history error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
 
 const generateTokenForma = () => crypto.randomBytes(20).toString('hex');
 
@@ -15022,6 +15054,7 @@ app.post("/fashion/pro-rate", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
 
 
 // Start the server
