@@ -14409,7 +14409,7 @@ app.post('/fashion/generate-outfit', uploadAIFashion.any(), async (req, res) => 
     );
 
     const planName = subscription ? subscription.plan_name : 'Chic'; // default = free
-    const planLimits = { Chic: 10, Bespoke: 30, Couture: 100 };
+    const planLimits = { Chic: 10, Bespoke: 30, Couture: 10000 };
 
     // 🗓️ Get current month's count
     const startOfMonth = new Date();
