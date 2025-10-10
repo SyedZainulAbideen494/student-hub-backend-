@@ -14535,7 +14535,7 @@ app.post('/fashion/get-history', async (req, res) => {
     const userId = await getUserIdFromTokenForma(token);
     if (!userId) return res.status(403).json({ error: 'Invalid token' });
 
-    // Fetch outfits for this user
+    // 1️⃣ Fetch outfits
     const outfits = await query2(
       `SELECT id, title, cloth_ids, created_at 
        FROM generated_outfits 
@@ -14544,23 +14544,34 @@ app.post('/fashion/get-history', async (req, res) => {
       [userId]
     );
 
-const formatted = outfits.map(o => {
-  let images = [];
-  try {
-    images = typeof o.cloth_ids === 'string' ? JSON.parse(o.cloth_ids) : o.cloth_ids;
-  } catch (e) {
-    console.error('Failed to parse cloth_ids for outfit id', o.id, o.cloth_ids);
-    images = []; // fallback
-  }
+    // 2️⃣ Collect all cloth_ids from outfits
+    const allClothIds = [
+      ...new Set(outfits.flatMap(o => (typeof o.cloth_ids === 'string' ? JSON.parse(o.cloth_ids) : o.cloth_ids)))
+    ];
 
-  return {
-    id: o.id,
-    title: o.title,
-    images,
-    created_at: o.created_at
-  };
-});
+    // 3️⃣ Fetch image_name from clothes table
+    const clothRows = await query2(
+      `SELECT id, image_name FROM clothes WHERE id IN (?)`,
+      [allClothIds]
+    );
 
+    // Map cloth_id → image_name
+    const clothIdToImage = {};
+    clothRows.forEach(c => {
+      clothIdToImage[c.id] = c.image_name;
+    });
+
+    // 4️⃣ Map outfits with actual image names
+    const formatted = outfits.map(o => {
+      let ids = typeof o.cloth_ids === 'string' ? JSON.parse(o.cloth_ids) : o.cloth_ids;
+      const images = ids.map(id => clothIdToImage[id]).filter(Boolean);
+      return {
+        id: o.id,
+        title: o.title,
+        images,
+        created_at: o.created_at
+      };
+    });
 
     res.json({ success: true, outfits: formatted });
   } catch (err) {
