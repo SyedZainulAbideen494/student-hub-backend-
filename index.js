@@ -14167,13 +14167,12 @@ app.post('/fashion/verifyToken', (req, res) => {
 
 });
 
-
 app.post('/fashion/upload/cloths', upload.single('image'), async (req, res) => {
   try {
     const { hashtag, token } = req.body;
 
-    if (!req.file) return res.status(400).json({ error: 'Image file not received.' });
-    if (!token) return res.status(401).json({ error: 'Token required.' });
+    if (!req.file) return res.status(400).json({ errorMessage: 'Image file not received.' });
+    if (!token) return res.status(401).json({ errorMessage: 'Token required.' });
 
     const user_id = await getUserIdFromTokenForma(token);
     const fileName = req.file.filename;
@@ -14182,12 +14181,43 @@ app.post('/fashion/upload/cloths', upload.single('image'), async (req, res) => {
     console.log("📦 Hashtag:", hashtag);
     console.log("👤 User ID:", user_id);
 
-    // Check if hashtag exists
+    // 🔹 Get user’s subscription
+    const [subscription] = await query2(
+      'SELECT plan_name, expiry_date FROM subscriptions WHERE user_id = ? AND payment_status = "success" ORDER BY payment_date DESC LIMIT 1',
+      [user_id]
+    );
+
+    const planName = subscription ? subscription.plan_name : 'Chic'; // Default = Free
+    const planLimits = { Chic: 5, Bespoke: 30, Couture: Infinity };
+
+    // 🔹 Count uploads this month
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const uploadsThisMonth = await query2(
+      'SELECT COUNT(*) AS cnt FROM clothes WHERE user_id = ? AND created_at >= ?',
+      [user_id, startOfMonth]
+    );
+
+    const uploadCount = uploadsThisMonth[0].cnt || 0;
+    console.log(uploadCount)
+    if (uploadCount >= planLimits[planName]) {
+      const msg =
+        planName === 'Couture'
+          ? 'Unexpected error — unlimited plan should not limit uploads.'
+          : `Your ${planName} plan allows only ${planLimits[planName]} uploads per month.`;
+
+      console.warn(`⚠️ Upload blocked for user ${user_id} — ${msg}`);
+      return res.status(403).json({ success: false, errorMessage: msg, plan: planName });
+    }
+
+    // 🔹 Proceed to upload
     connection2.query(
       'SELECT id FROM hashtags WHERE name = ? AND user_id = ?',
       [hashtag, user_id],
       (err, results) => {
-        if (err) return res.status(500).json({ error: 'Database error during hashtag check.' });
+        if (err) return res.status(500).json({ errorMessage: 'Database error during hashtag check.' });
 
         const hashtagId = results.length > 0 ? results[0].id : null;
 
@@ -14196,33 +14226,30 @@ app.post('/fashion/upload/cloths', upload.single('image'), async (req, res) => {
             'INSERT INTO clothes (user_id, image_name, hashtag_id) VALUES (?, ?, ?)',
             [user_id, fileName, hashtagIdToUse],
             (insErr) => {
-              if (insErr) return res.status(500).json({ error: 'Database error during clothes insert.' });
-              console.log("✅ Upload successful!");
-              res.json({ message: 'Uploaded!' });
+              if (insErr) return res.status(500).json({ errorMessage: 'Database error during clothes insert.' });
+              console.log("✅ Upload successful for user:", user_id);
+              res.json({ success: true, message: 'Uploaded!' });
             }
           );
         };
 
         if (hashtagId) {
-          // Hashtag exists → just insert cloth
           insertCloth(hashtagId);
         } else {
-          // Hashtag doesn't exist → create hashtag first
           connection2.query(
             'INSERT INTO hashtags (name, user_id) VALUES (?, ?)',
             [hashtag, user_id],
             (insertErr, result) => {
-              if (insertErr) return res.status(500).json({ error: 'Database error during hashtag insert.' });
+              if (insertErr) return res.status(500).json({ errorMessage: 'Database error during hashtag insert.' });
               insertCloth(result.insertId);
             }
           );
         }
       }
     );
-
   } catch (error) {
     console.error("🔥 Unexpected server error:", error);
-    return res.status(500).json({ error: 'Unexpected error occurred.' });
+    return res.status(500).json({ errorMessage: 'Unexpected error occurred.' });
   }
 });
 
@@ -14360,6 +14387,7 @@ const uploadAIFashion = multer({
   storage: multer.memoryStorage(),
 });
 
+
 app.post('/fashion/generate-outfit', uploadAIFashion.any(), async (req, res) => {
   try {
     const { token, clothes, activity, comfort, psychology } = req.body;
@@ -14368,20 +14396,51 @@ app.post('/fashion/generate-outfit', uploadAIFashion.any(), async (req, res) => 
     const userId = await getUserIdFromTokenForma(token);
     if (!userId) return res.status(403).json({ error: 'Invalid token' });
 
-    if (!req.files || req.files.length === 0) {
+    if (!req.files || req.files.length === 0)
       return res.status(400).json({ error: 'No images uploaded' });
-    }
 
-    const parsedClothes = JSON.parse(clothes); // [{ cloth_id, hashtag, type, image_name }]
+    const parsedClothes = JSON.parse(clothes);
     if (!parsedClothes.length) throw new Error('No clothes provided');
-// 📌 Fetch user style attributes
-const [userDetails] = await query2(
-  `SELECT gender, skin_tone, eye_color, hair_color, height, weight, body_type 
-   FROM user_details WHERE user_id = ?`,
-  [userId]
-);
 
-const styleProfile = userDetails?.[0] || {};
+    // 📦 Fetch user plan and limit
+    const [subscription] = await query2(
+      'SELECT plan_name, expiry_date FROM subscriptions WHERE user_id = ? AND payment_status = "success" ORDER BY payment_date DESC LIMIT 1',
+      [userId]
+    );
+
+    const planName = subscription ? subscription.plan_name : 'Chic'; // default = free
+    const planLimits = { Chic: 10, Bespoke: 30, Couture: 100 };
+
+    // 🗓️ Get current month's count
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const [countResult] = await query2(
+      'SELECT COUNT(*) AS count FROM generated_outfits WHERE user_id = ? AND created_at >= ?',
+      [userId, startOfMonth]
+    );
+
+    const generatedCount = countResult.count || 0;
+    const limit = planLimits[planName];
+
+if (generatedCount >= limit) {
+  console.warn(`⚠️ User ${userId} exceeded outfit generation limit for ${planName} plan`);
+  return res.status(403).json({
+    success: false,
+    error: `Your ${planName} plan allows only ${limit} outfit generations per month. Upgrade to continue.`,
+    plan: planName
+  });
+}
+
+
+    // 📌 Fetch user style attributes
+    const [userDetails] = await query2(
+      `SELECT gender, skin_tone, eye_color, hair_color, height, weight, body_type 
+       FROM user_details WHERE user_id = ?`,
+      [userId]
+    );
+    const styleProfile = userDetails?.[0] || {};
 
     // Map cloth_id -> uploaded file
     const clothImageMap = {};
@@ -14391,19 +14450,19 @@ const styleProfile = userDetails?.[0] || {};
       clothImageMap[c.cloth_id] = file;
     });
 
-    // 🧠 Build parts array with cloth ID text BEFORE each image
+    // Build Gemini prompt
     const parts = [];
     parsedClothes.forEach(c => {
-      parts.push({
-        text: `Cloth ID: ${c.cloth_id} → ${c.type || 'unknown'} (${c.hashtag})`
-      });
+      parts.push({ text: `Cloth ID: ${c.cloth_id} → ${c.type || 'unknown'} (${c.hashtag})` });
       parts.push({
         inlineData: {
           data: clothImageMap[c.cloth_id].buffer.toString('base64'),
-          mimeType: clothImageMap[c.cloth_id].mimetype,
+          mimeType: clothImageMap[c.cloth_id].mimetype
         }
       });
     });
+
+
 
     // 📌 Main instruction comes LAST
 parts.push({
@@ -14485,14 +14544,13 @@ ${parsedClothes
 
     const contents = [{ role: 'user', parts }];
 
-    // ✅ Proper Gemini API call
+    // ✅ Gemini API call
     const result = await model.generateContent({ contents });
-    const aiReply =
-      result?.response?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    const aiReply = result?.response?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
 
     if (!aiReply) throw new Error('No response from Gemini');
 
-    // 🧠 Parse JSON safely
+    // Parse Gemini JSON
     let outfitsJSON;
     try {
       const jsonMatch = aiReply.match(/\{[\s\S]*\}/);
@@ -14503,7 +14561,7 @@ ${parsedClothes
       throw new Error('Failed to parse Gemini response');
     }
 
-    // ✅ Validate cloth_ids
+    // Validate cloth_ids
     for (const outfit of outfitsJSON.outfits) {
       for (const id of outfit.cloth_ids) {
         if (!parsedClothes.some(c => c.cloth_id === id)) {
@@ -14512,7 +14570,7 @@ ${parsedClothes
       }
     }
 
-    // 💾 Store outfits
+    // Save generated outfits
     for (const outfit of outfitsJSON.outfits) {
       await query2(
         'INSERT INTO generated_outfits (user_id, title, cloth_ids) VALUES (?, ?, ?)',
