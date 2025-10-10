@@ -14544,13 +14544,23 @@ app.post('/fashion/get-history', async (req, res) => {
       [userId]
     );
 
-    // Convert cloth_ids JSON string to array
-    const formatted = outfits.map(o => ({
-      id: o.id,
-      title: o.title,
-      images: JSON.parse(o.cloth_ids), // assuming cloth_ids is array of uploaded cloth IDs / image names
-      created_at: o.created_at
-    }));
+const formatted = outfits.map(o => {
+  let images = [];
+  try {
+    images = typeof o.cloth_ids === 'string' ? JSON.parse(o.cloth_ids) : o.cloth_ids;
+  } catch (e) {
+    console.error('Failed to parse cloth_ids for outfit id', o.id, o.cloth_ids);
+    images = []; // fallback
+  }
+
+  return {
+    id: o.id,
+    title: o.title,
+    images,
+    created_at: o.created_at
+  };
+});
+
 
     res.json({ success: true, outfits: formatted });
   } catch (err) {
