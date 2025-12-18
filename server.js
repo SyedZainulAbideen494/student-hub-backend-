@@ -62,7 +62,7 @@ const safetySettings = [
   }
 ];
 const model = genAI.getGenerativeModel({
-  model: "gemini-2.0-flash",
+  model: "gemini-3-flash-preview",
   safetySettings: safetySettings,
   systemInstruction: "You are FitBuddy, an AI-powered fitness and nutrition assistant designed to help users stay healthy, manage their diet, and achieve their fitness goals. Your mission is to provide personalized workout plans, meal guidance, and easy calorie tracking in a simple, accessible way.\n\n" +
 
@@ -488,7 +488,7 @@ Respond only in WhatsApp-friendly text format.
 `;
 
 
-  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash", safetySettings });
+  const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview", safetySettings });
   const chat = model.startChat({ history: [] });
   const result = await chat.sendMessage(prompt);
   const answer = await result.response.text();
@@ -730,7 +730,7 @@ Respond strictly in JSON format like this:
 Ensure all 7 days are present and JSON is valid. Include realistic exercises and nutrition details based on user's goal and activity.
 `;
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash", safetySettings });
+    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview", safetySettings });
 
     // --- Helper to generate plan ---
     const generateFitnessPlan = async () => {

@@ -33,6 +33,8 @@ const Razorpay = require('razorpay');
 const { exec } = require("child_process");
 const puppeteer = require("puppeteer");
 const { YoutubeTranscript } = require("youtube-transcript");
+const os = require("os");
+
 const fsForma = require('fs').promises; // use promises for async/await
 // Replace this line:
 // const { GoogleGenAI, createUserContent, createPartFromUri } = require("@google/genai");
@@ -69,7 +71,7 @@ const safetySettings = [
 ];
 
 const model = genAI.getGenerativeModel({
-  model: "gemini-2.0-flash",
+  model: "gemini-3-flash-preview",
   safetySettings: safetySettings,
   systemInstruction: "You are Edusify, an AI-powered productivity assistant designed to help students manage their academic tasks, study materials, and stay organized. Your mission is to provide tailored assistance and streamline the study experience with a wide range of features.\n\n" +
   
@@ -3600,7 +3602,7 @@ app.post('/api/chat/ai', async (req, res) => {
       return res.status(401).json({ error: 'Invalid token or user not authenticated.' });
     }
 
-    const modelName = thinkingMode ? "gemini-2.0-flash" : "gemini-2.0-flash"; // Toggle model
+    const modelName = thinkingMode ? "gemini-3-flash-preview" : "gemini-3-flash-preview"; // Toggle model
 
      // Fetch user data
      const userData = await Promise.all([
@@ -7950,7 +7952,7 @@ Do not:
 
       // Generate notes using Gemini
       const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash",
+        model: "gemini-3-flash-preview",
         contents,
       });
 
@@ -8052,7 +8054,7 @@ app.post("/ai-chatbox/pdf/ai", uploadPDF.single("file"), async (req, res) => {
      
 
       // Load the generative model
-      const model = genAI.getGenerativeModel({ model: "models/gemini-2.0-flash" });
+      const model = genAI.getGenerativeModel({ model: "models/gemini-3-flash-preview" });
       const result = await model.generateContent([
         {
           inlineData: {
@@ -8813,7 +8815,7 @@ app.post("/api/saveGoal", async (req, res) => {
 
       // Model declaration inside the API
       const model = genAI.getGenerativeModel({
-        model: "gemini-2.0-flash",
+        model: "gemini-3-flash-preview",
         safetySettings: safetySettings,
       });
 
@@ -10988,7 +10990,7 @@ app.post("/api/chat/ai/yt", async (req, res) => {
     `;
 
     const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
+      model: "gemini-3-flash-preview",
       safetySettings: safetySettings,
       systemInstruction: dynamicSystemInstruction,
     });
@@ -12015,7 +12017,7 @@ app.post("/api/chat/assignment", async (req, res) => {
     `;
 
     const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
+      model: "gemini-3-flash-preview",
       systemInstruction: dynamicSystemInstruction,
     });
 
@@ -12238,7 +12240,7 @@ app.post('/api/ai-agent', async (req, res) => {
 
     // Initialize AI model
     const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
+      model: "gemini-3-flash-preview",
       safetySettings: safetySettings,
       systemInstruction: dynamicSystemInstruction
     });
@@ -12452,7 +12454,7 @@ app.post("/generate-image", async (req, res) => {
   console.log('Ai image generating', message, userId)
   try {
     const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash-exp-image-generation",
+      model: "gemini-3-flash-preview-exp-image-generation",
       generationConfig: { responseModalities: ["Text", "Image"] },
     });
 
@@ -15030,7 +15032,7 @@ app.post('/fashion/chat/stylist', async (req, res) => {
 
     // Initialize AI model
     const model = genAI.getGenerativeModel({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-3-flash-preview',
       safetySettings: safetySettings,
       systemInstruction: systemPrompt
     });
@@ -15257,8 +15259,7 @@ app.post("/fashion/pro-rate", async (req, res) => {
   }
 });
 
-
-
+ 
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
