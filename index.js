@@ -49,7 +49,7 @@ let GoogleGenAI, createUserContent, createPartFromUri;
 })();
 
 // Initialize Google Generative AI
-const genAI = new GoogleGenerativeAI('AIzaSyCOkOA_jaTX1T85CsMChjx6vUjR8IqE7AI');
+const genAI = new GoogleGenerativeAI('AIzaSyDEd9y5NZB5P8pr0pZcyPmnC1zPAtwKnbw');
 
 const safetySettings = [
   {
