@@ -3,104 +3,222 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pricing Plans</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <title>AI Chatbot UI</title>
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+    
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Poppins:wght@300;400;500&display=swap');
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+        }
+
         body {
-            font-family: 'Poppins', sans-serif;
-            background-color: #0B0F17;
+            background-color: #f3f0f7;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
         }
-        .premium-title {
-            font-family: 'Cormorant Garamond', serif;
+
+        /* Phone Container */
+        .iphone-frame {
+            width: 375px;
+            height: 812px;
+            background: linear-gradient(160deg, #fdfbff 0%, #ede7f6 100%);
+            border-radius: 45px;
+            position: relative;
+            box-shadow: 0 40px 100px rgba(0,0,0,0.1);
+            overflow: hidden;
+            border: 8px solid #ffffff;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
         }
-        .premium-gradient {
-            background-image: linear-gradient(45deg, #e5e7eb, #9ca3af);
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-            filter: drop-shadow(0 0 10px rgba(229, 231, 235, 0.1));
+
+        /* Dynamic Island Mockup */
+        .dynamic-island {
+            width: 110px;
+            height: 30px;
+            background: #000;
+            border-radius: 20px;
+            margin: 0 auto;
+            margin-top: 5px;
+        }
+
+        /* Top Navigation */
+        .top-nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 25px;
+        }
+
+        .get-pro {
+            background: rgba(255, 255, 255, 0.5);
+            backdrop-filter: blur(10px);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            color: #4a4a4a;
+            border: 1px solid rgba(255,255,255,0.4);
+        }
+
+        .nav-icons {
+            display: flex;
+            gap: 12px;
+        }
+
+        .icon-circle {
+            width: 35px;
+            height: 35px;
+            background: rgba(255, 255, 255, 0.5);
+            backdrop-filter: blur(10px);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 14px;
+        }
+
+        /* Main Content */
+        .hero-section {
+            margin-top: 100px;
+        }
+
+        .hero-section h1 {
+            font-family: 'Instrument Serif', serif;
+            font-size: 48px;
+            color: #342e49;
+            line-height: 1;
+            font-weight: 400;
+        }
+
+        .hero-section p {
+            margin-top: 15px;
+            color: #8c869c;
+            font-size: 14px;
+            line-height: 1.4;
+            max-width: 250px;
+        }
+
+        /* Suggestion Chips */
+        .chips-row {
+            margin-top: auto;
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .chip {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.4);
+            backdrop-filter: blur(15px);
+            padding: 15px;
+            border-radius: 20px;
+            border: 1px solid rgba(255,255,255,0.6);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .chip-icon {
+            background: #e9e2f5;
+            padding: 8px;
+            border-radius: 12px;
+            font-size: 16px;
+        }
+
+        .chip-text span {
+            display: block;
+            font-size: 11px;
+            color: #8c869c;
+        }
+
+        .chip-text strong {
+            font-size: 13px;
+            color: #342e49;
+            font-weight: 600;
+        }
+
+        /* Bottom Input */
+        .input-container {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(20px);
+            height: 60px;
+            border-radius: 30px;
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            border: 1px solid #ffffff;
+            margin-bottom: 10px;
+        }
+
+        .ai-orb {
+            width: 40px;
+            height: 40px;
+            background: radial-gradient(circle at 30% 30%, #fff, #e2d7ff, #bca8ff);
+            border-radius: 50%;
+            box-shadow: 0 4px 15px rgba(188, 168, 255, 0.4);
+        }
+
+        .input-container input {
+            flex: 1;
+            border: none;
+            background: transparent;
+            padding: 0 15px;
+            font-size: 14px;
+            color: #8c869c;
+            outline: none;
+        }
+
+        .paperclip {
+            color: #8c869c;
+            margin-right: 10px;
+            font-size: 18px;
         }
     </style>
 </head>
-<body class="flex items-center justify-center min-h-screen">
+<body>
 
-    <div class="container mx-auto p-4 md:p-8">
-        <h1 class="text-4xl md:text-6xl text-center mb-4 premium-title premium-gradient">PREMIUM</h1>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8 max-w-6xl mx-auto items-center">
+    <div class="iphone-frame">
+        <div class="dynamic-island"></div>
 
-            <!-- Chic Plan -->
-            <div class="card bg-slate-800/50 rounded-3xl p-6 md:p-8 text-center text-slate-300 h-full flex flex-col border border-slate-700">
-                <h2 class="text-2xl font-semibold tracking-widest text-slate-200">CHIC</h2>
-                <p class="text-lg mt-2">BASIC PLAN</p>
-                <p class="text-5xl md:text-6xl font-bold my-6 text-slate-200">₹0</p>
-                <div class="space-y-6 flex-grow">
-                    <div class="flex flex-col items-center">
-                        <i class="fas fa-tshirt text-3xl mb-2 text-cyan-500"></i>
-                        <span class="font-semibold text-slate-200">20 OUTFIT</span>
-                        <span>GENERATION/MONTH</span>
-                    </div>
-                    <div class="flex flex-col items-center">
-                        <i class="fas fa-comments text-3xl mb-2 text-cyan-500"></i>
-                        <span class="font-semibold text-slate-200">20 CHATS/MONTH</span>
-                    </div>
-                </div>
-                <button class="mt-8 bg-cyan-500 text-white w-full py-3 rounded-xl font-semibold hover:bg-cyan-600 transition-colors">Buy Now</button>
+        <div class="top-nav">
+            <div class="get-pro">👤 Get Pro 15%</div>
+            <div class="nav-icons">
+                <div class="icon-circle">😴</div>
+                <div class="icon-circle">💬</div>
             </div>
+        </div>
 
-            <!-- Bespoke Plan (Most Selling) -->
-            <div class="card bg-slate-900 rounded-3xl p-6 md:p-8 text-center relative shadow-2xl h-full flex flex-col md:scale-105 border-2 border-pink-500">
-                 <div class="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-pink-500 text-white px-4 py-1 rounded-full text-sm font-semibold">
-                    MOST SELLING
+        <div class="hero-section">
+            <h1>Hello Rehan<br>How can i help<br>you today</h1>
+            <p>is simply dummy text of the printing and typesetting industry. Lorem Ipsum</p>
+        </div>
+
+        <div class="chips-row">
+            <div class="chip">
+                <div class="chip-icon">📖</div>
+                <div class="chip-text">
+                    <span>Read me a</span>
+                    <strong>book</strong>
                 </div>
-                <h2 class="text-2xl font-semibold tracking-widest text-slate-200">BESPOKE</h2>
-                <p class="text-5xl md:text-6xl font-bold my-6 md:my-8 text-slate-200">₹29</p>
-                <div class="space-y-6 flex-grow text-slate-300">
-                    <div class="flex flex-col items-center">
-                        <i class="fas fa-robot text-3xl mb-2 text-pink-500"></i>
-                        <span class="font-semibold text-slate-200">200 OUTFIT</span>
-                        <span>GENERATION/MONTH</span>
-                    </div>
-                    <div class="flex flex-col items-center">
-                        <i class="fas fa-ad text-3xl mb-2 text-pink-500"></i>
-                        <span>ADS FREE EXPERIENCE</span>
-                    </div>
-                    <div class="flex flex-col items-center">
-                        <i class="fas fa-bullhorn text-3xl mb-2 text-pink-500"></i>
-                        <span class="font-semibold text-slate-200">300 CHATS/MONTH</span>
-                    </div>
-                     <div class="flex flex-col items-center">
-                        <i class="fas fa-crown text-3xl mb-2 text-pink-500"></i>
-                        <span>PREMIUM FEATURES</span>
-                    </div>
-                </div>
-                <button class="mt-8 bg-pink-500 text-white w-full py-3 rounded-xl font-semibold hover:bg-pink-600 transition-colors">Buy Now</button>
             </div>
-
-            <!-- Couture Plan -->
-            <div class="card bg-slate-800/50 rounded-3xl p-6 md:p-8 text-center text-slate-300 h-full flex flex-col border border-slate-700">
-                <h2 class="text-2xl font-semibold tracking-widest text-slate-200">COUTURE</h2>
-                <p class="text-lg mt-2">MOST PREMIUM EXPERIENCE</p>
-                <p class="text-5xl md:text-6xl font-bold my-6 text-slate-200">₹79</p>
-                <div class="space-y-6 flex-grow">
-                    <div class="flex flex-col items-center">
-                        <i class="fas fa-infinity text-3xl mb-2 text-cyan-500"></i>
-                        <span class="font-semibold text-slate-200">UNLIMITED OUTFIT</span>
-                        <span>GENERATION</span>
-                    </div>
-                    <div class="flex flex-col items-center">
-                       <i class="fas fa-award text-3xl mb-2 text-cyan-500"></i>
-                        <span>ADS FREE EXPERIENCE AND PREMIUN FEATURES</span>
-                    </div>
-                    <div class="flex flex-col items-center">
-                        <i class="fas fa-comments text-3xl mb-2 text-cyan-500"></i>
-                        <span class="font-semibold text-slate-200">UNLIMITED CHATS</span>
-                    </div>
+            <div class="chip">
+                <div class="chip-icon">🩹</div>
+                <div class="chip-text">
+                    <span>Personal</span>
+                    <strong>therapy</strong>
                 </div>
-                <button class="mt-8 bg-cyan-500 text-white w-full py-3 rounded-xl font-semibold hover:bg-cyan-600 transition-colors">Buy Now</button>
             </div>
+        </div>
 
+        <div class="input-container">
+            <div class="ai-orb"></div>
+            <input type="text" placeholder="Tap on AI to start speaking...">
+            <div class="paperclip">📎</div>
         </div>
     </div>
 
