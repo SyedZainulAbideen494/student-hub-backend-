@@ -48,9 +48,8 @@ let GoogleGenAI, createUserContent, createPartFromUri;
   createPartFromUri = genai.createPartFromUri;
 })();
 
-const genAI = new GoogleGenerativeAI(
-  process.env.GOOGLE_GENAI_API_KEY
-);
+// Initialize Google Generative AI
+const genAI = new GoogleGenerativeAI('AIzaSyBa58mDPYIpbYR-5g0iUObGOGAVFlRW8MQ');
 
 const safetySettings = [
   {
