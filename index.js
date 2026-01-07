@@ -494,24 +494,14 @@ app.post('/signup', (req, res) => {
           }
 
           // ✅ Insert 1-day free premium
-          const subQuery = `
-            INSERT INTO subscriptions (user_id, subscription_plan, payment_status, payment_date, expiry_date)
-            VALUES (?, '1-Day Plan', 'Paid', NOW(), DATE_ADD(NOW(), INTERVAL 1 DAY))
-          `;
-          connection.query(subQuery, [userId], (subErr) => {
-            if (subErr) {
-              console.error('🔴 Error giving free premium:', subErr);
-              return res.status(500).json({ error: 'Error giving free premium' });
-            }
-
-            console.log('✅ User registered with 1-day premium!');
+         
+            console.log('✅ User registered');
             return res.status(200).json({
               auth: true,
               token: token,
               user: { id: userId, email },
               message: 'User registered and 1-day premium activated!'
             });
-          });
         });
       });
     });
