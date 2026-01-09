@@ -8223,7 +8223,7 @@ app.post("/summarize-pdf/notes", uploadPDF.single("file"), async (req, res) => {
 
     const userPrompt = options.map((opt) => prompts[opt]).join("\n");
 
-    const model = genAI.getGenerativeModel({ model: "models/gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "models/gemini-3-flash-preview" });
 
     let generatedText;
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
@@ -11658,7 +11658,7 @@ app.post("/api/mindmaps/generate-from-pdf", uploadPDF.single("file"), async (req
     }
 
     // Step 2: Define AI prompt
-    const model = genAI.getGenerativeModel({ model: "models/gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "models/gemini-3-flash-preview" });
     const result = await model.generateContent([
       {
         text: `
