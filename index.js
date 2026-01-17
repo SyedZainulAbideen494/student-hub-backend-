@@ -505,7 +505,138 @@ app.post('/signup', (req, res) => {
     });
   });
 });
+app.post('/signup/boring', (req, res) => {
+  const { email, password } = req.body;
 
+  // 1️⃣ Validate input
+  if (!email || !password) {
+    return res.status(400).json({ error: 'All fields are required' });
+  }
+
+  // 2️⃣ Check if email already exists
+  const checkQuery = 'SELECT id FROM users WHERE email = ?';
+  connection.query(checkQuery, [email], (checkErr, checkResults) => {
+    if (checkErr) {
+      console.error('🔴 Error checking existing user:', checkErr);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+
+    if (checkResults.length > 0) {
+      return res.status(409).json({ error: 'Email already in use' });
+    }
+
+    // 3️⃣ Hash password
+    bcrypt.hash(password, saltRounds, (hashErr, hash) => {
+      if (hashErr) {
+        console.error('🔴 Error hashing password:', hashErr);
+        return res.status(500).json({ error: 'Internal server error' });
+      }
+
+      // 4️⃣ Insert user
+      const insertQuery = 'INSERT INTO users (email, password) VALUES (?, ?)';
+      connection.query(insertQuery, [email, hash], (insertErr, insertResults) => {
+        if (insertErr) {
+          console.error('🔴 Error inserting user:', insertErr);
+          return res.status(500).json({ error: 'Internal server error' });
+        }
+
+        const userId = insertResults.insertId;
+
+        // 5️⃣ Create JWT
+        const token = jwt.sign(
+          { id: userId },
+          process.env.JWT_SECRET || 'jwtsecret',
+          { expiresIn: '24h' }
+        );
+
+        // 6️⃣ Save session
+        const sessionQuery = 'INSERT INTO session (user_id, jwt) VALUES (?, ?)';
+        connection.query(sessionQuery, [userId, token], (sessionErr) => {
+          if (sessionErr) {
+            console.error('🔴 Error creating session:', sessionErr);
+            return res.status(500).json({ error: 'Error creating session' });
+          }
+
+          console.log('✅ User registered');
+
+          return res.status(201).json({
+            auth: true,
+            token,
+            user: {
+              id: userId,
+              email
+            },
+            message: 'User registered and 1-day premium activated!'
+          });
+        });
+      });
+    });
+  });
+});
+
+/* ---------------- ADD TASK ---------------- */
+app.post('/api/tasks/add', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const userId = await getUserIdFromToken(token); // REQUIRED
+    if (!userId) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+
+    const { title, day } = req.body;
+
+    if (!title || !title.trim()) {
+      return res.status(400).json({ error: 'Task title required' });
+    }
+
+    await query(
+      `
+      INSERT INTO tasks_flow (user_id, title, day, completed)
+      VALUES (?, ?, ?, 0)
+      `,
+      [userId, title.trim(), day || 'Today']
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('ADD TASK ERROR:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+/* ---------------- GET TASKS ---------------- */
+app.get('/api/tasks', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const userId = await getUserIdFromToken(token);
+    if (!userId) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+
+    const tasks = await query(
+      `
+      SELECT id, title, day, completed
+      FROM tasks_flow
+      WHERE user_id = ?
+      ORDER BY created_at DESC
+      `,
+      [userId]
+    );
+
+    res.json(tasks);
+  } catch (err) {
+    console.error('GET TASKS ERROR:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 
 const verifyjwt = (req, res) => {
   const token = req.headers["x-access-token"];
@@ -554,6 +685,8 @@ const transporter = nodemailer.createTransport({
       pass: 'xqfw mmov xlrg gukf',
   },
 });
+
+
 // Simplified Login Route (no OTP)
 app.post("/login", (req, res) => {
   const identifier = req.body.identifier;
