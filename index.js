@@ -614,7 +614,7 @@ app.post('/api/tasks/add', async (req, res) => {
 
 
 /* ---------------- GET TASKS ---------------- */
-app.get('/api/tasks', async (req, res) => {
+app.get('/api/tasks/flow', async (req, res) => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '');
     if (!token) {
