@@ -582,23 +582,27 @@ app.post('/api/tasks/add', async (req, res) => {
       return res.status(401).json({ error: 'No token provided' });
     }
 
-    const userId = await getUserIdFromToken(token); // REQUIRED
+    const userId = await getUserIdFromToken(token);
     if (!userId) {
       return res.status(401).json({ error: 'Invalid token' });
     }
 
-    const { title, day } = req.body;
+    const { title, taskDate } = req.body;
 
     if (!title || !title.trim()) {
       return res.status(400).json({ error: 'Task title required' });
     }
 
+    if (!taskDate) {
+      return res.status(400).json({ error: 'Task date required' });
+    }
+
     await query(
       `
-      INSERT INTO tasks_flow (user_id, title, day, completed)
+      INSERT INTO tasks_flow (user_id, title, task_date, completed)
       VALUES (?, ?, ?, 0)
       `,
-      [userId, title.trim(), day || 'Today']
+      [userId, title.trim(), taskDate]
     );
 
     res.json({ success: true });
@@ -607,6 +611,7 @@ app.post('/api/tasks/add', async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 });
+
 
 /* ---------------- GET TASKS ---------------- */
 app.get('/api/tasks', async (req, res) => {
@@ -621,15 +626,16 @@ app.get('/api/tasks', async (req, res) => {
       return res.status(401).json({ error: 'Invalid token' });
     }
 
-    const tasks = await query(
-      `
-      SELECT id, title, day, completed
-      FROM tasks_flow
-      WHERE user_id = ?
-      ORDER BY created_at DESC
-      `,
-      [userId]
-    );
+const tasks = await query(
+  `
+  SELECT id, title, task_date, completed
+  FROM tasks_flow
+  WHERE user_id = ?
+  ORDER BY task_date ASC
+  `,
+  [userId]
+);
+
 
     res.json(tasks);
   } catch (err) {
